@@ -1,6 +1,5 @@
 import SwiftUI
 import MetalKit
-import IrisShared
 
 /// SwiftUI wrapper for MTKView
 struct MetalView: NSViewRepresentable {

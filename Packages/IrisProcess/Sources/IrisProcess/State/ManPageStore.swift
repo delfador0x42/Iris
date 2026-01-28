@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 import os.log
 
 /// Manages caching and retrieval of man pages

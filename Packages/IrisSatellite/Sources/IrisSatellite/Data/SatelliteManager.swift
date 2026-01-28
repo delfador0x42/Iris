@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 
 /// Manages satellite data loading
 /// Note: Position propagation is now handled by GPU compute shader in Renderer

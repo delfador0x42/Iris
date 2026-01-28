@@ -1,5 +1,4 @@
 import SwiftUI
-import IrisShared
 
 /// Main view for network monitoring - displays per-process connections
 public struct NetworkMonitorView: View {

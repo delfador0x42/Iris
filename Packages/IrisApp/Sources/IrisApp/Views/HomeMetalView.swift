@@ -1,6 +1,5 @@
 import SwiftUI
 import MetalKit
-import IrisShared
 
 /// SwiftUI wrapper for the Metal-based home screen
 struct HomeMetalView: NSViewRepresentable {

@@ -1,6 +1,5 @@
 import SwiftUI
 import Combine
-import IrisShared
 
 /// State of the disk scanning operation
 public enum DiskScanState: Equatable, Sendable {

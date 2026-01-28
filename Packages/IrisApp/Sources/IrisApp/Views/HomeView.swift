@@ -1,8 +1,4 @@
 import SwiftUI
-import IrisDisk
-import IrisProcess
-import IrisNetwork
-import IrisSatellite
 
 enum MenuDestination: String, CaseIterable {
     case satelliteTracker = "Satellite Tracker"

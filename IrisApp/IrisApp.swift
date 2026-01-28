@@ -1,8 +1,7 @@
 import SwiftUI
-import IrisApp
 
 @main
-struct IrisApp: App {
+struct IrisMainApp: App {
     var body: some Scene {
         WindowGroup {
             HomeView()

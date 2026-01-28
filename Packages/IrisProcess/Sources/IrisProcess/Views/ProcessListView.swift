@@ -1,5 +1,4 @@
 import SwiftUI
-import IrisShared
 
 /// Main view for process list - displays all running processes with suspicious highlighting
 public struct ProcessListView: View {

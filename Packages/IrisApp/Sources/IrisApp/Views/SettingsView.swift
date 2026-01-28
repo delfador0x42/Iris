@@ -1,5 +1,4 @@
 import SwiftUI
-import IrisShared
 
 /// Settings view for managing app preferences and security extension
 public struct SettingsView: View {

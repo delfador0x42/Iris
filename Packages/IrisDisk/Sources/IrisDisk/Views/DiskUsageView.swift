@@ -1,5 +1,4 @@
 import SwiftUI
-import IrisShared
 
 /// Main view for disk usage visualization
 public struct DiskUsageView: View {

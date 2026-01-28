@@ -1,6 +1,6 @@
 import MetalKit
 import simd
-import IrisShared
+import Combine
 
 /// Main Metal renderer for satellite visualization.
 /// Conforms to SatelliteRendererProtocol for dependency injection.

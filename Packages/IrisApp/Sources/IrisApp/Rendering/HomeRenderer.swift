@@ -1,6 +1,6 @@
 import MetalKit
+import Combine
 import simd
-import IrisShared
 
 /// Extended uniforms for AAA home renderer
 struct HomeUniforms {

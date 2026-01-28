@@ -1,5 +1,4 @@
 import Foundation
-import IrisShared
 
 /// Actor-based disk scanner for thread-safe filesystem traversal
 public actor DiskScanner {

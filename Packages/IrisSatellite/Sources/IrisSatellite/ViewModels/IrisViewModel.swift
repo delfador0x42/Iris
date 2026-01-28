@@ -1,6 +1,5 @@
 import SwiftUI
 import Combine
-import IrisShared
 
 /// ViewModel coordinating store, renderer, and camera for the satellite tracker.
 /// Consolidates the 4 separate @StateObject instances into a single coordinated ViewModel.

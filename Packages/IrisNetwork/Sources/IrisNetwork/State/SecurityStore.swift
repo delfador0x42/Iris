@@ -1,7 +1,6 @@
 import Foundation
 import Combine
 import os.log
-import IrisShared
 
 /// State store for network security monitoring
 @MainActor
