@@ -6,20 +6,89 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		3F0974A72F24FCC30004D070 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3F0974A62F24FCC20004D070 /* NetworkExtension.framework */; };
+		3F0974B12F24FCC30004D070 /* com.wudan.iris.network.extension.systemextension in Embed System Extensions */ = {isa = PBXBuildFile; fileRef = 3F0974A42F24FCC20004D070 /* com.wudan.iris.network.extension.systemextension */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		3F4FF3442F250792003F8CA1 /* IrisApp in Frameworks */ = {isa = PBXBuildFile; productRef = 3F4FF2F42F250100003F8CA1 /* IrisApp */; };
+		3FE0000C2F25A0000004D070 /* com.wudan.iris.endpoint.extension.systemextension in Embed System Extensions */ = {isa = PBXBuildFile; fileRef = 3FE000012F25A0000004D070 /* com.wudan.iris.endpoint.extension.systemextension */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		3F0974AF2F24FCC30004D070 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 3F51086D2F24FBE0004CFE8D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 3F0974A32F24FCC20004D070;
+			remoteInfo = IrisNetworkExtension;
+		};
+		3FE0000A2F25A0000004D070 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 3F51086D2F24FBE0004CFE8D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 3FE000062F25A0000004D070;
+			remoteInfo = IrisEndpointExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		3F0974B22F24FCC30004D070 /* Embed System Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(SYSTEM_EXTENSIONS_FOLDER_PATH)";
+			dstSubfolderSpec = 16;
+			files = (
+				3F0974B12F24FCC30004D070 /* com.wudan.iris.network.extension.systemextension in Embed System Extensions */,
+				3FE0000C2F25A0000004D070 /* com.wudan.iris.endpoint.extension.systemextension in Embed System Extensions */,
+			);
+			name = "Embed System Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
-		3F10B37A2F2A9BA200702935 /* iris.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = iris.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		3F0974A42F24FCC20004D070 /* com.wudan.iris.network.extension.systemextension */ = {isa = PBXFileReference; explicitFileType = "wrapper.system-extension"; includeInIndex = 0; path = com.wudan.iris.network.extension.systemextension; sourceTree = BUILT_PRODUCTS_DIR; };
+		3F0974A62F24FCC20004D070 /* NetworkExtension.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = NetworkExtension.framework; path = System/Library/Frameworks/NetworkExtension.framework; sourceTree = SDKROOT; };
+		3F5108752F24FBE0004CFE8D /* Iris.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Iris.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		3FE000012F25A0000004D070 /* com.wudan.iris.endpoint.extension.systemextension */ = {isa = PBXFileReference; explicitFileType = "wrapper.system-extension"; includeInIndex = 0; path = com.wudan.iris.endpoint.extension.systemextension; sourceTree = BUILT_PRODUCTS_DIR; };
+		3FFBF9372F25539F00E3D581 /* Iris.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Iris.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		3F10B37C2F2A9BA200702935 /* iris */ = {
+		3F0974A82F24FCC30004D070 /* IrisNetworkExtension */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = iris;
+			path = IrisNetworkExtension;
+			sourceTree = "<group>";
+		};
+		3F5108772F24FBE0004CFE8D /* IrisApp */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = IrisApp;
+			sourceTree = "<group>";
+		};
+		3FE000022F25A0000004D070 /* IrisEndpointExtension */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = IrisEndpointExtension;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		3F10B3772F2A9BA200702935 /* Frameworks */ = {
+		3F0974A12F24FCC20004D070 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3F0974A72F24FCC30004D070 /* NetworkExtension.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3F5108722F24FBE0004CFE8D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3F4FF3442F250792003F8CA1 /* IrisApp in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3FE000042F25A0000004D070 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -29,18 +98,32 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		3F10B3712F2A9BA200702935 = {
+		3F0974A52F24FCC20004D070 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				3F10B37C2F2A9BA200702935 /* iris */,
-				3F10B37B2F2A9BA200702935 /* Products */,
+				3F0974A62F24FCC20004D070 /* NetworkExtension.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		3F51086C2F24FBE0004CFE8D = {
+			isa = PBXGroup;
+			children = (
+				3FFBF9372F25539F00E3D581 /* Iris.entitlements */,
+				3F5108772F24FBE0004CFE8D /* IrisApp */,
+				3F0974A82F24FCC30004D070 /* IrisNetworkExtension */,
+				3FE000022F25A0000004D070 /* IrisEndpointExtension */,
+				3F0974A52F24FCC20004D070 /* Frameworks */,
+				3F5108762F24FBE0004CFE8D /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		3F10B37B2F2A9BA200702935 /* Products */ = {
+		3F5108762F24FBE0004CFE8D /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				3F10B37A2F2A9BA200702935 /* iris.app */,
+				3F5108752F24FBE0004CFE8D /* Iris.app */,
+				3F0974A42F24FCC20004D070 /* com.wudan.iris.network.extension.systemextension */,
+				3FE000012F25A0000004D070 /* com.wudan.iris.endpoint.extension.systemextension */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -48,64 +131,137 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		3F10B3792F2A9BA200702935 /* iris */ = {
+		3F0974A32F24FCC20004D070 /* IrisNetworkExtension */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 3F10B3852F2A9BA300702935 /* Build configuration list for PBXNativeTarget "iris" */;
+			buildConfigurationList = 3F0974B62F24FCC30004D070 /* Build configuration list for PBXNativeTarget "IrisNetworkExtension" */;
 			buildPhases = (
-				3F10B3762F2A9BA200702935 /* Sources */,
-				3F10B3772F2A9BA200702935 /* Frameworks */,
-				3F10B3782F2A9BA200702935 /* Resources */,
+				3F0974A02F24FCC20004D070 /* Sources */,
+				3F0974A12F24FCC20004D070 /* Frameworks */,
+				3F0974A22F24FCC20004D070 /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				3F10B37C2F2A9BA200702935 /* iris */,
+				3F0974A82F24FCC30004D070 /* IrisNetworkExtension */,
 			);
-			name = iris;
+			name = IrisNetworkExtension;
 			packageProductDependencies = (
 			);
-			productName = iris;
-			productReference = 3F10B37A2F2A9BA200702935 /* iris.app */;
+			productName = IrisNetworkExtension;
+			productReference = 3F0974A42F24FCC20004D070 /* com.wudan.iris.network.extension.systemextension */;
+			productType = "com.apple.product-type.system-extension";
+		};
+		3F5108742F24FBE0004CFE8D /* Iris */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3F5108802F24FBE0004CFE8D /* Build configuration list for PBXNativeTarget "Iris" */;
+			buildPhases = (
+				3F5108712F24FBE0004CFE8D /* Sources */,
+				3F5108722F24FBE0004CFE8D /* Frameworks */,
+				3F5108732F24FBE0004CFE8D /* Resources */,
+				3F0974B22F24FCC30004D070 /* Embed System Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				3F0974B02F24FCC30004D070 /* PBXTargetDependency */,
+				3FE0000B2F25A0000004D070 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				3F5108772F24FBE0004CFE8D /* IrisApp */,
+			);
+			name = Iris;
+			packageProductDependencies = (
+				3F4FF2F42F250100003F8CA1 /* IrisApp */,
+			);
+			productName = Iris;
+			productReference = 3F5108752F24FBE0004CFE8D /* Iris.app */;
 			productType = "com.apple.product-type.application";
+		};
+		3FE000062F25A0000004D070 /* IrisEndpointExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3FE000092F25A0000004D070 /* Build configuration list for PBXNativeTarget "IrisEndpointExtension" */;
+			buildPhases = (
+				3FE000032F25A0000004D070 /* Sources */,
+				3FE000042F25A0000004D070 /* Frameworks */,
+				3FE000052F25A0000004D070 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				3FE000022F25A0000004D070 /* IrisEndpointExtension */,
+			);
+			name = IrisEndpointExtension;
+			packageProductDependencies = (
+			);
+			productName = IrisEndpointExtension;
+			productReference = 3FE000012F25A0000004D070 /* com.wudan.iris.endpoint.extension.systemextension */;
+			productType = "com.apple.product-type.system-extension";
 		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
-		3F10B3722F2A9BA200702935 /* Project object */ = {
+		3F51086D2F24FBE0004CFE8D /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 2620;
+				LastSwiftUpdateCheck = 2610;
 				LastUpgradeCheck = 2620;
 				TargetAttributes = {
-					3F10B3792F2A9BA200702935 = {
-						CreatedOnToolsVersion = 26.2;
+					3F0974A32F24FCC20004D070 = {
+						CreatedOnToolsVersion = 26.1;
+					};
+					3F5108742F24FBE0004CFE8D = {
+						CreatedOnToolsVersion = 26.1;
+					};
+					3FE000062F25A0000004D070 = {
+						CreatedOnToolsVersion = 26.1;
 					};
 				};
 			};
-			buildConfigurationList = 3F10B3752F2A9BA200702935 /* Build configuration list for PBXProject "iris" */;
+			buildConfigurationList = 3F5108702F24FBE0004CFE8D /* Build configuration list for PBXProject "Iris" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
 				Base,
 			);
-			mainGroup = 3F10B3712F2A9BA200702935;
+			mainGroup = 3F51086C2F24FBE0004CFE8D;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				3F4FF2F32F2500DE003F8CA1 /* XCLocalSwiftPackageReference "." */,
+			);
 			preferredProjectObjectVersion = 77;
-			productRefGroup = 3F10B37B2F2A9BA200702935 /* Products */;
+			productRefGroup = 3F5108762F24FBE0004CFE8D /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				3F10B3792F2A9BA200702935 /* iris */,
+				3F5108742F24FBE0004CFE8D /* Iris */,
+				3F0974A32F24FCC20004D070 /* IrisNetworkExtension */,
+				3FE000062F25A0000004D070 /* IrisEndpointExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		3F10B3782F2A9BA200702935 /* Resources */ = {
+		3F0974A22F24FCC20004D070 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3F5108732F24FBE0004CFE8D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3FE000052F25A0000004D070 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -115,7 +271,21 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		3F10B3762F2A9BA200702935 /* Sources */ = {
+		3F0974A02F24FCC20004D070 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3F5108712F24FBE0004CFE8D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3FE000032F25A0000004D070 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -124,8 +294,121 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		3F0974B02F24FCC30004D070 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 3F0974A32F24FCC20004D070 /* IrisNetworkExtension */;
+			targetProxy = 3F0974AF2F24FCC30004D070 /* PBXContainerItemProxy */;
+		};
+		3FE0000B2F25A0000004D070 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 3FE000062F25A0000004D070 /* IrisEndpointExtension */;
+			targetProxy = 3FE0000A2F25A0000004D070 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
-		3F10B3832F2A9BA300702935 /* Debug */ = {
+		3F0974B32F24FCC30004D070 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				AUTOMATION_APPLE_EVENTS = NO;
+				CODE_SIGN_ENTITLEMENTS = IrisNetworkExtension/IrisNetworkExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 99HGW2AR62;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = IrisNetworkExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = IrisNetworkExtension;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2024. All rights reserved.";
+				INFOPLIST_KEY_NSSystemExtensionUsageDescription = "Iris needs this extension to monitor network connections for security analysis.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.wudan.iris.network.extension;
+				PRODUCT_NAME = "$(inherited)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				REGISTER_APP_GROUPS = YES;
+				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
+				RUNTIME_EXCEPTION_ALLOW_JIT = NO;
+				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = NO;
+				RUNTIME_EXCEPTION_DEBUGGING_TOOL = NO;
+				RUNTIME_EXCEPTION_DISABLE_EXECUTABLE_PAGE_PROTECTION = NO;
+				RUNTIME_EXCEPTION_DISABLE_LIBRARY_VALIDATION = NO;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		3F0974B42F24FCC30004D070 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				AUTOMATION_APPLE_EVENTS = NO;
+				CODE_SIGN_ENTITLEMENTS = IrisNetworkExtension/IrisNetworkExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 99HGW2AR62;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = IrisNetworkExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = IrisNetworkExtension;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2024. All rights reserved.";
+				INFOPLIST_KEY_NSSystemExtensionUsageDescription = "Iris needs this extension to monitor network connections for security analysis.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.wudan.iris.network.extension;
+				PRODUCT_NAME = "$(inherited)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				REGISTER_APP_GROUPS = YES;
+				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
+				RUNTIME_EXCEPTION_ALLOW_JIT = NO;
+				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = NO;
+				RUNTIME_EXCEPTION_DEBUGGING_TOOL = NO;
+				RUNTIME_EXCEPTION_DISABLE_EXECUTABLE_PAGE_PROTECTION = NO;
+				RUNTIME_EXCEPTION_DISABLE_LIBRARY_VALIDATION = NO;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		3F51087E2F24FBE0004CFE8D /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -159,6 +442,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = 99HGW2AR62;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -179,17 +463,18 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.2;
+				MACOSX_DEPLOYMENT_TARGET = 26.1;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
 			name = Debug;
 		};
-		3F10B3842F2A9BA300702935 /* Release */ = {
+		3F51087F2F24FBE0004CFE8D /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -223,6 +508,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = 99HGW2AR62;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -237,28 +523,40 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.2;
+				MACOSX_DEPLOYMENT_TARGET = 26.1;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 			};
 			name = Release;
 		};
-		3F10B3862F2A9BA300702935 /* Debug */ = {
+		3F5108812F24FBE0004CFE8D /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				AUTOMATION_APPLE_EVENTS = NO;
+				CODE_SIGN_ENTITLEMENTS = Iris.entitlements;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 99HGW2AR62;
-				ENABLE_APP_SANDBOX = YES;
-				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = NO;
 				ENABLE_PREVIEWS = YES;
-				ENABLE_USER_SELECTED_FILES = readonly;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Iris;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -268,6 +566,12 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.wudan.iris;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
+				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
+				RUNTIME_EXCEPTION_ALLOW_JIT = NO;
+				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = NO;
+				RUNTIME_EXCEPTION_DEBUGGING_TOOL = NO;
+				RUNTIME_EXCEPTION_DISABLE_EXECUTABLE_PAGE_PROTECTION = NO;
+				RUNTIME_EXCEPTION_DISABLE_LIBRARY_VALIDATION = NO;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -277,20 +581,31 @@
 			};
 			name = Debug;
 		};
-		3F10B3872F2A9BA300702935 /* Release */ = {
+		3F5108822F24FBE0004CFE8D /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				AUTOMATION_APPLE_EVENTS = NO;
+				CODE_SIGN_ENTITLEMENTS = Iris.entitlements;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 99HGW2AR62;
-				ENABLE_APP_SANDBOX = YES;
-				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = NO;
 				ENABLE_PREVIEWS = YES;
-				ENABLE_USER_SELECTED_FILES = readonly;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Iris;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -300,6 +615,12 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.wudan.iris;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
+				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
+				RUNTIME_EXCEPTION_ALLOW_JIT = NO;
+				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = NO;
+				RUNTIME_EXCEPTION_DEBUGGING_TOOL = NO;
+				RUNTIME_EXCEPTION_DISABLE_EXECUTABLE_PAGE_PROTECTION = NO;
+				RUNTIME_EXCEPTION_DISABLE_LIBRARY_VALIDATION = NO;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -309,28 +630,160 @@
 			};
 			name = Release;
 		};
+		3FE000072F25A0000004D070 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				AUTOMATION_APPLE_EVENTS = NO;
+				CODE_SIGN_ENTITLEMENTS = IrisEndpointExtension/IrisEndpointExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 99HGW2AR62;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = IrisEndpointExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = IrisEndpointExtension;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2024. All rights reserved.";
+				INFOPLIST_KEY_NSSystemExtensionUsageDescription = "Iris uses this extension to monitor process execution for security analysis.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.wudan.iris.endpoint.extension;
+				PRODUCT_NAME = "$(inherited)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				REGISTER_APP_GROUPS = YES;
+				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
+				RUNTIME_EXCEPTION_ALLOW_JIT = NO;
+				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = NO;
+				RUNTIME_EXCEPTION_DEBUGGING_TOOL = NO;
+				RUNTIME_EXCEPTION_DISABLE_EXECUTABLE_PAGE_PROTECTION = NO;
+				RUNTIME_EXCEPTION_DISABLE_LIBRARY_VALIDATION = NO;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		3FE000082F25A0000004D070 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				AUTOMATION_APPLE_EVENTS = NO;
+				CODE_SIGN_ENTITLEMENTS = IrisEndpointExtension/IrisEndpointExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 99HGW2AR62;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = IrisEndpointExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = IrisEndpointExtension;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2024. All rights reserved.";
+				INFOPLIST_KEY_NSSystemExtensionUsageDescription = "Iris uses this extension to monitor process execution for security analysis.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.wudan.iris.endpoint.extension;
+				PRODUCT_NAME = "$(inherited)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				REGISTER_APP_GROUPS = YES;
+				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
+				RUNTIME_EXCEPTION_ALLOW_JIT = NO;
+				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = NO;
+				RUNTIME_EXCEPTION_DEBUGGING_TOOL = NO;
+				RUNTIME_EXCEPTION_DISABLE_EXECUTABLE_PAGE_PROTECTION = NO;
+				RUNTIME_EXCEPTION_DISABLE_LIBRARY_VALIDATION = NO;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		3F10B3752F2A9BA200702935 /* Build configuration list for PBXProject "iris" */ = {
+		3F0974B62F24FCC30004D070 /* Build configuration list for PBXNativeTarget "IrisNetworkExtension" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				3F10B3832F2A9BA300702935 /* Debug */,
-				3F10B3842F2A9BA300702935 /* Release */,
+				3F0974B32F24FCC30004D070 /* Debug */,
+				3F0974B42F24FCC30004D070 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		3F10B3852F2A9BA300702935 /* Build configuration list for PBXNativeTarget "iris" */ = {
+		3F5108702F24FBE0004CFE8D /* Build configuration list for PBXProject "Iris" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				3F10B3862F2A9BA300702935 /* Debug */,
-				3F10B3872F2A9BA300702935 /* Release */,
+				3F51087E2F24FBE0004CFE8D /* Debug */,
+				3F51087F2F24FBE0004CFE8D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		3F5108802F24FBE0004CFE8D /* Build configuration list for PBXNativeTarget "Iris" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3F5108812F24FBE0004CFE8D /* Debug */,
+				3F5108822F24FBE0004CFE8D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		3FE000092F25A0000004D070 /* Build configuration list for PBXNativeTarget "IrisEndpointExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3FE000072F25A0000004D070 /* Debug */,
+				3FE000082F25A0000004D070 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		3F4FF2F32F2500DE003F8CA1 /* XCLocalSwiftPackageReference "." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = .;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		3F4FF2F42F250100003F8CA1 /* IrisApp */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = IrisApp;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
-	rootObject = 3F10B3722F2A9BA200702935 /* Project object */;
+	rootObject = 3F51086D2F24FBE0004CFE8D /* Project object */;
 }
