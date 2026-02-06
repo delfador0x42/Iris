@@ -97,6 +97,14 @@ public class ExtensionManager: NSObject, ObservableObject {
         }
     }
 
+    /// Pending operation for sequencing uninstall → reinstall
+    private enum PendingOperation {
+        case none
+        case uninstallNetworkForReinstall
+        case uninstallEndpointForReinstall
+        case reinstallAfterCleanup
+    }
+
     // MARK: - Properties
 
     private let logger = Logger(subsystem: "com.wudan.iris", category: "ExtensionManager")
@@ -107,6 +115,9 @@ public class ExtensionManager: NSObject, ObservableObject {
 
     /// Track which extension type is being installed (for delegate callbacks)
     private var pendingInstallationType: ExtensionType?
+
+    /// Track pending operation sequence for clean reinstall
+    private var pendingOperation: PendingOperation = .none
 
     /// Callbacks when extensions become ready
     public var onNetworkExtensionReady: (() -> Void)?
@@ -327,6 +338,50 @@ public class ExtensionManager: NSObject, ObservableObject {
         }
     }
 
+    /// Completely remove the network filter configuration
+    public func cleanNetworkFilterConfiguration() async {
+        logger.info("Cleaning network filter configuration...")
+
+        do {
+            let manager = NEFilterManager.shared()
+            try await manager.loadFromPreferences()
+
+            manager.providerConfiguration = nil
+            manager.isEnabled = false
+
+            try await manager.saveToPreferences()
+            logger.info("Network filter configuration cleaned")
+            filterState = .disabled
+        } catch {
+            logger.error("Failed to clean filter configuration: \(error.localizedDescription)")
+        }
+    }
+
+    /// Perform a clean reinstall of both system extensions
+    /// This uninstalls existing extensions, clears configs, and reinstalls fresh
+    public func cleanReinstallExtensions() {
+        logger.info("Starting clean reinstall of all extensions...")
+        lastError = nil
+
+        // Update states to show we're working
+        if networkExtensionState == .installed || networkExtensionState != .notInstalled {
+            networkExtensionState = .installing
+        }
+        if endpointExtensionState == .installed || endpointExtensionState != .notInstalled {
+            endpointExtensionState = .installing
+        }
+
+        // Start the sequence: uninstall network first
+        pendingOperation = .uninstallNetworkForReinstall
+
+        let request = OSSystemExtensionRequest.deactivationRequest(
+            forExtensionWithIdentifier: ExtensionType.network.bundleIdentifier,
+            queue: .main
+        )
+        request.delegate = self
+        OSSystemExtensionManager.shared.submitRequest(request)
+    }
+
     // MARK: - Full Disk Access
 
     /// Check if Full Disk Access is granted (required for Endpoint Security)
@@ -426,18 +481,78 @@ extension ExtensionManager: OSSystemExtensionRequestDelegate {
             case .completed:
                 logger.info("\(type.displayName) extension request completed successfully")
 
-                switch type {
-                case .network:
-                    networkExtensionState = .installed
-                    await enableFilter()
-                    onNetworkExtensionReady?()
-                case .endpoint:
-                    endpointExtensionState = .installed
-                    onEndpointExtensionReady?()
+                // Handle clean reinstall sequence
+                switch pendingOperation {
+                case .uninstallNetworkForReinstall:
+                    logger.info("Network extension uninstalled, now uninstalling endpoint...")
+                    pendingOperation = .uninstallEndpointForReinstall
+                    networkExtensionState = .notInstalled
+
+                    // Uninstall endpoint next
+                    let request = OSSystemExtensionRequest.deactivationRequest(
+                        forExtensionWithIdentifier: ExtensionType.endpoint.bundleIdentifier,
+                        queue: .main
+                    )
+                    request.delegate = self
+                    OSSystemExtensionManager.shared.submitRequest(request)
+
+                case .uninstallEndpointForReinstall:
+                    logger.info("Endpoint extension uninstalled, cleaning config and reinstalling...")
+                    endpointExtensionState = .notInstalled
+
+                    // Clean the filter configuration, then reinstall
+                    Task {
+                        await self.cleanNetworkFilterConfiguration()
+
+                        // Small delay to let system settle
+                        try? await Task.sleep(nanoseconds: 500_000_000)
+
+                        // Now reinstall network extension
+                        self.pendingOperation = .reinstallAfterCleanup
+                        self.pendingInstallationType = .network
+                        self.networkExtensionState = .installing
+
+                        let request = OSSystemExtensionRequest.activationRequest(
+                            forExtensionWithIdentifier: ExtensionType.network.bundleIdentifier,
+                            queue: .main
+                        )
+                        request.delegate = self
+                        OSSystemExtensionManager.shared.submitRequest(request)
+                    }
+
+                case .reinstallAfterCleanup:
+                    // Network reinstalled, now install endpoint
+                    if type == .network {
+                        networkExtensionState = .installed
+                        await enableFilter()
+                        onNetworkExtensionReady?()
+
+                        // Now install endpoint
+                        pendingOperation = .none
+                        installExtension(.endpoint)
+                    } else {
+                        // Endpoint installed - we're done
+                        endpointExtensionState = .installed
+                        onEndpointExtensionReady?()
+                        pendingOperation = .none
+                    }
+
+                case .none:
+                    // Normal installation flow (not part of reinstall sequence)
+                    switch type {
+                    case .network:
+                        networkExtensionState = .installed
+                        await enableFilter()
+                        onNetworkExtensionReady?()
+                    case .endpoint:
+                        endpointExtensionState = .installed
+                        onEndpointExtensionReady?()
+                    }
                 }
 
             case .willCompleteAfterReboot:
                 logger.info("\(type.displayName) extension will complete after reboot")
+                pendingOperation = .none
                 switch type {
                 case .network:
                     networkExtensionState = .needsUserApproval
@@ -447,6 +562,7 @@ extension ExtensionManager: OSSystemExtensionRequestDelegate {
 
             @unknown default:
                 logger.warning("Unknown extension result")
+                pendingOperation = .none
             }
 
             pendingInstallationType = nil
@@ -463,6 +579,50 @@ extension ExtensionManager: OSSystemExtensionRequestDelegate {
 
             logger.error("\(type.displayName) extension error: \(nsError.localizedDescription)")
             logger.error("Error domain: \(nsError.domain), code: \(nsError.code)")
+
+            // During clean reinstall, continue the sequence even if uninstall fails
+            // (extension might not have been installed in the first place)
+            switch pendingOperation {
+            case .uninstallNetworkForReinstall:
+                logger.info("Network uninstall failed (may not exist), continuing to endpoint...")
+                pendingOperation = .uninstallEndpointForReinstall
+                networkExtensionState = .notInstalled
+
+                let request = OSSystemExtensionRequest.deactivationRequest(
+                    forExtensionWithIdentifier: ExtensionType.endpoint.bundleIdentifier,
+                    queue: .main
+                )
+                request.delegate = self
+                OSSystemExtensionManager.shared.submitRequest(request)
+                return
+
+            case .uninstallEndpointForReinstall:
+                logger.info("Endpoint uninstall failed (may not exist), continuing to reinstall...")
+                endpointExtensionState = .notInstalled
+
+                Task {
+                    await self.cleanNetworkFilterConfiguration()
+                    try? await Task.sleep(nanoseconds: 500_000_000)
+
+                    self.pendingOperation = .reinstallAfterCleanup
+                    self.pendingInstallationType = .network
+                    self.networkExtensionState = .installing
+
+                    let request = OSSystemExtensionRequest.activationRequest(
+                        forExtensionWithIdentifier: ExtensionType.network.bundleIdentifier,
+                        queue: .main
+                    )
+                    request.delegate = self
+                    OSSystemExtensionManager.shared.submitRequest(request)
+                }
+                return
+
+            default:
+                break
+            }
+
+            // Normal error handling for non-sequence operations
+            pendingOperation = .none
 
             var errorDetails = "Code: \(nsError.code)"
             if let underlyingError = nsError.userInfo[NSUnderlyingErrorKey] as? NSError {

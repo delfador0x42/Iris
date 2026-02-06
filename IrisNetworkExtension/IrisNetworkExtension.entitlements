@@ -15,6 +15,7 @@
 	<key>com.apple.security.application-groups</key>
 	<array>
 		<string>$(TeamIdentifierPrefix)com.wudan.iris.security.xpc</string>
+		<string>$(TeamIdentifierPrefix)com.wudan.iris.network.xpc</string>
 	</array>
 </dict>
 </plist>

@@ -7,7 +7,7 @@
 	<key>NetworkExtension</key>
 	<dict>
 		<key>NEMachServiceName</key>
-		<string>$(TeamIdentifierPrefix)com.wudan.iris.security.xpc</string>
+		<string>$(TeamIdentifierPrefix)com.wudan.iris.network.xpc</string>
 		<key>NEProviderClasses</key>
 		<dict>
 			<key>com.apple.networkextension.filter-data</key>
