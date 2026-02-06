@@ -3,8 +3,10 @@ import AppKit
 
 /// Rich inline detail view showing IP enrichment data (geolocation + security)
 struct IPDetailPopover: View {
-    let connection: NetworkConnection
+    let aggregated: AggregatedConnection
     @Environment(\.dismiss) private var dismiss
+
+    private var connection: NetworkConnection { aggregated.representative }
 
     var body: some View {
         ScrollView {
@@ -57,10 +59,19 @@ struct IPDetailPopover: View {
 
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(connection.remoteAddress)
-                .font(.system(size: 18, weight: .bold, design: .monospaced))
-                .textSelection(.enabled)
+            HStack {
+                Text(connection.remoteAddress)
+                    .font(.system(size: 18, weight: .bold, design: .monospaced))
+                    .textSelection(.enabled)
 
+                if aggregated.connectionCount > 1 {
+                    Text("(\(aggregated.connectionCount) connections)")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            // Hostname (moved from connection row to popover)
             if let hostname = connection.remoteHostnames?.first ?? connection.remoteHostname {
                 Text(hostname)
                     .font(.system(size: 14))
@@ -388,28 +399,34 @@ struct FlowLayout: Layout {
 // MARK: - Preview
 
 #Preview {
-    IPDetailPopover(
-        connection: NetworkConnection(
-            processId: 1234,
-            processPath: "/usr/bin/curl",
-            processName: "curl",
-            localAddress: "192.168.1.100",
-            localPort: 54321,
+    let sampleConnection = NetworkConnection(
+        processId: 1234,
+        processPath: "/usr/bin/curl",
+        processName: "curl",
+        localAddress: "192.168.1.100",
+        localPort: 54321,
+        remoteAddress: "17.248.192.3",
+        remotePort: 443,
+        protocol: .tcp,
+        state: .established,
+        remoteCountry: "United States",
+        remoteCountryCode: "US",
+        remoteCity: "Cupertino",
+        remoteLatitude: 37.3230,
+        remoteLongitude: -122.0322,
+        remoteASN: "AS714 Apple Inc.",
+        remoteOrganization: "Apple Inc.",
+        remoteOpenPorts: [80, 443, 22, 8080],
+        remoteHostnames: ["apple.com", "www.apple.com"],
+        remoteCVEs: ["CVE-2023-1234", "CVE-2023-5678"],
+        remoteServiceTags: ["cloud", "starttls"]
+    )
+
+    return IPDetailPopover(
+        aggregated: AggregatedConnection(
+            id: "17.248.192.3",
             remoteAddress: "17.248.192.3",
-            remotePort: 443,
-            protocol: .tcp,
-            state: .established,
-            remoteCountry: "United States",
-            remoteCountryCode: "US",
-            remoteCity: "Cupertino",
-            remoteLatitude: 37.3230,
-            remoteLongitude: -122.0322,
-            remoteASN: "AS714 Apple Inc.",
-            remoteOrganization: "Apple Inc.",
-            remoteOpenPorts: [80, 443, 22, 8080],
-            remoteHostnames: ["apple.com", "www.apple.com"],
-            remoteCVEs: ["CVE-2023-1234", "CVE-2023-5678"],
-            remoteServiceTags: ["cloud", "starttls"]
+            connections: [sampleConnection, sampleConnection, sampleConnection, sampleConnection]
         )
     )
 }

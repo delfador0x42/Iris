@@ -288,6 +288,15 @@ struct ProcessConnectionRow: View {
     let isExpanded: Bool
     let onToggle: () -> Void
 
+    /// Aggregate connections by remote IP for deduplication
+    private var aggregatedConnections: [AggregatedConnection] {
+        let grouped = Dictionary(grouping: connections) { $0.remoteAddress }
+        return grouped.map { (ip, conns) in
+            AggregatedConnection(id: ip, remoteAddress: ip, connections: conns)
+        }
+        .sorted { $0.connectionCount > $1.connectionCount }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Process row
@@ -335,10 +344,10 @@ struct ProcessConnectionRow: View {
                 onToggle()
             }
 
-            // Connection rows (when expanded)
+            // Connection rows (when expanded) - deduplicated by IP
             if isExpanded {
-                ForEach(connections) { connection in
-                    ConnectionDetailRow(connection: connection)
+                ForEach(aggregatedConnections) { aggregated in
+                    ConnectionDetailRow(aggregated: aggregated)
                 }
             }
         }
@@ -351,9 +360,11 @@ struct ProcessConnectionRow: View {
 // MARK: - Connection Detail Row
 
 struct ConnectionDetailRow: View {
-    let connection: NetworkConnection
+    let aggregated: AggregatedConnection
     @State private var isHovering = false
     @State private var showDetailPopover = false
+
+    private var connection: NetworkConnection { aggregated.representative }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -362,16 +373,11 @@ struct ConnectionDetailRow: View {
                 Spacer()
                     .frame(width: 40) // Indent
 
-                // Local endpoint
-                Text(connection.localEndpoint)
-                    .font(.system(size: 12, design: .monospaced))
-                    .foregroundColor(.white.opacity(0.6))
-
                 Text("→")
                     .font(.system(size: 12))
                     .foregroundColor(.gray)
 
-                // Remote endpoint - clickable to show detail popover
+                // Remote endpoint (IP only) - clickable to show detail popover
                 Button {
                     showDetailPopover = true
                 } label: {
@@ -404,7 +410,7 @@ struct ConnectionDetailRow: View {
                 }
                 .help("View IP details")
                 .popover(isPresented: $showDetailPopover) {
-                    IPDetailPopover(connection: connection)
+                    IPDetailPopover(aggregated: aggregated)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -427,14 +433,14 @@ struct ConnectionDetailRow: View {
                 .foregroundColor(stateColor)
                 .frame(width: 90)
 
-            // Bytes up
-            Text(connection.formattedBytesUp)
+            // Bytes up (aggregated total)
+            Text(NetworkConnection.formatBytes(aggregated.totalBytesUp))
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundColor(.gray)
                 .frame(width: 80, alignment: .trailing)
 
-            // Bytes down
-            Text(connection.formattedBytesDown)
+            // Bytes down (aggregated total)
+            Text(NetworkConnection.formatBytes(aggregated.totalBytesDown))
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundColor(.gray)
                 .frame(width: 80, alignment: .trailing)

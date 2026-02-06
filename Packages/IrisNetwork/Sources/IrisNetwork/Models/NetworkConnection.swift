@@ -120,10 +120,9 @@ public struct NetworkConnection: Identifiable, Sendable, Codable, Equatable {
         "\(localAddress):\(localPort)"
     }
 
-    /// Formatted remote endpoint string
+    /// Formatted remote endpoint string (IP:port only, hostname in popover)
     public var remoteEndpoint: String {
-        let host = remoteHostname ?? remoteAddress
-        return "\(host):\(remotePort)"
+        "\(remoteAddress):\(remotePort)"
     }
 
     /// Full connection description (local → remote)
@@ -191,4 +190,26 @@ extension NetworkConnection {
     public var formattedBytesDown: String {
         Self.formatBytes(bytesDown)
     }
+}
+
+// MARK: - Aggregated Connection
+
+/// Aggregated connections to the same remote IP (for deduplication in UI)
+public struct AggregatedConnection: Identifiable {
+    public let id: String  // remoteAddress
+    public let remoteAddress: String
+    public let connections: [NetworkConnection]
+
+    public init(id: String, remoteAddress: String, connections: [NetworkConnection]) {
+        self.id = id
+        self.remoteAddress = remoteAddress
+        self.connections = connections
+    }
+
+    public var connectionCount: Int { connections.count }
+    public var totalBytesUp: UInt64 { connections.reduce(0) { $0 + $1.bytesUp } }
+    public var totalBytesDown: UInt64 { connections.reduce(0) { $0 + $1.bytesDown } }
+
+    /// First connection used as representative (same IP = same enrichment data)
+    public var representative: NetworkConnection { connections[0] }
 }
