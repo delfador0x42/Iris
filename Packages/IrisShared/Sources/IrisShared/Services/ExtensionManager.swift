@@ -332,7 +332,9 @@ public class ExtensionManager: NSObject, ObservableObject {
     /// Check if Full Disk Access is granted (required for Endpoint Security)
     public func checkFullDiskAccess() async {
         let testPath = "/Library/Application Support/com.apple.TCC/TCC.db"
-        let hasAccess = FileManager.default.isReadableFile(atPath: testPath)
+        // Actually try to read the file - isReadableFile can give false positives
+        // TCC will block the actual read even if file permissions allow it
+        let hasAccess = (try? Data(contentsOf: URL(fileURLWithPath: testPath))) != nil
         hasFullDiskAccess = hasAccess
 
         if hasAccess {
