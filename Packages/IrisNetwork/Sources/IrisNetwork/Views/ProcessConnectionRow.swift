@@ -13,7 +13,35 @@ struct ProcessConnectionRow: View {
         return grouped.map { (ip, conns) in
             AggregatedConnection(id: ip, remoteAddress: ip, connections: conns)
         }
-        .sorted { $0.connectionCount > $1.connectionCount }
+        .sorted { compareIPAddresses($0.remoteAddress, $1.remoteAddress) }
+    }
+
+    /// Compare two IP addresses numerically
+    /// IPv4 addresses are sorted before IPv6, then numerically within each type
+    private func compareIPAddresses(_ ip1: String, _ ip2: String) -> Bool {
+        let parts1 = ip1.split(separator: ".").compactMap { Int($0) }
+        let parts2 = ip2.split(separator: ".").compactMap { Int($0) }
+
+        // If both are valid IPv4 (4 octets), compare numerically
+        if parts1.count == 4 && parts2.count == 4 {
+            for i in 0..<4 {
+                if parts1[i] != parts2[i] {
+                    return parts1[i] < parts2[i]
+                }
+            }
+            return false // Equal
+        }
+
+        // IPv4 comes before IPv6
+        if parts1.count == 4 && parts2.count != 4 {
+            return true
+        }
+        if parts1.count != 4 && parts2.count == 4 {
+            return false
+        }
+
+        // Fall back to string comparison for IPv6 or other formats
+        return ip1 < ip2
     }
 
     var body: some View {

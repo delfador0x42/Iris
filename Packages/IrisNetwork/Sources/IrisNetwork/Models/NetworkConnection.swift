@@ -34,6 +34,30 @@ public struct NetworkConnection: Identifiable, Sendable, Codable, Equatable {
     public var remoteServiceTags: [String]?
     public var remoteCPEs: [String]?
 
+    // Threat intelligence data (from GreyNoise, AbuseIPDB)
+    public var abuseScore: Int?              // 0-100 from AbuseIPDB
+    public var isKnownScanner: Bool?         // From GreyNoise
+    public var isBenignService: Bool?        // From GreyNoise (CDN, cloud, etc)
+    public var threatClassification: String? // benign, malicious, unknown
+    public var isTor: Bool?                  // From AbuseIPDB
+    public var enrichmentSources: [String]?  // Which services provided data
+
+    // HTTP request data (parsed from network traffic)
+    public var httpMethod: String?
+    public var httpPath: String?
+    public var httpHost: String?
+    public var httpContentType: String?
+    public var httpUserAgent: String?
+
+    // HTTP response data
+    public var httpStatusCode: Int?
+    public var httpStatusReason: String?
+    public var httpResponseContentType: String?
+
+    // Raw HTTP data (full headers for detailed view)
+    public var httpRawRequest: String?
+    public var httpRawResponse: String?
+
     public init(
         id: UUID = UUID(),
         processId: Int32,
@@ -61,7 +85,23 @@ public struct NetworkConnection: Identifiable, Sendable, Codable, Equatable {
         remoteHostnames: [String]? = nil,
         remoteCVEs: [String]? = nil,
         remoteServiceTags: [String]? = nil,
-        remoteCPEs: [String]? = nil
+        remoteCPEs: [String]? = nil,
+        abuseScore: Int? = nil,
+        isKnownScanner: Bool? = nil,
+        isBenignService: Bool? = nil,
+        threatClassification: String? = nil,
+        isTor: Bool? = nil,
+        enrichmentSources: [String]? = nil,
+        httpMethod: String? = nil,
+        httpPath: String? = nil,
+        httpHost: String? = nil,
+        httpContentType: String? = nil,
+        httpUserAgent: String? = nil,
+        httpStatusCode: Int? = nil,
+        httpStatusReason: String? = nil,
+        httpResponseContentType: String? = nil,
+        httpRawRequest: String? = nil,
+        httpRawResponse: String? = nil
     ) {
         self.id = id
         self.processId = processId
@@ -90,6 +130,22 @@ public struct NetworkConnection: Identifiable, Sendable, Codable, Equatable {
         self.remoteCVEs = remoteCVEs
         self.remoteServiceTags = remoteServiceTags
         self.remoteCPEs = remoteCPEs
+        self.abuseScore = abuseScore
+        self.isKnownScanner = isKnownScanner
+        self.isBenignService = isBenignService
+        self.threatClassification = threatClassification
+        self.isTor = isTor
+        self.enrichmentSources = enrichmentSources
+        self.httpMethod = httpMethod
+        self.httpPath = httpPath
+        self.httpHost = httpHost
+        self.httpContentType = httpContentType
+        self.httpUserAgent = httpUserAgent
+        self.httpStatusCode = httpStatusCode
+        self.httpStatusReason = httpStatusReason
+        self.httpResponseContentType = httpResponseContentType
+        self.httpRawRequest = httpRawRequest
+        self.httpRawResponse = httpRawResponse
     }
 
     /// Network protocol type
@@ -157,6 +213,47 @@ public struct NetworkConnection: Identifiable, Sendable, Codable, Equatable {
     /// Whether this connection has known vulnerabilities
     public var hasCriticalVulns: Bool {
         !(remoteCVEs ?? []).isEmpty
+    }
+
+    /// Whether this connection has threat intelligence data
+    public var hasThreatData: Bool {
+        abuseScore != nil || isKnownScanner != nil || threatClassification != nil
+    }
+
+    /// Whether this IP has a high abuse score (>= 50)
+    public var isHighRisk: Bool {
+        guard let score = abuseScore else { return false }
+        return score >= 50
+    }
+
+    /// Whether this connection has HTTP request data
+    public var hasHTTPRequest: Bool {
+        httpMethod != nil
+    }
+
+    /// Whether this connection has HTTP response data
+    public var hasHTTPResponse: Bool {
+        httpStatusCode != nil
+    }
+
+    /// Whether this connection has any HTTP data
+    public var hasHTTPData: Bool {
+        hasHTTPRequest || hasHTTPResponse
+    }
+
+    /// Full HTTP URL if available
+    public var httpFullURL: String? {
+        guard let method = httpMethod, let path = httpPath else { return nil }
+        let host = httpHost ?? remoteHostname ?? remoteAddress
+        let scheme = remotePort == 443 ? "https" : "http"
+        return "\(scheme)://\(host)\(path)"
+    }
+
+    /// HTTP status description (e.g., "200 OK")
+    public var httpStatusDescription: String? {
+        guard let code = httpStatusCode else { return nil }
+        let reason = httpStatusReason ?? ""
+        return "\(code) \(reason)".trimmingCharacters(in: .whitespaces)
     }
 }
 

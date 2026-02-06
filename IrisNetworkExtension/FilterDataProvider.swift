@@ -32,6 +32,32 @@ class FilterDataProvider: NEFilterDataProvider {
         var localAddress: String
         var localPort: UInt16
         let flowId: UUID
+
+        // HTTP tracking
+        var httpRequest: ParsedHTTPRequest?
+        var httpResponse: ParsedHTTPResponse?
+        var requestParser: HTTPParser.StreamingRequestParser?
+        var responseParser: HTTPParser.StreamingResponseParser?
+        var isHTTPParsed: Bool = false
+    }
+
+    // MARK: - HTTP Data Structures (for XPC)
+
+    struct ParsedHTTPRequest: Codable {
+        let method: String
+        let path: String
+        let host: String?
+        let contentType: String?
+        let userAgent: String?
+        let rawHeaders: String  // Full raw request headers
+    }
+
+    struct ParsedHTTPResponse: Codable {
+        let statusCode: Int
+        let reason: String
+        let contentType: String?
+        let contentLength: Int?
+        let rawHeaders: String  // Full raw response headers
     }
 
     // MARK: - Lifecycle
@@ -136,7 +162,17 @@ class FilterDataProvider: NEFilterDataProvider {
             interface: nil,
             bytesUp: 0,
             bytesDown: 0,
-            timestamp: Date()
+            timestamp: Date(),
+            httpMethod: nil,
+            httpPath: nil,
+            httpHost: nil,
+            httpContentType: nil,
+            httpUserAgent: nil,
+            httpStatusCode: nil,
+            httpStatusReason: nil,
+            httpResponseContentType: nil,
+            httpRawRequest: nil,
+            httpRawResponse: nil
         )
 
         // Track the connection
@@ -170,6 +206,12 @@ class FilterDataProvider: NEFilterDataProvider {
                                     readBytesStartOffset: Int,
                                     readBytes: Data) -> NEFilterDataVerdict {
         updateBytes(flow: flow, bytesDown: UInt64(readBytes.count))
+
+        // Try to parse HTTP response (only on first data chunk)
+        if readBytesStartOffset == 0 {
+            parseHTTPResponse(flow: flow, data: readBytes)
+        }
+
         return .allow()
     }
 
@@ -177,7 +219,91 @@ class FilterDataProvider: NEFilterDataProvider {
                                      readBytesStartOffset: Int,
                                      readBytes: Data) -> NEFilterDataVerdict {
         updateBytes(flow: flow, bytesUp: UInt64(readBytes.count))
+
+        // Try to parse HTTP request (only on first data chunk)
+        if readBytesStartOffset == 0 {
+            parseHTTPRequest(flow: flow, data: readBytes)
+        }
+
         return .allow()
+    }
+
+    // MARK: - HTTP Parsing
+
+    private func parseHTTPRequest(flow: NEFilterFlow, data: Data) {
+        // Check if this looks like HTTP (common HTTP methods)
+        guard data.count >= 4 else { return }
+
+        let methodPrefixes = ["GET ", "POST", "PUT ", "HEAD", "DELE", "PATC", "OPTI", "CONN"]
+        guard let prefix = String(data: data.prefix(4), encoding: .utf8),
+              methodPrefixes.contains(where: { prefix.hasPrefix($0.prefix(4)) }) else {
+            return
+        }
+
+        // Try to parse the HTTP request
+        if let parsed = HTTPParser.parseRequest(from: data) {
+            // Build raw headers string
+            var rawHeaders = "\(parsed.method) \(parsed.path) \(parsed.httpVersion)\r\n"
+            for header in parsed.headers {
+                rawHeaders += "\(header.name): \(header.value)\r\n"
+            }
+
+            let httpRequest = ParsedHTTPRequest(
+                method: parsed.method,
+                path: parsed.path,
+                host: parsed.host,
+                contentType: parsed.headers.first { $0.name.lowercased() == "content-type" }?.value,
+                userAgent: parsed.headers.first { $0.name.lowercased() == "user-agent" }?.value,
+                rawHeaders: rawHeaders
+            )
+
+            connectionsLock.lock()
+            let flowHash = ObjectIdentifier(flow).hashValue
+            if let connectionId = flowToConnection[flowHash],
+               var tracker = connections[connectionId] {
+                tracker.httpRequest = httpRequest
+                tracker.isHTTPParsed = true
+                connections[connectionId] = tracker
+                logger.debug("Parsed HTTP request: \(parsed.method) \(parsed.path)")
+            }
+            connectionsLock.unlock()
+        }
+    }
+
+    private func parseHTTPResponse(flow: NEFilterFlow, data: Data) {
+        // Check if this looks like HTTP response
+        guard data.count >= 8 else { return }
+        guard let prefix = String(data: data.prefix(8), encoding: .utf8),
+              prefix.hasPrefix("HTTP/") else {
+            return
+        }
+
+        // Try to parse the HTTP response
+        if let parsed = HTTPParser.parseResponse(from: data) {
+            // Build raw headers string
+            var rawHeaders = "\(parsed.httpVersion) \(parsed.statusCode) \(parsed.reason)\r\n"
+            for header in parsed.headers {
+                rawHeaders += "\(header.name): \(header.value)\r\n"
+            }
+
+            let httpResponse = ParsedHTTPResponse(
+                statusCode: parsed.statusCode,
+                reason: parsed.reason,
+                contentType: parsed.headers.first { $0.name.lowercased() == "content-type" }?.value,
+                contentLength: parsed.contentLength,
+                rawHeaders: rawHeaders
+            )
+
+            connectionsLock.lock()
+            let flowHash = ObjectIdentifier(flow).hashValue
+            if let connectionId = flowToConnection[flowHash],
+               var tracker = connections[connectionId] {
+                tracker.httpResponse = httpResponse
+                connections[connectionId] = tracker
+                logger.debug("Parsed HTTP response: \(parsed.statusCode) \(parsed.reason)")
+            }
+            connectionsLock.unlock()
+        }
     }
 
     // MARK: - Private Helpers
@@ -249,7 +375,7 @@ class FilterDataProvider: NEFilterDataProvider {
 
         return connections.values.map { tracker in
             let conn = tracker.connection
-            // Update with current byte counts and local endpoint
+            // Update with current byte counts, local endpoint, and HTTP data
             return NetworkConnection(
                 id: conn.id,
                 processId: conn.processId,
@@ -265,7 +391,17 @@ class FilterDataProvider: NEFilterDataProvider {
                 interface: conn.interface,
                 bytesUp: tracker.bytesUp,
                 bytesDown: tracker.bytesDown,
-                timestamp: conn.timestamp
+                timestamp: conn.timestamp,
+                httpMethod: tracker.httpRequest?.method,
+                httpPath: tracker.httpRequest?.path,
+                httpHost: tracker.httpRequest?.host,
+                httpContentType: tracker.httpRequest?.contentType,
+                httpUserAgent: tracker.httpRequest?.userAgent,
+                httpStatusCode: tracker.httpResponse?.statusCode,
+                httpStatusReason: tracker.httpResponse?.reason,
+                httpResponseContentType: tracker.httpResponse?.contentType,
+                httpRawRequest: tracker.httpRequest?.rawHeaders,
+                httpRawResponse: tracker.httpResponse?.rawHeaders
             )
         }
     }
@@ -344,6 +480,18 @@ struct NetworkConnection: Codable {
     var bytesUp: UInt64
     var bytesDown: UInt64
     let timestamp: Date
+
+    // HTTP fields
+    let httpMethod: String?
+    let httpPath: String?
+    let httpHost: String?
+    let httpContentType: String?
+    let httpUserAgent: String?
+    let httpStatusCode: Int?
+    let httpStatusReason: String?
+    let httpResponseContentType: String?
+    let httpRawRequest: String?
+    let httpRawResponse: String?
 
     enum NetworkProtocol: String, Codable {
         case tcp = "TCP"

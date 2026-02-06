@@ -57,7 +57,14 @@ public final class SecurityStore: ObservableObject {
                 totalBytesDown: totalBytesDown
             )
         }
-        .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        .sorted {
+            // Sort alphabetically by name first, then by PID (lower PIDs on top) for stability
+            let nameComparison = $0.name.localizedCaseInsensitiveCompare($1.name)
+            if nameComparison != .orderedSame {
+                return nameComparison == .orderedAscending
+            }
+            return $0.pid < $1.pid
+        }
     }
 
     /// Total bytes uploaded
@@ -276,7 +283,8 @@ public final class SecurityStore: ObservableObject {
         connectionsByProcess = Dictionary(grouping: newConnections) { $0.processId }
     }
 
-    /// Enrich connections with geolocation and security data from IP addresses
+    /// Enrich connections with geolocation, security, and threat intelligence data
+    /// Uses the unified IPEnrichmentService which provides fallback logic
     private func enrichWithGeolocation(_ connections: [NetworkConnection]) async -> [NetworkConnection] {
         // Get unique remote IPs that need lookup
         let uniqueIPs = Set(connections.map { $0.remoteAddress })
@@ -285,34 +293,37 @@ public final class SecurityStore: ObservableObject {
         // Skip if no IPs to look up
         guard !uniqueIPs.isEmpty else { return connections }
 
-        // Fetch both GeoIP and InternetDB data concurrently
-        async let geoResults = GeoIPService.shared.batchLookup(Array(uniqueIPs))
-        async let securityResults = InternetDBService.shared.batchLookup(Array(uniqueIPs))
+        // Use unified enrichment service with fallback logic
+        let enrichmentResults = await IPEnrichmentService.shared.batchEnrich(Array(uniqueIPs))
 
-        let (geo, security) = await (geoResults, securityResults)
-
-        // Enrich each connection with both data sources
+        // Enrich each connection with all data sources
         return connections.map { connection in
             var enriched = connection
 
-            // Apply geolocation data
-            if let geoData = geo[connection.remoteAddress] {
-                enriched.remoteCountry = geoData.country
-                enriched.remoteCountryCode = geoData.countryCode
-                enriched.remoteCity = geoData.city
-                enriched.remoteLatitude = geoData.latitude
-                enriched.remoteLongitude = geoData.longitude
-                enriched.remoteASN = geoData.asn
-                enriched.remoteOrganization = geoData.org
-            }
+            if let result = enrichmentResults[connection.remoteAddress] {
+                // Geolocation data
+                enriched.remoteCountry = result.country
+                enriched.remoteCountryCode = result.countryCode
+                enriched.remoteCity = result.city
+                enriched.remoteLatitude = result.latitude
+                enriched.remoteLongitude = result.longitude
+                enriched.remoteASN = result.asn
+                enriched.remoteOrganization = result.organization
 
-            // Apply security data from InternetDB
-            if let securityData = security[connection.remoteAddress] {
-                enriched.remoteOpenPorts = securityData.portsAsUInt16
-                enriched.remoteHostnames = securityData.hostnames
-                enriched.remoteCVEs = securityData.vulns
-                enriched.remoteServiceTags = securityData.tags
-                enriched.remoteCPEs = securityData.cpes
+                // Security data from InternetDB (or reverse DNS for hostnames)
+                enriched.remoteOpenPorts = result.openPorts
+                enriched.remoteHostnames = result.hostnames
+                enriched.remoteCVEs = result.cves
+                enriched.remoteServiceTags = result.serviceTags
+                enriched.remoteCPEs = result.cpes
+
+                // Threat intelligence data
+                enriched.abuseScore = result.abuseScore
+                enriched.isKnownScanner = result.isKnownScanner
+                enriched.isBenignService = result.isBenignService
+                enriched.threatClassification = result.threatClassification
+                enriched.isTor = result.isTor
+                enriched.enrichmentSources = result.sources
             }
 
             return enriched

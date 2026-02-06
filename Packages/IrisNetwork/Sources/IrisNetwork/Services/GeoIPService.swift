@@ -66,11 +66,25 @@ public actor GeoIPService {
             return cached
         }
 
-        // Fetch from API
-        guard let result = await fetchSingle(ipAddress) else { return nil }
+        // Fetch from API with retry logic
+        guard let result = await fetchWithRetry(ipAddress) else { return nil }
 
         cache[ipAddress] = result
         return result
+    }
+
+    /// Fetch with retry logic and exponential backoff
+    private func fetchWithRetry(_ ip: String, retries: Int = 2) async -> GeoIPResult? {
+        for attempt in 0..<retries {
+            if let result = await fetchSingle(ip) {
+                return result
+            }
+            // Exponential backoff: 100ms, 200ms
+            if attempt < retries - 1 {
+                try? await Task.sleep(nanoseconds: UInt64(100_000_000 * (1 << attempt)))
+            }
+        }
+        return nil
     }
 
     /// Look up geolocation for multiple IP addresses (batch)

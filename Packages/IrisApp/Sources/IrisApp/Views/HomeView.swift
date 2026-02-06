@@ -4,7 +4,7 @@ enum MenuDestination: String, CaseIterable {
     case satelliteTracker = "Satellite Tracker"
     case statistics = "Statistics"
     case processList = "Process List"
-    case favorites = "Favorites"
+    case firewall = "Firewall Rules"
     case settings = "Settings"
     case networkMonitor = "Network Monitor"
     case help = "Help"
@@ -15,7 +15,7 @@ enum MenuDestination: String, CaseIterable {
         case .satelliteTracker: return "satellite.fill"
         case .statistics: return "internaldrive.fill"
         case .processList: return "list.bullet.rectangle.fill"
-        case .favorites: return "star.fill"
+        case .firewall: return "flame.fill"
         case .settings: return "gearshape.fill"
         case .networkMonitor: return "network.badge.shield.half.filled"
         case .help: return "questionmark.circle.fill"
@@ -28,9 +28,9 @@ enum MenuDestination: String, CaseIterable {
         case .satelliteTracker: return "Track satellites in real-time"
         case .statistics: return "View disk usage"
         case .processList: return "View running processes"
-        case .favorites: return "Your saved satellites"
+        case .firewall: return "Manage network rules"
         case .settings: return "Extension & permissions"
-        case .networkMonitor: return "Monitor network connections"
+        case .networkMonitor: return "Monitor network & HTTP traffic"
         case .help: return "Help & documentation"
         case .about: return "About this app"
         }
@@ -46,7 +46,7 @@ public struct HomeView: View {
         .satelliteTracker,  // Top (0)
         .statistics,        // Top-right (1)
         .processList,       // Right (2)
-        .favorites,         // Bottom-right (3)
+        .firewall,          // Bottom-right (3)
         .settings,          // Bottom (4)
         .networkMonitor,    // Bottom-left (5)
         .help,              // Left (6)

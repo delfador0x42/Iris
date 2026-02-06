@@ -19,15 +19,35 @@ struct ConnectionDetailRow: View {
                     .font(.system(size: 12))
                     .foregroundColor(.gray)
 
+                // HTTP method badge (if available)
+                if let method = connection.httpMethod {
+                    HTTPMethodBadge(method: method)
+                }
+
                 // Remote endpoint (IP only) - clickable to show detail popover
                 Button {
                     showDetailPopover = true
                 } label: {
                     HStack(spacing: 4) {
-                        Text(connection.remoteEndpoint)
-                            .font(.system(size: 12, design: .monospaced))
-                            .foregroundColor(isHovering ? .cyan : .white.opacity(0.8))
-                            .underline(isHovering)
+                        // Show HTTP path if available, otherwise IP:port
+                        if let path = connection.httpPath {
+                            let displayHost = connection.httpHost ?? connection.remoteHostname ?? connection.remoteAddress
+                            Text(displayHost + (path.count > 40 ? String(path.prefix(40)) + "..." : path))
+                                .font(.system(size: 12, design: .monospaced))
+                                .foregroundColor(isHovering ? .cyan : .white.opacity(0.8))
+                                .underline(isHovering)
+                                .lineLimit(1)
+                        } else {
+                            Text(connection.remoteEndpoint)
+                                .font(.system(size: 12, design: .monospaced))
+                                .foregroundColor(isHovering ? .cyan : .white.opacity(0.8))
+                                .underline(isHovering)
+                        }
+
+                        // HTTP status badge (if available)
+                        if let statusCode = connection.httpStatusCode {
+                            HTTPStatusBadge(statusCode: statusCode)
+                        }
 
                         // Vulnerability indicator
                         if connection.hasCriticalVulns {
