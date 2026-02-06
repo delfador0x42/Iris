@@ -57,6 +57,11 @@ public final class SatelliteStore: ObservableObject {
 
     // MARK: - Public Actions
 
+    /// Standard refresh method - reloads satellite data
+    public func refresh() async {
+        await loadSatellites()
+    }
+
     /// Load satellites from the data source
     public func loadSatellites(group: SatelliteGroup = .active, forceRefresh: Bool = false) async {
         loadingState = .loading

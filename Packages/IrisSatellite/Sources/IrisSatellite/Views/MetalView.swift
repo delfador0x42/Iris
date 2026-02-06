@@ -1,5 +1,8 @@
 import SwiftUI
 import MetalKit
+import os.log
+
+private let logger = Logger(subsystem: "com.wudan.iris", category: "MetalView")
 
 /// SwiftUI wrapper for MTKView
 struct MetalView: NSViewRepresentable {
@@ -14,7 +17,7 @@ struct MetalView: NSViewRepresentable {
         guard let device = MTLCreateSystemDefaultDevice() else {
             let error = IrisError.rendering(.metalNotSupported)
             onSetupError?(error)
-            print("MetalView setup error: \(error.localizedDescription)")
+            logger.error("MetalView setup error: \(error.localizedDescription)")
             return view
         }
 
@@ -35,11 +38,11 @@ struct MetalView: NSViewRepresentable {
             try renderer.setup(device: device, view: view)
         } catch let error as IrisError {
             onSetupError?(error)
-            print("MetalView setup error: \(error.localizedDescription)")
+            logger.error("MetalView setup error: \(error.localizedDescription)")
         } catch {
             let wrappedError = IrisError.rendering(.deviceCreationFailed)
             onSetupError?(wrappedError)
-            print("MetalView setup error: \(error.localizedDescription)")
+            logger.error("MetalView setup error: \(error.localizedDescription)")
         }
 
         // Setup input handling

@@ -30,6 +30,13 @@ public final class ProcessStore: ObservableObject {
     private let logger = Logger(subsystem: "com.wudan.iris", category: "ProcessStore")
     private var xpcConnection: NSXPCConnection?
     private var refreshTimer: Timer?
+
+    /// Optional data source for dependency injection (used in tests)
+    private let dataSource: (any ProcessDataSourceProtocol)?
+
+    /// Refresh interval in seconds.
+    /// Rationale: 2 seconds balances UI responsiveness with CPU usage.
+    /// Process list changes infrequently, so faster polling adds overhead without benefit.
     private let refreshInterval: TimeInterval = 2.0
 
     // MARK: - Computed Properties
@@ -84,16 +91,28 @@ public final class ProcessStore: ObservableObject {
 
     // MARK: - Initialization
 
-    public init() {}
+    /// Initialize with optional data source for dependency injection
+    /// - Parameter dataSource: Optional data source (nil uses XPC/local fallback)
+    public init(dataSource: (any ProcessDataSourceProtocol)? = nil) {
+        self.dataSource = dataSource
+    }
 
     // MARK: - Data Fetching
 
-    /// Fetch processes - tries XPC first, falls back to local enumeration
+    /// Standard refresh method - reloads all process data
+    public func refresh() async {
+        await refreshProcesses()
+    }
+
+    /// Fetch processes - uses data source if available, otherwise XPC/local fallback
     public func refreshProcesses() async {
         isLoading = processes.isEmpty
 
-        // Try XPC first
-        if let connection = xpcConnection {
+        // Use injected data source if available (for testing)
+        if let dataSource = dataSource {
+            await fetchProcessesViaDataSource(dataSource)
+        } else if let connection = xpcConnection {
+            // Try XPC first
             await fetchProcessesViaXPC(connection)
         } else {
             // Fallback to local enumeration
@@ -125,6 +144,16 @@ public final class ProcessStore: ObservableObject {
             if processes[i].hasManPage != hasManPage {
                 processes[i].hasManPage = hasManPage
             }
+        }
+    }
+
+    private func fetchProcessesViaDataSource(_ dataSource: any ProcessDataSourceProtocol) async {
+        do {
+            let dataArray = try await dataSource.fetchProcesses()
+            processProcessData(dataArray)
+        } catch {
+            logger.error("Data source error: \(error.localizedDescription)")
+            errorMessage = error.localizedDescription
         }
     }
 

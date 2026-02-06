@@ -1,6 +1,7 @@
 import MetalKit
 import simd
 import Combine
+import os.log
 
 /// Main Metal renderer for satellite visualization.
 /// Conforms to SatelliteRendererProtocol for dependency injection.
@@ -8,6 +9,7 @@ import Combine
 public class Renderer: NSObject, ObservableObject, MTKViewDelegate, SatelliteRendererProtocol {
     // Configuration
     private let configuration: RenderingConfiguration
+    private let logger = Logger(subsystem: "com.wudan.iris", category: "Renderer")
 
     // Metal objects
     private var device: MTLDevice!
@@ -291,7 +293,7 @@ public class Renderer: NSObject, ObservableObject, MTKViewDelegate, SatelliteRen
             // Commit to make buffers resident on GPU
             residencySet?.commit()
         } catch {
-            print("Warning: Could not create residency set: \(error)")
+            logger.warning("Could not create residency set: \(error.localizedDescription)")
         }
     }
 

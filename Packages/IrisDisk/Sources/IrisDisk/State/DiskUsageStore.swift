@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import os.log
 
 /// State of the disk scanning operation
 public enum DiskScanState: Equatable, Sendable {
@@ -48,6 +49,7 @@ public final class DiskUsageStore: ObservableObject {
 
     private let scanner: DiskScanner
     private var scanTask: Task<Void, Never>?
+    private let logger = Logger(subsystem: "com.wudan.iris", category: "DiskUsageStore")
 
     // MARK: - Cache
 
@@ -81,6 +83,16 @@ public final class DiskUsageStore: ObservableObject {
                 scanState = .idle
             }
         }
+    }
+
+    /// Standard refresh method - starts a new disk scan
+    public func refresh() {
+        startScan()
+    }
+
+    /// Alias for refresh() - starts a new disk scan
+    public func scan() {
+        startScan()
     }
 
     /// Start scanning from root path
@@ -171,7 +183,7 @@ public final class DiskUsageStore: ObservableObject {
             let data = try JSONEncoder().encode(cache)
             try data.write(to: Self.cacheURL)
         } catch {
-            print("Failed to save disk scan cache: \(error)")
+            logger.error("Failed to save disk scan cache: \(error.localizedDescription)")
         }
     }
 
@@ -184,7 +196,7 @@ public final class DiskUsageStore: ObservableObject {
             let data = try Data(contentsOf: Self.cacheURL)
             return try JSONDecoder().decode(DiskScanCache.self, from: data)
         } catch {
-            print("Failed to load disk scan cache: \(error)")
+            logger.error("Failed to load disk scan cache: \(error.localizedDescription)")
             return nil
         }
     }

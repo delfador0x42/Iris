@@ -1,5 +1,8 @@
 import SwiftUI
 import MetalKit
+import os.log
+
+private let logger = Logger(subsystem: "com.wudan.iris", category: "HomeMetalView")
 
 /// SwiftUI wrapper for the Metal-based home screen
 struct HomeMetalView: NSViewRepresentable {
@@ -13,7 +16,7 @@ struct HomeMetalView: NSViewRepresentable {
         guard let device = MTLCreateSystemDefaultDevice() else {
             let error = IrisError.rendering(.metalNotSupported)
             onSetupError?(error)
-            print("HomeMetalView setup error: \(error.localizedDescription)")
+            logger.error("HomeMetalView setup error: \(error.localizedDescription)")
             return view
         }
 
@@ -33,11 +36,11 @@ struct HomeMetalView: NSViewRepresentable {
             try renderer.setup(device: device, view: view)
         } catch let error as IrisError {
             onSetupError?(error)
-            print("HomeMetalView setup error: \(error.localizedDescription)")
+            logger.error("HomeMetalView setup error: \(error.localizedDescription)")
         } catch {
             let wrappedError = IrisError.rendering(.deviceCreationFailed)
             onSetupError?(wrappedError)
-            print("HomeMetalView setup error: \(error.localizedDescription)")
+            logger.error("HomeMetalView setup error: \(error.localizedDescription)")
         }
 
         // Setup mouse tracking

@@ -31,7 +31,14 @@ public final class SecurityStore: ObservableObject {
     private let logger = Logger(subsystem: "com.wudan.iris", category: "SecurityStore")
     private var xpcConnection: NSXPCConnection?
     private var refreshTimer: Timer?
+
+    /// Refresh interval in seconds.
+    /// Rationale: 1 second provides near-real-time network visibility.
+    /// Network connections change rapidly, so faster polling is valuable here.
     private let refreshInterval: TimeInterval = 1.0
+
+    /// Optional data source for dependency injection (used in tests)
+    private let dataSource: (any NetworkDataSourceProtocol)?
 
     // MARK: - Computed Properties
 
@@ -100,7 +107,11 @@ public final class SecurityStore: ObservableObject {
 
     // MARK: - Initialization
 
-    public init() {}
+    /// Initialize with optional data source for dependency injection
+    /// - Parameter dataSource: Optional data source (nil uses XPC)
+    public init(dataSource: (any NetworkDataSourceProtocol)? = nil) {
+        self.dataSource = dataSource
+    }
 
     // MARK: - Connection Management
 
@@ -190,11 +201,42 @@ public final class SecurityStore: ObservableObject {
         refreshTimer = nil
     }
 
+    /// Standard refresh method - reloads all network data
+    public func refresh() async {
+        await refreshData()
+    }
+
     /// Refresh all data from the extension
     public func refreshData() async {
-        await fetchConnections()
-        await fetchRules()
+        // Use injected data source if available (for testing)
+        if let dataSource = dataSource {
+            await fetchConnectionsViaDataSource(dataSource)
+            await fetchRulesViaDataSource(dataSource)
+        } else {
+            await fetchConnections()
+            await fetchRules()
+        }
         lastUpdate = Date()
+    }
+
+    private func fetchConnectionsViaDataSource(_ dataSource: any NetworkDataSourceProtocol) async {
+        do {
+            let dataArray = try await dataSource.fetchConnections()
+            await processConnectionData(dataArray)
+        } catch {
+            logger.error("Data source error: \(error.localizedDescription)")
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func fetchRulesViaDataSource(_ dataSource: any NetworkDataSourceProtocol) async {
+        do {
+            let dataArray = try await dataSource.fetchRules()
+            processRulesData(dataArray)
+        } catch {
+            logger.error("Data source error: \(error.localizedDescription)")
+            errorMessage = error.localizedDescription
+        }
     }
 
     private func fetchConnections() async {

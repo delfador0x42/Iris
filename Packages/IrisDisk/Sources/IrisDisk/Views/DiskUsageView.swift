@@ -115,7 +115,7 @@ public struct DiskUsageView: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
 
-                Text("\(progress.filesScanned) files, \(formatSize(progress.totalSizeScanned))")
+                Text("\(progress.filesScanned) files, \(ByteFormatter.format(progress.totalSizeScanned, style: .abbreviated))")
                     .font(.system(size: 14))
                     .foregroundColor(.white)
             }
@@ -233,7 +233,7 @@ struct DiskUsageHeaderView: View {
                         Text("Total")
                             .font(.system(size: 10))
                             .foregroundColor(.gray.opacity(0.7))
-                        Text(formatSize(info.totalCapacity))
+                        Text(ByteFormatter.format(info.totalCapacity, style: .abbreviated))
                             .font(.system(size: 14, weight: .medium, design: .monospaced))
                             .foregroundColor(.white)
                     }
@@ -243,7 +243,7 @@ struct DiskUsageHeaderView: View {
                         Text("Used")
                             .font(.system(size: 10))
                             .foregroundColor(.gray.opacity(0.7))
-                        Text(formatSize(info.usedSpace))
+                        Text(ByteFormatter.format(info.usedSpace, style: .abbreviated))
                             .font(.system(size: 14, weight: .medium, design: .monospaced))
                             .foregroundColor(.orange)
                     }
@@ -253,7 +253,7 @@ struct DiskUsageHeaderView: View {
                         Text("Available")
                             .font(.system(size: 10))
                             .foregroundColor(.gray.opacity(0.7))
-                        Text(formatSize(info.availableSpace))
+                        Text(ByteFormatter.format(info.availableSpace, style: .abbreviated))
                             .font(.system(size: 14, weight: .medium, design: .monospaced))
                             .foregroundColor(.green)
                     }

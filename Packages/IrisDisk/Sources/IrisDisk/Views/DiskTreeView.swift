@@ -79,7 +79,7 @@ struct DiskNodeRow: View {
                 .frame(width: 100, height: 12)
 
                 // Size text
-                Text(formatSize(node.size))
+                Text(ByteFormatter.format(node.size, style: .abbreviated))
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundColor(.gray)
                     .frame(width: 60, alignment: .trailing)
