@@ -164,21 +164,9 @@ public struct NetworkConnection: Identifiable, Sendable, Codable, Equatable {
 
 extension NetworkConnection {
     /// Format bytes as human-readable string
+    /// Uses ByteFormatter with full style for detailed display
     public static func formatBytes(_ bytes: UInt64) -> String {
-        let units = ["bytes", "KB", "MB", "GB", "TB"]
-        var value = Double(bytes)
-        var unitIndex = 0
-
-        while value >= 1024 && unitIndex < units.count - 1 {
-            value /= 1024
-            unitIndex += 1
-        }
-
-        if unitIndex == 0 {
-            return "\(bytes) bytes"
-        } else {
-            return String(format: "%.1f %@", value, units[unitIndex])
-        }
+        ByteFormatter.format(bytes, style: .full)
     }
 
     /// Formatted bytes up

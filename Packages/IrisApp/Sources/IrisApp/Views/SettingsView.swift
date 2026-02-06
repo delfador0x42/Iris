@@ -193,7 +193,7 @@ public struct SettingsView: View {
         }
     }
 
-    private func statusColor(for state: ExtensionManager.ExtensionState) -> Color {
+    private func statusColor(for state: ExtensionState) -> Color {
         switch state {
         case .installed: return .green
         case .installing: return .yellow
@@ -214,7 +214,7 @@ public struct SettingsView: View {
     }
 
     @ViewBuilder
-    private func extensionActionButton(for type: ExtensionType, state: ExtensionManager.ExtensionState) -> some View {
+    private func extensionActionButton(for type: ExtensionType, state: ExtensionState) -> some View {
         switch state {
         case .notInstalled, .unknown:
             Button(action: { extensionManager.installExtension(type) }) {
