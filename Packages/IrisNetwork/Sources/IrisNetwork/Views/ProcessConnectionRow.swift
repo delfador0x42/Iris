@@ -1,0 +1,77 @@
+import SwiftUI
+
+/// Row showing a process and its aggregated network connections
+struct ProcessConnectionRow: View {
+    let process: SecurityStore.ProcessSummary
+    let connections: [NetworkConnection]
+    let isExpanded: Bool
+    let onToggle: () -> Void
+
+    /// Aggregate connections by remote IP for deduplication
+    private var aggregatedConnections: [AggregatedConnection] {
+        let grouped = Dictionary(grouping: connections) { $0.remoteAddress }
+        return grouped.map { (ip, conns) in
+            AggregatedConnection(id: ip, remoteAddress: ip, connections: conns)
+        }
+        .sorted { $0.connectionCount > $1.connectionCount }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Process row
+            HStack(spacing: 8) {
+                // Expand indicator
+                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                    .font(.system(size: 10))
+                    .foregroundColor(.gray)
+                    .frame(width: 12)
+
+                // Process icon (placeholder)
+                Image(systemName: "app.fill")
+                    .foregroundColor(.blue)
+                    .frame(width: 20)
+
+                // Process name and path
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(process.name) (pid: \(process.pid))")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.white)
+
+                    Text(process.path)
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundColor(.gray.opacity(0.7))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+
+                Spacer()
+
+                // Total bytes
+                Text(process.formattedBytesUp)
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundColor(.gray)
+                    .frame(width: 80, alignment: .trailing)
+
+                Text(process.formattedBytesDown)
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundColor(.gray)
+                    .frame(width: 80, alignment: .trailing)
+            }
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                onToggle()
+            }
+
+            // Connection rows (when expanded) - deduplicated by IP
+            if isExpanded {
+                ForEach(aggregatedConnections) { aggregated in
+                    ConnectionDetailRow(aggregated: aggregated)
+                }
+            }
+        }
+        .background(
+            isExpanded ? Color.white.opacity(0.03) : Color.clear
+        )
+    }
+}
