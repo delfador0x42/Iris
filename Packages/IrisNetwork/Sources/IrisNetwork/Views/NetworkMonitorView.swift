@@ -1,4 +1,19 @@
 import SwiftUI
+import AppKit
+
+// MARK: - Pointer Cursor Modifier
+
+extension View {
+    func pointerCursor() -> some View {
+        self.onHover { inside in
+            if inside {
+                NSCursor.pointingHand.set()
+            } else {
+                NSCursor.arrow.set()
+            }
+        }
+    }
+}
 
 /// View mode for network monitor
 public enum NetworkViewMode: String, CaseIterable {
@@ -337,6 +352,8 @@ struct ProcessConnectionRow: View {
 
 struct ConnectionDetailRow: View {
     let connection: NetworkConnection
+    @State private var isHovering = false
+    @State private var showDetailPopover = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -345,10 +362,50 @@ struct ConnectionDetailRow: View {
                 Spacer()
                     .frame(width: 40) // Indent
 
-                Text(connection.connectionDescription)
+                // Local endpoint
+                Text(connection.localEndpoint)
                     .font(.system(size: 12, design: .monospaced))
-                    .foregroundColor(.white.opacity(0.8))
-                    .lineLimit(1)
+                    .foregroundColor(.white.opacity(0.6))
+
+                Text("→")
+                    .font(.system(size: 12))
+                    .foregroundColor(.gray)
+
+                // Remote endpoint - clickable to show detail popover
+                Button {
+                    showDetailPopover = true
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(connection.remoteEndpoint)
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundColor(isHovering ? .cyan : .white.opacity(0.8))
+                            .underline(isHovering)
+
+                        // Vulnerability indicator
+                        if connection.hasCriticalVulns {
+                            Image(systemName: "exclamationmark.shield.fill")
+                                .foregroundColor(.red)
+                                .font(.system(size: 10))
+                                .help("\(connection.remoteCVEs?.count ?? 0) known vulnerabilities")
+                        }
+
+                        // Location badge if available
+                        if let location = connection.locationDescription {
+                            Text("(\(location))")
+                                .font(.system(size: 10))
+                                .foregroundColor(.cyan.opacity(0.7))
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+                .pointerCursor()
+                .onHover { hovering in
+                    isHovering = hovering
+                }
+                .help("View IP details")
+                .popover(isPresented: $showDetailPopover) {
+                    IPDetailPopover(connection: connection)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -412,15 +469,29 @@ struct NetworkMonitorHeaderView: View {
 
                 Spacer()
 
-                // View mode picker
-                Picker("View", selection: $viewMode) {
+                // View mode toggle buttons
+                HStack(spacing: 4) {
                     ForEach(NetworkViewMode.allCases, id: \.self) { mode in
-                        Text(mode.rawValue)
-                            .tag(mode)
+                        Button {
+                            viewMode = mode
+                        } label: {
+                            Image(systemName: mode.icon)
+                                .font(.system(size: 14))
+                                .frame(width: 32, height: 24)
+                        }
+                        .buttonStyle(.plain)
+                        .background(
+                            viewMode == mode
+                                ? Color.blue
+                                : Color.white.opacity(0.1)
+                        )
+                        .foregroundColor(viewMode == mode ? .white : .gray)
+                        .cornerRadius(6)
                     }
                 }
-                .pickerStyle(.segmented)
-                .frame(width: 140)
+                .padding(4)
+                .background(Color.black.opacity(0.3))
+                .cornerRadius(8)
 
                 Spacer()
                     .frame(width: 16)

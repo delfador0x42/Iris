@@ -1,10 +1,12 @@
 import SwiftUI
 import MapKit
+import AppKit
 
 /// World map visualization showing network connection destinations
 public struct WorldMapView: View {
     @ObservedObject var store: SecurityStore
     @State private var cameraPosition: MapCameraPosition = .automatic
+    @State private var animationPhase: CGFloat = 0
 
     // Default user location (can be updated with actual location)
     private let userLocation = CLLocationCoordinate2D(latitude: 37.7749, longitude: -122.4194) // San Francisco
@@ -23,12 +25,36 @@ public struct WorldMapView: View {
                 statsOverlay
             }
         }
+        .onAppear {
+            // Start animation timer
+            withAnimation(.linear(duration: 2).repeatForever(autoreverses: false)) {
+                animationPhase = 1
+            }
+        }
     }
 
     @ViewBuilder
     private var mapContent: some View {
         if #available(macOS 14.0, *) {
             Map(position: $cameraPosition) {
+                // Connection arcs (drawn first, so they appear behind markers)
+                ForEach(aggregatedEndpoints) { endpoint in
+                    // Draw arc from user to endpoint
+                    MapPolyline(coordinates: greatCircleArc(
+                        from: userLocation,
+                        to: endpoint.coordinate,
+                        segments: 50
+                    ))
+                    .stroke(
+                        arcGradient(for: endpoint),
+                        style: StrokeStyle(
+                            lineWidth: arcLineWidth(for: endpoint),
+                            lineCap: .round,
+                            lineJoin: .round
+                        )
+                    )
+                }
+
                 // User location marker
                 Annotation("You", coordinate: userLocation) {
                     UserLocationMarker()
@@ -52,6 +78,75 @@ public struct WorldMapView: View {
             Text("Map requires macOS 14.0 or later")
                 .foregroundColor(.secondary)
         }
+    }
+
+    /// Calculate points along a great circle arc between two coordinates
+    private func greatCircleArc(
+        from start: CLLocationCoordinate2D,
+        to end: CLLocationCoordinate2D,
+        segments: Int
+    ) -> [CLLocationCoordinate2D] {
+        var coordinates: [CLLocationCoordinate2D] = []
+
+        let lat1 = start.latitude * .pi / 180
+        let lon1 = start.longitude * .pi / 180
+        let lat2 = end.latitude * .pi / 180
+        let lon2 = end.longitude * .pi / 180
+
+        // Calculate the angular distance
+        let d = 2 * asin(sqrt(
+            pow(sin((lat1 - lat2) / 2), 2) +
+            cos(lat1) * cos(lat2) * pow(sin((lon1 - lon2) / 2), 2)
+        ))
+
+        for i in 0...segments {
+            let f = Double(i) / Double(segments)
+
+            let A = sin((1 - f) * d) / sin(d)
+            let B = sin(f * d) / sin(d)
+
+            let x = A * cos(lat1) * cos(lon1) + B * cos(lat2) * cos(lon2)
+            let y = A * cos(lat1) * sin(lon1) + B * cos(lat2) * sin(lon2)
+            let z = A * sin(lat1) + B * sin(lat2)
+
+            let lat = atan2(z, sqrt(x * x + y * y))
+            let lon = atan2(y, x)
+
+            coordinates.append(CLLocationCoordinate2D(
+                latitude: lat * 180 / .pi,
+                longitude: lon * 180 / .pi
+            ))
+        }
+
+        return coordinates
+    }
+
+    /// Get gradient color for arc based on traffic volume
+    private func arcGradient(for endpoint: ConnectionEndpoint) -> LinearGradient {
+        let totalBytes = endpoint.totalBytesUp + endpoint.totalBytesDown
+        let baseColor: Color
+        if totalBytes > 10_000_000 {
+            baseColor = .red
+        } else if totalBytes > 1_000_000 {
+            baseColor = .orange
+        } else {
+            baseColor = .cyan
+        }
+
+        return LinearGradient(
+            colors: [
+                baseColor.opacity(0.3),
+                baseColor.opacity(0.8),
+                baseColor.opacity(0.3)
+            ],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+    }
+
+    /// Get line width based on connection count
+    private func arcLineWidth(for endpoint: ConnectionEndpoint) -> CGFloat {
+        CGFloat(min(6, 1 + endpoint.connectionCount / 5))
     }
 
     private var statsOverlay: some View {
@@ -104,7 +199,8 @@ public struct WorldMapView: View {
                 connectionCount: connections.count,
                 totalBytesUp: connections.reduce(0) { $0 + $1.bytesUp },
                 totalBytesDown: connections.reduce(0) { $0 + $1.bytesDown },
-                processes: Set(connections.map { $0.processName })
+                processes: Set(connections.map { $0.processName }),
+                uniqueIPs: Set(connections.map { $0.remoteAddress })
             )
         }
         .sorted { $0.connectionCount > $1.connectionCount }
@@ -123,6 +219,7 @@ struct ConnectionEndpoint: Identifiable {
     let totalBytesUp: UInt64
     let totalBytesDown: UInt64
     let processes: Set<String>
+    let uniqueIPs: Set<String>  // Unique IP addresses at this location
 
     var label: String {
         if city.isEmpty {
@@ -140,19 +237,43 @@ struct ConnectionEndpoint: Identifiable {
 // MARK: - Map Markers
 
 struct UserLocationMarker: View {
+    @State private var isPulsing = false
+
     var body: some View {
         ZStack {
+            // Outer pulse ring
+            Circle()
+                .stroke(.blue.opacity(0.4), lineWidth: 2)
+                .frame(width: 40, height: 40)
+                .scaleEffect(isPulsing ? 1.5 : 1.0)
+                .opacity(isPulsing ? 0 : 0.8)
+
+            // Inner glow
             Circle()
                 .fill(.blue.opacity(0.3))
                 .frame(width: 32, height: 32)
 
+            // Main circle
             Circle()
-                .fill(.blue)
-                .frame(width: 16, height: 16)
+                .fill(
+                    RadialGradient(
+                        colors: [.cyan, .blue],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: 10
+                    )
+                )
+                .frame(width: 18, height: 18)
 
+            // Center dot
             Circle()
                 .fill(.white)
                 .frame(width: 8, height: 8)
+        }
+        .onAppear {
+            withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: false)) {
+                isPulsing = true
+            }
         }
     }
 }
@@ -229,6 +350,23 @@ struct EndpointPopover: View {
             LabeledContent("Upload", value: NetworkConnection.formatBytes(endpoint.totalBytesUp))
             LabeledContent("Download", value: NetworkConnection.formatBytes(endpoint.totalBytesDown))
 
+            // IP addresses with Shodan links
+            if !endpoint.uniqueIPs.isEmpty {
+                Divider()
+                Text("IP Addresses:")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                ForEach(Array(endpoint.uniqueIPs.prefix(5)).sorted(), id: \.self) { ip in
+                    IPAddressRow(ip: ip)
+                }
+                if endpoint.uniqueIPs.count > 5 {
+                    Text("... and \(endpoint.uniqueIPs.count - 5) more")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+
             if !endpoint.processes.isEmpty {
                 Divider()
                 Text("Processes:")
@@ -246,7 +384,36 @@ struct EndpointPopover: View {
             }
         }
         .padding()
-        .frame(minWidth: 200)
+        .frame(minWidth: 220)
+    }
+}
+
+struct IPAddressRow: View {
+    let ip: String
+    @State private var isHovering = false
+
+    var body: some View {
+        Button {
+            openShodan(for: ip)
+        } label: {
+            Text("• \(ip)")
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundColor(isHovering ? .cyan : .primary)
+                .underline(isHovering)
+        }
+        .buttonStyle(.plain)
+        .pointerCursor()
+        .onHover { hovering in
+            isHovering = hovering
+        }
+        .help("View on Shodan")
+    }
+
+    private func openShodan(for ip: String) {
+        let urlString = "https://www.shodan.io/host/\(ip)"
+        if let url = URL(string: urlString) {
+            NSWorkspace.shared.open(url)
+        }
     }
 }
 

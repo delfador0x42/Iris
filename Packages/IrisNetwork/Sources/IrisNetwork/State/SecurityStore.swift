@@ -234,7 +234,7 @@ public final class SecurityStore: ObservableObject {
         connectionsByProcess = Dictionary(grouping: newConnections) { $0.processId }
     }
 
-    /// Enrich connections with geolocation data from IP addresses
+    /// Enrich connections with geolocation and security data from IP addresses
     private func enrichWithGeolocation(_ connections: [NetworkConnection]) async -> [NetworkConnection] {
         // Get unique remote IPs that need lookup
         let uniqueIPs = Set(connections.map { $0.remoteAddress })
@@ -243,22 +243,36 @@ public final class SecurityStore: ObservableObject {
         // Skip if no IPs to look up
         guard !uniqueIPs.isEmpty else { return connections }
 
-        // Batch lookup
-        let geoResults = await GeoIPService.shared.batchLookup(Array(uniqueIPs))
+        // Fetch both GeoIP and InternetDB data concurrently
+        async let geoResults = GeoIPService.shared.batchLookup(Array(uniqueIPs))
+        async let securityResults = InternetDBService.shared.batchLookup(Array(uniqueIPs))
 
-        // Enrich each connection
+        let (geo, security) = await (geoResults, securityResults)
+
+        // Enrich each connection with both data sources
         return connections.map { connection in
-            guard let geo = geoResults[connection.remoteAddress] else {
-                return connection
-            }
             var enriched = connection
-            enriched.remoteCountry = geo.country
-            enriched.remoteCountryCode = geo.countryCode
-            enriched.remoteCity = geo.city
-            enriched.remoteLatitude = geo.latitude
-            enriched.remoteLongitude = geo.longitude
-            enriched.remoteASN = geo.asn
-            enriched.remoteOrganization = geo.org
+
+            // Apply geolocation data
+            if let geoData = geo[connection.remoteAddress] {
+                enriched.remoteCountry = geoData.country
+                enriched.remoteCountryCode = geoData.countryCode
+                enriched.remoteCity = geoData.city
+                enriched.remoteLatitude = geoData.latitude
+                enriched.remoteLongitude = geoData.longitude
+                enriched.remoteASN = geoData.asn
+                enriched.remoteOrganization = geoData.org
+            }
+
+            // Apply security data from InternetDB
+            if let securityData = security[connection.remoteAddress] {
+                enriched.remoteOpenPorts = securityData.portsAsUInt16
+                enriched.remoteHostnames = securityData.hostnames
+                enriched.remoteCVEs = securityData.vulns
+                enriched.remoteServiceTags = securityData.tags
+                enriched.remoteCPEs = securityData.cpes
+            }
+
             return enriched
         }
     }

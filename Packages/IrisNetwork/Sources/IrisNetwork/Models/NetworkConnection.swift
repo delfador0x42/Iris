@@ -27,6 +27,13 @@ public struct NetworkConnection: Identifiable, Sendable, Codable, Equatable {
     public var remoteASN: String?
     public var remoteOrganization: String?
 
+    // Security enrichment data (from InternetDB/Shodan)
+    public var remoteOpenPorts: [UInt16]?
+    public var remoteHostnames: [String]?
+    public var remoteCVEs: [String]?
+    public var remoteServiceTags: [String]?
+    public var remoteCPEs: [String]?
+
     public init(
         id: UUID = UUID(),
         processId: Int32,
@@ -49,7 +56,12 @@ public struct NetworkConnection: Identifiable, Sendable, Codable, Equatable {
         remoteLatitude: Double? = nil,
         remoteLongitude: Double? = nil,
         remoteASN: String? = nil,
-        remoteOrganization: String? = nil
+        remoteOrganization: String? = nil,
+        remoteOpenPorts: [UInt16]? = nil,
+        remoteHostnames: [String]? = nil,
+        remoteCVEs: [String]? = nil,
+        remoteServiceTags: [String]? = nil,
+        remoteCPEs: [String]? = nil
     ) {
         self.id = id
         self.processId = processId
@@ -73,6 +85,11 @@ public struct NetworkConnection: Identifiable, Sendable, Codable, Equatable {
         self.remoteLongitude = remoteLongitude
         self.remoteASN = remoteASN
         self.remoteOrganization = remoteOrganization
+        self.remoteOpenPorts = remoteOpenPorts
+        self.remoteHostnames = remoteHostnames
+        self.remoteCVEs = remoteCVEs
+        self.remoteServiceTags = remoteServiceTags
+        self.remoteCPEs = remoteCPEs
     }
 
     /// Network protocol type
@@ -131,6 +148,16 @@ public struct NetworkConnection: Identifiable, Sendable, Codable, Equatable {
             return "\(city), \(country)"
         }
         return country
+    }
+
+    /// Whether this connection has security enrichment data
+    public var hasSecurityData: Bool {
+        remoteOpenPorts != nil || remoteHostnames != nil || remoteCVEs != nil
+    }
+
+    /// Whether this connection has known vulnerabilities
+    public var hasCriticalVulns: Bool {
+        !(remoteCVEs ?? []).isEmpty
     }
 }
 
