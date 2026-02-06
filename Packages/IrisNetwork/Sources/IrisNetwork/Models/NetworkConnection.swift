@@ -18,6 +18,15 @@ public struct NetworkConnection: Identifiable, Sendable, Codable, Equatable {
     public var bytesDown: UInt64
     public let timestamp: Date
 
+    // Geolocation data (enriched after creation)
+    public var remoteCountry: String?
+    public var remoteCountryCode: String?
+    public var remoteCity: String?
+    public var remoteLatitude: Double?
+    public var remoteLongitude: Double?
+    public var remoteASN: String?
+    public var remoteOrganization: String?
+
     public init(
         id: UUID = UUID(),
         processId: Int32,
@@ -33,7 +42,14 @@ public struct NetworkConnection: Identifiable, Sendable, Codable, Equatable {
         interface: String? = nil,
         bytesUp: UInt64 = 0,
         bytesDown: UInt64 = 0,
-        timestamp: Date = Date()
+        timestamp: Date = Date(),
+        remoteCountry: String? = nil,
+        remoteCountryCode: String? = nil,
+        remoteCity: String? = nil,
+        remoteLatitude: Double? = nil,
+        remoteLongitude: Double? = nil,
+        remoteASN: String? = nil,
+        remoteOrganization: String? = nil
     ) {
         self.id = id
         self.processId = processId
@@ -50,6 +66,13 @@ public struct NetworkConnection: Identifiable, Sendable, Codable, Equatable {
         self.bytesUp = bytesUp
         self.bytesDown = bytesDown
         self.timestamp = timestamp
+        self.remoteCountry = remoteCountry
+        self.remoteCountryCode = remoteCountryCode
+        self.remoteCity = remoteCity
+        self.remoteLatitude = remoteLatitude
+        self.remoteLongitude = remoteLongitude
+        self.remoteASN = remoteASN
+        self.remoteOrganization = remoteOrganization
     }
 
     /// Network protocol type
@@ -94,6 +117,20 @@ public struct NetworkConnection: Identifiable, Sendable, Codable, Equatable {
     /// Total bytes transferred
     public var totalBytes: UInt64 {
         bytesUp + bytesDown
+    }
+
+    /// Whether this connection has geolocation data
+    public var hasGeolocation: Bool {
+        remoteLatitude != nil && remoteLongitude != nil
+    }
+
+    /// Formatted location string (e.g., "San Francisco, US")
+    public var locationDescription: String? {
+        guard let country = remoteCountry else { return nil }
+        if let city = remoteCity, !city.isEmpty {
+            return "\(city), \(country)"
+        }
+        return country
     }
 }
 

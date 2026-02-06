@@ -1,10 +1,24 @@
 import SwiftUI
 
+/// View mode for network monitor
+public enum NetworkViewMode: String, CaseIterable {
+    case list = "List"
+    case map = "Map"
+
+    var icon: String {
+        switch self {
+        case .list: return "list.bullet"
+        case .map: return "globe"
+        }
+    }
+}
+
 /// Main view for network monitoring - displays per-process connections
 public struct NetworkMonitorView: View {
     @StateObject private var store = SecurityStore()
     @StateObject private var extensionManager = ExtensionManager.shared
     @State private var expandedProcesses: Set<Int32> = []
+    @State private var viewMode: NetworkViewMode = .list
 
     public init() {}
 
@@ -25,7 +39,8 @@ public struct NetworkMonitorView: View {
                 // Header
                 NetworkMonitorHeaderView(
                     store: store,
-                    extensionManager: extensionManager
+                    extensionManager: extensionManager,
+                    viewMode: $viewMode
                 )
 
                 // Content based on state
@@ -36,7 +51,13 @@ public struct NetworkMonitorView: View {
                 } else if store.connections.isEmpty {
                     emptyView
                 } else {
-                    connectionListView
+                    // Show list or map based on view mode
+                    switch viewMode {
+                    case .list:
+                        connectionListView
+                    case .map:
+                        WorldMapView(store: store)
+                    }
                 }
             }
         }
@@ -379,6 +400,7 @@ struct ConnectionDetailRow: View {
 struct NetworkMonitorHeaderView: View {
     @ObservedObject var store: SecurityStore
     @ObservedObject var extensionManager: ExtensionManager
+    @Binding var viewMode: NetworkViewMode
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -389,6 +411,19 @@ struct NetworkMonitorHeaderView: View {
                     .foregroundColor(.white)
 
                 Spacer()
+
+                // View mode picker
+                Picker("View", selection: $viewMode) {
+                    ForEach(NetworkViewMode.allCases, id: \.self) { mode in
+                        Text(mode.rawValue)
+                            .tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 140)
+
+                Spacer()
+                    .frame(width: 16)
 
                 // Status indicator
                 HStack(spacing: 6) {

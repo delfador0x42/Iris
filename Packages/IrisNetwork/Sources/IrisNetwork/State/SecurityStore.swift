@@ -63,6 +63,21 @@ public final class SecurityStore: ObservableObject {
         connections.reduce(0) { $0 + $1.bytesDown }
     }
 
+    /// Connections that have geolocation data
+    public var geolocatedConnections: [NetworkConnection] {
+        connections.filter { $0.hasGeolocation }
+    }
+
+    /// Unique countries in connections
+    public var uniqueCountries: Set<String> {
+        Set(connections.compactMap { $0.remoteCountryCode })
+    }
+
+    /// Count of connections with geolocation
+    public var geolocatedCount: Int {
+        geolocatedConnections.count
+    }
+
     // MARK: - Types
 
     public struct ProcessSummary: Identifiable {
@@ -195,25 +210,57 @@ public final class SecurityStore: ObservableObject {
         await withCheckedContinuation { continuation in
             proxy.getConnections { [weak self] dataArray in
                 Task { @MainActor in
-                    self?.processConnectionData(dataArray)
+                    await self?.processConnectionData(dataArray)
                     continuation.resume()
                 }
             }
         }
     }
 
-    private func processConnectionData(_ dataArray: [Data]) {
+    private func processConnectionData(_ dataArray: [Data]) async {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
 
-        let newConnections = dataArray.compactMap { data -> NetworkConnection? in
+        var newConnections = dataArray.compactMap { data -> NetworkConnection? in
             try? decoder.decode(NetworkConnection.self, from: data)
         }
+
+        // Enrich with geolocation data
+        newConnections = await enrichWithGeolocation(newConnections)
 
         connections = newConnections
 
         // Group by process
         connectionsByProcess = Dictionary(grouping: newConnections) { $0.processId }
+    }
+
+    /// Enrich connections with geolocation data from IP addresses
+    private func enrichWithGeolocation(_ connections: [NetworkConnection]) async -> [NetworkConnection] {
+        // Get unique remote IPs that need lookup
+        let uniqueIPs = Set(connections.map { $0.remoteAddress })
+            .filter { !$0.isEmpty }
+
+        // Skip if no IPs to look up
+        guard !uniqueIPs.isEmpty else { return connections }
+
+        // Batch lookup
+        let geoResults = await GeoIPService.shared.batchLookup(Array(uniqueIPs))
+
+        // Enrich each connection
+        return connections.map { connection in
+            guard let geo = geoResults[connection.remoteAddress] else {
+                return connection
+            }
+            var enriched = connection
+            enriched.remoteCountry = geo.country
+            enriched.remoteCountryCode = geo.countryCode
+            enriched.remoteCity = geo.city
+            enriched.remoteLatitude = geo.latitude
+            enriched.remoteLongitude = geo.longitude
+            enriched.remoteASN = geo.asn
+            enriched.remoteOrganization = geo.org
+            return enriched
+        }
     }
 
     private func fetchRules() async {
