@@ -380,3 +380,96 @@ Package URLs: swift-nio (2.94.0+), swift-nio-ssl (2.36.0+), swift-nio-transport-
 - Manages NEDNSProxyManager lifecycle (load/save/removeFromPreferences)
 - providerBundleIdentifier: "com.wudan.iris.dns.extension"
 - serverAddress: "1.1.1.1" (required by API even though we use DoH internally)
+
+## APT Attack Surface & Defenses
+
+Full red team report, scanner inventory, and gap analysis are in `../iris-research/`:
+- **[THREAT_MODEL.md](../iris-research/THREAT_MODEL.md)** — 10 nation-state attack scenarios with MITRE ATT&CK mapping
+- **[SCANNER_INVENTORY.md](../iris-research/SCANNER_INVENTORY.md)** — All 20+ scanners cataloged with capabilities and gaps
+- **[DETECTION_GAPS.md](../iris-research/DETECTION_GAPS.md)** — P0-P3 gap analysis with effort/impact matrix
+
+### Critical Finding: Iris Has 20 Scanners, Only 8 Execute
+
+SecurityAssessor.assess() only calls SystemSecurityChecks.runAll(). These 16 scanners exist as complete, functional code but NEVER run:
+PersistenceScanner, DylibHijackScanner, EventTapScanner, StealthScanner, LOLBinDetector, TCCMonitor, NetworkAnomalyDetector, ProcessIntegrityChecker, FileSystemBaseline, SupplyChainAuditor, XPCServiceAuditor, PersistenceMonitor, RansomwareDetector, EntropyAnalyzer, AVMonitor, SigningVerifier
+
+### Top 10 Attack/Parry Pairs
+
+**1. ATTACK: Operation PHANTOM THREAD — DNS Tunneling (T1071.004)**
+Base32-encoded data in subdomain labels, 1.2 MB/hour exfil
+**PARRY**: DNSStore has all query data → needs DNSThreatAnalyzer (entropy on labels, frequency per base domain)
+**STATUS**: Data collected, analyzer not yet built
+
+**2. ATTACK: Operation GOLDEN BRIDGE — Supply Chain + Shell Injection (T1195, T1059.004)**
+Trojanized package modifies .zshrc, adds `curl|bash` to build pipeline
+**PARRY**: SupplyChainAuditor (taps/npm/pip) + PersistenceScanner+Shell → needs ShellConfigAnalyzer (content parsing)
+**STATUS**: Scanners exist but don't analyze shell config content
+
+**3. ATTACK: Operation DEEP CURRENT — Encrypted C2 on Non-Standard Port (T1573.002, T1571)**
+TLS 1.3 on port 8443, beacons every 30s ± jitter
+**PARRY**: NetworkAnomalyDetector has beaconing CV analysis + C2 port list → just needs WIRING
+**STATUS**: Detector exists, orphaned from SecurityAssessor
+
+**4. ATTACK: Operation SILK ROAD — LOLBin Chain (T1059.002, T1218)**
+osascript → curl → python3 → sqlite3 TCC.db, no malware on disk
+**PARRY**: LOLBinDetector (40+ LOLBins, parent→child, keychain dumps) → needs WIRING
+**STATUS**: Detector exists with MITRE IDs, orphaned
+
+**5. ATTACK: Operation CRYSTAL PALACE — Auth Plugin Persistence (T1547.002)**
+Authorization plugin in SecurityAgentPlugins + auth.db mechanism insertion
+**PARRY**: PersistenceScanner finds plugins on disk → needs auth.db parsing
+**STATUS**: Partial — scans directory but doesn't verify auth.db wiring
+
+**6. ATTACK: Operation SHADOW PUPPET — FinderSync Keylogger (T1056.001, T1547.015)**
+FinderSync extension auto-loads with Finder, runs CGEventTap keylogger
+**PARRY**: EventTapScanner detects CGEventTap → needs FinderSync/Spotlight/QuickLook enumeration
+**STATUS**: Event tap detection works, extension enumeration missing
+
+**7. ATTACK: Operation QUICKSILVER — Chunked HTTP Exfiltration (T1041, T1030)**
+4KB POST bodies to compromised WordPress, looks like normal API traffic
+**PARRY**: NetworkConnection has bytesUp/bytesDown → needs exfil ratio analysis
+**STATUS**: Data available, analysis not built
+
+**8. ATTACK: Operation ROOTKIT HOTEL — Kext/SysExt Persistence (T1547.006)**
+Malicious kext hooks VFS to hide files and intercept network
+**PARRY**: PersistenceScanner + FileSystemBaseline monitor Extensions dirs → needs kextstat comparison
+**STATUS**: File detection works, runtime detection limited by architecture
+
+**9. ATTACK: Operation WHISPER NET — ICMP Covert Channel (T1095)**
+Encoded payloads in ICMP echo request data field
+**PARRY**: Architectural gap — NEFilter only sees TCP/UDP, no ICMP visibility
+**STATUS**: No clean solution in current extension framework
+
+**10. ATTACK: Operation GLASS HOUSE — TCC Bypass (T1005, T1552.001)**
+Direct TCC.db modification grants FDA/ScreenRecording/Accessibility
+**PARRY**: TCCMonitor SHA256 baselines TCC.db + flags high-risk grants → needs WIRING
+**STATUS**: Detector exists, orphaned
+
+### IrisSecurity Package — Scanner Summary (41 files, 5377 lines)
+
+| Scanner | MITRE | Status |
+|---------|-------|--------|
+| SystemSecurityChecks (8 checks) | T1562, T1486, T1553, T1021, T1078 | ACTIVE |
+| PersistenceScanner (13 types) | T1543, T1547, T1053, T1546, T1176, T1574 | Orphaned |
+| DylibHijackScanner + MachOParser | T1574.001, T1574.004 | Orphaned |
+| EventTapScanner | T1056.001 | Orphaned |
+| RansomwareDetector + EntropyAnalyzer | T1486 | Orphaned |
+| AVMonitor | T1123, T1125 | Orphaned |
+| StealthScanner (9 techniques) | T1564, T1546, T1556, T1548, T1098, T1053, T1574, T1553 | Orphaned |
+| LOLBinDetector (40+ LOLBins) | T1059, T1218, T1555, T1005 | Orphaned |
+| TCCMonitor | T1557, T1005 | Orphaned |
+| NetworkAnomalyDetector | T1571, T1573, T1071 | Orphaned |
+| ProcessIntegrityChecker | T1055, T1574.006 | Orphaned |
+| FileSystemBaseline (FIM) | T1565, T1036 | Orphaned |
+| SupplyChainAuditor | T1195 | Orphaned |
+| XPCServiceAuditor | T1559 | Orphaned |
+| PersistenceMonitor | T1543, T1547 | Orphaned |
+
+### Priority Fix Order
+1. **P0**: Wire SecurityAssessor to call all scanners (~200 lines)
+2. **P0**: DNSThreatAnalyzer — entropy/DGA/beaconing on DNS data (~100 lines)
+3. **P0**: ShellConfigAnalyzer — content analysis of shell configs (~80 lines)
+4. **P0**: NetworkThreatAnalyzer — exfil ratio/volume analysis (~100 lines)
+5. **P1**: PersistenceScanner+Auth — auth.db parsing (~60 lines)
+6. **P1**: PersistenceScanner+System — FinderSync/Spotlight/QuickLook (~40 lines)
+7. **P1**: PersistenceScanner+Launch — WatchPaths/QueueDirs/Sockets (~15 lines)

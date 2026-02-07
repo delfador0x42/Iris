@@ -1,61 +1,63 @@
-# IrisSecurity — Threat Detection, Persistence Analysis, System Integrity
+# IrisSecurity — 18 Detection Engines, 51 Files, 8095 Lines
 
 ## What This Does
-Comprehensive macOS security toolkit implementing 12 detection engines:
-CIS-Benchmark config assessment, persistence enumeration (13 location types),
-event tap/keylogger detection, mic/camera monitoring, dylib hijack scanning,
-entropy-based ransomware detection, LOLBin abuse detection, TCC.db integrity
-monitoring, stealth persistence scanning (emond, PAM, sudoers, SSH, SUID,
-hidden agents, at jobs, DYLD injection), network anomaly/beaconing detection,
-and XPC service auditing.
+Comprehensive macOS threat detection: process integrity verification,
+filesystem baseline diffing (IPSW-style), credential theft detection,
+kernel extension auditing, authorization DB monitoring, DYLD injection
+scanning, supply chain integrity, LOLBin abuse, stealth persistence,
+event tap/keylogger detection, dylib hijack scanning, ransomware
+detection, beaconing analysis, XPC auditing, CIS-Benchmark assessment.
 
 ## Why This Design
-Think like the attacker. Nation-state APTs don't drop obvious malware — they
-use your system tools against you (osascript, curl, sqlite3), persist in places
-nobody checks (emond, PAM modules, Authorization plugins), and communicate via
-patterns that look normal (HTTPS beaconing, DNS tunneling). Every scanner is
-an actor — thread-safe, parallel, no shared state. Detection uses MITRE ATT&CK
-technique IDs for classification.
+Think like the attacker. Every detection maps to real APT TTPs.
+MITRE ATT&CK IDs on every finding. Actors for thread safety.
+SecurityHubView as Tron-style command center entry point.
 
 ## Data Flow
 ```
-ThreatScanView → runs all scanners in sequence:
-  LOLBinDetector → proc_listpids + KERN_PROCARGS2 → [ProcessAnomaly]
-  StealthScanner → filesystem + xattr + sysctl → [ProcessAnomaly]
-  XPCServiceAuditor → directory walk + SecStaticCode → [ProcessAnomaly]
-  NetworkAnomalyDetector → netstat + interval analysis → [NetworkAnomaly]
-  TCCMonitor → sqlite3 TCC.db + SHA256 baseline → [TCCEntry/TCCChange]
-  PersistenceScanner → 13 location types → [PersistenceItem]
-  EventTapScanner → CGGetEventTapList → [EventTapInfo]
-  DylibHijackScanner → MachOParser → [DylibHijack]
-  AVMonitor → CoreAudio property listeners → [AVDeviceEvent]
-  EntropyAnalyzer/RansomwareDetector → Shannon/chi²/π → [RansomwareAlert]
-  PersistenceMonitor → regex + snapshot diff → [PersistenceChange]
+SecurityHubView → 6 module cards → dedicated views
+ThreatScanView → runs 11 scanners sequentially:
+  LOLBinDetector → proc_listpids + KERN_PROCARGS2
+  StealthScanner → filesystem + xattr + sysctl
+  XPCServiceAuditor → directory walk + SecStaticCode
+  NetworkAnomalyDetector → netstat + interval analysis
+  ProcessIntegrityChecker → proc_regionfilename + CS flags
+  CredentialAccessDetector → proc_pidfdinfo + file perms
+  KextAnomalyDetector → kextstat + disk scan + boot-args
+  AuthorizationDBMonitor → security authorizationdb + plugins
+  DyldEnvDetector → KERN_PROCARGS2 env + plists + shells
+  SupplyChainAuditor → brew/npm/pip/xcode audit
+  FileSystemBaseline → SHA-256 hash + diff
 ```
 
-## Decisions Made
-- MITRE ATT&CK mapping: every detection carries a technique ID
-- LOLBin detector: parent→child lineage analysis catches lateral movement
-- TCC monitor: SHA256 baseline + diff catches silent permission grants
-- Stealth scanner: covers 9 persistence locations other tools ignore
-- Beaconing: coefficient of variation on connection intervals (CV < 0.3)
-- Process env scanning: KERN_PROCARGS2 past argc for DYLD_INSERT_LIBRARIES
+## Key Files — Advanced Detection
+- Services/ProcessIntegrityChecker.swift — injected dylibs, CS_DEBUGGED
+- Services/FileSystemBaseline.swift — IPSW-style SHA-256 baseline+diff
+- Services/CredentialAccessDetector.swift — Keychain, SSH, cloud creds
+- Services/KextAnomalyDetector.swift — rootkit patterns, IOKit hooks
+- Services/AuthorizationDBMonitor.swift — right weakening, auth plugins
+- Services/DyldEnvDetector.swift — DYLD_ in procs, plists, shells
+- Services/SupplyChainAuditor.swift — brew/npm/pip/xcode tampering
 
-## Key Files — APT Detection Layer
-- Services/LOLBinDetector.swift — 40+ LOLBins, lineage analysis, arg inspection
-- Services/TCCMonitor.swift — TCC.db hashing, entry diffing, permission auditing
-- Services/StealthScanner.swift — emond, PAM, sudoers, SSH, SUID, hidden agents
-- Services/NetworkAnomalyDetector.swift — beaconing, raw IP, suspicious ports
-- Services/XPCServiceAuditor.swift — signing mismatch, Mach service audit
-- Models/ProcessAnomaly.swift — finding with MITRE ID + severity
-- Models/TCCEntry.swift — TCC permission with suspicion analysis
-- Views/ThreatScanView.swift — unified threat scan UI
+## Key Files — APT Detection
+- Services/LOLBinDetector.swift — 40+ LOLBins, lineage, MITRE IDs
+- Services/TCCMonitor.swift — TCC.db SHA-256 baseline + diff
+- Services/StealthScanner.swift — 9 stealth persistence locations
+- Services/NetworkAnomalyDetector.swift — beaconing CV analysis
+- Services/XPCServiceAuditor.swift — signing mismatch detection
 
 ## Key Files — Objective-See Layer
-- Services/PersistenceScanner.swift + 4 extensions — 13 persistence types
-- Services/EventTapScanner.swift — CGGetEventTapList keylogger detection
-- Services/AVMonitor.swift — CoreAudio mic/camera monitoring
-- Services/DylibHijackScanner.swift + MachOParser.swift — Mach-O analysis
-- Services/EntropyAnalyzer.swift + RansomwareDetector.swift — ransomware
-- Services/PersistenceMonitor.swift — BlockBlock-style change detection
-- Services/SigningVerifier.swift — shared SecStaticCode verification
+- Services/PersistenceScanner.swift + 5 extensions — 13 locations
+- Services/EventTapScanner.swift — CGGetEventTapList
+- Services/DylibHijackScanner.swift + MachOParser.swift
+- Services/EntropyAnalyzer.swift + RansomwareDetector.swift
+- Services/PersistenceMonitor.swift — BlockBlock-style
+
+## Key Files — UI
+- Views/SecurityHubView.swift — Tron command center
+- Views/ThreatScanView.swift — 11-engine full sweep
+- Views/FileIntegrityView.swift — baseline + diff UI
+- Views/SupplyChainView.swift — package manager audit
+- Views/PersistenceView.swift — persistence enumeration
+- Views/EventTapView.swift — keylogger detection
+- Views/DylibHijackView.swift — Mach-O hijack scan
