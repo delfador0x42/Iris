@@ -93,6 +93,11 @@
 			path = Packages/IrisCertificates/Sources/IrisCertificates;
 			sourceTree = "<group>";
 		};
+		3F0001002F2800000000000A /* Packages/IrisWiFi/Sources/IrisWiFi */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Packages/IrisWiFi/Sources/IrisWiFi;
+			sourceTree = "<group>";
+		};
 		3F0974A82F24FCC30004D070 /* IrisNetworkExtension */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = IrisNetworkExtension;
@@ -157,6 +162,7 @@
 				3F0001002F28000000000007 /* Packages/IrisApp/Sources/IrisApp */,
 				3F0001002F28000000000008 /* Packages/IrisProxy/Sources/IrisProxy */,
 				3F0001002F28000000000009 /* Packages/IrisCertificates/Sources/IrisCertificates */,
+				3F0001002F2800000000000A /* Packages/IrisWiFi/Sources/IrisWiFi */,
 				3F0974A82F24FCC30004D070 /* IrisNetworkExtension */,
 				3FE000022F25A0000004D070 /* IrisEndpointExtension */,
 				3F0974A52F24FCC20004D070 /* Frameworks */,
@@ -223,6 +229,7 @@
 				3F0001002F28000000000007 /* Packages/IrisApp/Sources/IrisApp */,
 				3F0001002F28000000000008 /* Packages/IrisProxy/Sources/IrisProxy */,
 				3F0001002F28000000000009 /* Packages/IrisCertificates/Sources/IrisCertificates */,
+				3F0001002F2800000000000A /* Packages/IrisWiFi/Sources/IrisWiFi */,
 				3F5108772F24FBE0004CFE8D /* IrisApp */,
 			);
 			name = Iris;

@@ -8,7 +8,7 @@ enum MenuDestination: String, CaseIterable {
     case settings = "Settings"
     case networkMonitor = "Network Monitor"
     case help = "Help"
-    case about = "About"
+    case wifiMonitor = "WiFi Monitor"
 
     var icon: String {
         switch self {
@@ -19,7 +19,7 @@ enum MenuDestination: String, CaseIterable {
         case .settings: return "gearshape.fill"
         case .networkMonitor: return "network.badge.shield.half.filled"
         case .help: return "questionmark.circle.fill"
-        case .about: return "info.circle.fill"
+        case .wifiMonitor: return "wifi"
         }
     }
 
@@ -32,7 +32,7 @@ enum MenuDestination: String, CaseIterable {
         case .settings: return "Extension & permissions"
         case .networkMonitor: return "Monitor network & HTTP traffic"
         case .help: return "Help & documentation"
-        case .about: return "About this app"
+        case .wifiMonitor: return "WiFi signal & networks"
         }
     }
 }
@@ -50,7 +50,7 @@ public struct HomeView: View {
         .settings,          // Bottom (4)
         .networkMonitor,    // Bottom-left (5)
         .help,              // Left (6)
-        .about              // Top-left (7)
+        .wifiMonitor        // Top-left (7)
     ]
 
     public init() {}
@@ -103,6 +103,8 @@ public struct HomeView: View {
                     ProcessListView()
                 case .networkMonitor:
                     NetworkMonitorView()
+                case .wifiMonitor:
+                    WiFiMonitorView()
                 case .settings:
                     SettingsView()
                 default:
