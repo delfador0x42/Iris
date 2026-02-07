@@ -33,12 +33,12 @@ extension FilterDataProvider {
 
         return connections.values.map { tracker in
             let conn = tracker.connection
-            // Update with current byte counts, local endpoint, and HTTP data
             return NetworkConnection(
                 id: conn.id,
                 processId: conn.processId,
                 processPath: conn.processPath,
                 processName: conn.processName,
+                signingId: conn.signingId,
                 localAddress: tracker.localAddress,
                 localPort: tracker.localPort,
                 remoteAddress: conn.remoteAddress,

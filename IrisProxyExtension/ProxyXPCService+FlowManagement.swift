@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import Security
 import os.log
 
 // MARK: - Flow Management
@@ -51,7 +52,12 @@ extension ProxyXPCService: NSXPCListenerDelegate {
 
     func listener(_ listener: NSXPCListener,
                   shouldAcceptNewConnection newConnection: NSXPCConnection) -> Bool {
-        logger.info("New XPC connection request")
+
+        let pid = newConnection.processIdentifier
+        guard verifyCodeSignature(pid: pid) else {
+            logger.error("XPC: rejected connection from PID \(pid) — failed code signing check")
+            return false
+        }
 
         newConnection.exportedInterface = NSXPCInterface(with: ProxyXPCProtocol.self)
         newConnection.exportedObject = self
@@ -65,9 +71,21 @@ extension ProxyXPCService: NSXPCListenerDelegate {
         connectionsLock.unlock()
 
         newConnection.resume()
-        logger.info("XPC connection accepted")
+        logger.info("XPC connection accepted from PID \(pid)")
 
         return true
+    }
+
+    private func verifyCodeSignature(pid: pid_t) -> Bool {
+        var code: SecCode?
+        let attrs = [kSecGuestAttributePid: pid] as NSDictionary
+        guard SecCodeCopyGuestWithAttributes(nil, attrs, SecCSFlags(), &code) == errSecSuccess,
+              let guestCode = code else { return false }
+        var requirement: SecRequirement?
+        let reqStr = "anchor apple generic and certificate leaf[subject.OU] = \"99HGW2AR62\"" as CFString
+        guard SecRequirementCreateWithString(reqStr, SecCSFlags(), &requirement) == errSecSuccess,
+              let req = requirement else { return false }
+        return SecCodeCheckValidity(guestCode, SecCSFlags(), req) == errSecSuccess
     }
 
     func connectionInvalidated(_ connection: NSXPCConnection) {

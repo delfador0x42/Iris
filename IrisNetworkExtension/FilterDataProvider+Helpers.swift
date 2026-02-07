@@ -1,10 +1,26 @@
 import Foundation
 import NetworkExtension
+import Security
 import os.log
 
 // MARK: - Private Helpers
 
 extension FilterDataProvider {
+
+    func getSigningIdentifier(pid: Int32) -> String? {
+        var code: SecCode?
+        let attrs = [kSecGuestAttributePid: pid] as NSDictionary
+        guard SecCodeCopyGuestWithAttributes(nil, attrs, SecCSFlags(), &code) == errSecSuccess,
+              let guestCode = code else { return nil }
+        var staticCode: SecStaticCode?
+        guard SecCodeCopyStaticCode(guestCode, SecCSFlags(), &staticCode) == errSecSuccess,
+              let sc = staticCode else { return nil }
+        var info: CFDictionary?
+        guard SecCodeCopySigningInformation(sc, SecCSFlags(), &info) == errSecSuccess,
+              let dict = info as? [String: Any],
+              let identifier = dict[kSecCodeInfoIdentifier as String] as? String else { return nil }
+        return identifier
+    }
 
     func getProcessPath(pid: Int32) -> String {
         var pathBuffer = [CChar](repeating: 0, count: Int(MAXPATHLEN))
@@ -48,8 +64,9 @@ extension FilterDataProvider {
 // MARK: - Helper for audit token
 
 func audit_token_to_pid(_ token: Data) -> Int32 {
+    // audit_token_t is 8 x UInt32 = 32 bytes; PID is at index 5 (byte offset 20)
+    guard token.count >= 24 else { return -1 }
     return token.withUnsafeBytes { ptr in
-        // audit_token_t structure: pid is at offset 20 (5th 32-bit value)
         let tokenPtr = ptr.bindMemory(to: UInt32.self)
         return Int32(bitPattern: tokenPtr[5])
     }

@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import Network
 import os.log
 
 /// DNS-over-HTTPS client for the DNS proxy extension.
@@ -18,9 +19,10 @@ final class ExtensionDoHClient: @unchecked Sendable {
     /// URL session configured for DoH
     private let session: URLSession
 
-    /// Current server configuration
+    /// Current server configuration (guarded by configLock)
     private var serverURL: URL
     private var fallbackURL: URL?
+    private let configLock = NSLock()
 
     // MARK: - Server Configurations
 
@@ -80,8 +82,14 @@ final class ExtensionDoHClient: @unchecked Sendable {
     // MARK: - Query
 
     /// Sends a DNS wire format query via DoH and returns the wire format response.
+    /// Falls back to direct DNS (UDP port 53) if all DoH servers are unreachable.
     func query(_ queryData: Data) async throws -> Data {
-        var request = URLRequest(url: serverURL)
+        configLock.lock()
+        let primary = serverURL
+        let fallback = fallbackURL
+        configLock.unlock()
+
+        var request = URLRequest(url: primary)
         request.httpMethod = "POST"
         request.setValue("application/dns-message", forHTTPHeaderField: "Content-Type")
         request.setValue("application/dns-message", forHTTPHeaderField: "Accept")
@@ -95,8 +103,7 @@ final class ExtensionDoHClient: @unchecked Sendable {
             }
 
             guard httpResponse.statusCode == 200 else {
-                // Try fallback server
-                if let fallback = fallbackURL {
+                if let fallback = fallback {
                     return try await queryFallback(queryData, url: fallback)
                 }
                 throw DoHClientError.httpError(httpResponse.statusCode)
@@ -109,15 +116,25 @@ final class ExtensionDoHClient: @unchecked Sendable {
             return data
 
         } catch let error as DoHClientError {
-            throw error
+            // DoH failed — try direct DNS as last resort
+            do {
+                return try await directDNSFallback(queryData)
+            } catch {
+                throw error
+            }
         } catch {
-            // Try fallback on network error
-            if let fallback = fallbackURL {
+            // Network error — try DoH fallback, then direct DNS
+            if let fallback = fallback {
                 do {
                     return try await queryFallback(queryData, url: fallback)
                 } catch {
-                    // Fallback also failed
+                    // Fallback DoH also failed
                 }
+            }
+            do {
+                return try await directDNSFallback(queryData)
+            } catch {
+                // All resolution paths exhausted
             }
             throw DoHClientError.networkError(error)
         }
@@ -142,6 +159,75 @@ final class ExtensionDoHClient: @unchecked Sendable {
         return data
     }
 
+    /// Last-resort fallback: send raw DNS query via UDP to 8.8.8.8:53.
+    /// Bypasses DoH entirely — keeps DNS alive when HTTPS is broken.
+    private func directDNSFallback(_ queryData: Data) async throws -> Data {
+        logger.warning("DoH unreachable, falling back to direct DNS")
+        return try await withCheckedThrowingContinuation { continuation in
+            let lock = NSLock()
+            var hasResumed = false
+
+            let connection = NWConnection(
+                host: NWEndpoint.Host("8.8.8.8"),
+                port: NWEndpoint.Port(rawValue: 53)!,
+                using: .udp
+            )
+
+            connection.stateUpdateHandler = { state in
+                lock.lock()
+                guard !hasResumed else { lock.unlock(); return }
+                switch state {
+                case .ready:
+                    lock.unlock()
+                    connection.send(content: queryData, completion: .contentProcessed { error in
+                        if let error = error {
+                            lock.lock()
+                            guard !hasResumed else { lock.unlock(); return }
+                            hasResumed = true
+                            lock.unlock()
+                            connection.cancel()
+                            continuation.resume(throwing: error)
+                            return
+                        }
+                        connection.receiveMessage { data, _, _, error in
+                            lock.lock()
+                            guard !hasResumed else { lock.unlock(); return }
+                            hasResumed = true
+                            lock.unlock()
+                            connection.cancel()
+                            if let data = data, !data.isEmpty {
+                                continuation.resume(returning: data)
+                            } else {
+                                continuation.resume(throwing: error ?? DoHClientError.emptyResponse)
+                            }
+                        }
+                    })
+                case .failed(let error):
+                    hasResumed = true
+                    lock.unlock()
+                    continuation.resume(throwing: error)
+                case .cancelled:
+                    hasResumed = true
+                    lock.unlock()
+                    continuation.resume(throwing: DoHClientError.fallbackFailed)
+                default:
+                    lock.unlock()
+                }
+            }
+            connection.start(queue: .global(qos: .userInitiated))
+
+            // Timeout after 3 seconds
+            DispatchQueue.global().asyncAfter(deadline: .now() + 3) {
+                lock.lock()
+                guard !hasResumed else { lock.unlock(); return }
+                hasResumed = true
+                lock.unlock()
+                connection.cancel()
+                continuation.resume(throwing: DoHClientError.fallbackFailed)
+            }
+        }
+    }
+
     // MARK: - Configuration
 
     /// Changes the active DoH server.
@@ -151,8 +237,10 @@ final class ExtensionDoHClient: @unchecked Sendable {
             return
         }
 
+        configLock.lock()
         serverURL = URL(string: config.primaryURL)!
         fallbackURL = config.fallbackURL.flatMap { URL(string: $0) }
+        configLock.unlock()
         logger.info("DoH server switched to \(name) (\(config.primaryURL))")
     }
 }

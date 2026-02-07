@@ -71,11 +71,13 @@ extension HTTPParser {
             }
         }
 
-        let contentLength = headers.first { $0.name.lowercased() == "content-length" }
-            .flatMap { Int($0.value) }
-
+        // RFC 7230 §3.3.3: Transfer-Encoding overrides Content-Length
         let isChunked = headers.first { $0.name.lowercased() == "transfer-encoding" }?
             .value.lowercased().contains("chunked") ?? false
+
+        let contentLength: Int? = isChunked ? nil :
+            headers.first { $0.name.lowercased() == "content-length" }
+                .flatMap { Int($0.value) }
 
         return ParsedRequest(
             method: method,
@@ -134,11 +136,13 @@ extension HTTPParser {
             }
         }
 
-        let contentLength = headers.first { $0.name.lowercased() == "content-length" }
-            .flatMap { Int($0.value) }
-
+        // RFC 7230 §3.3.3: Transfer-Encoding overrides Content-Length
         let isChunked = headers.first { $0.name.lowercased() == "transfer-encoding" }?
             .value.lowercased().contains("chunked") ?? false
+
+        let contentLength: Int? = isChunked ? nil :
+            headers.first { $0.name.lowercased() == "content-length" }
+                .flatMap { Int($0.value) }
 
         return ParsedResponse(
             statusCode: statusCode,

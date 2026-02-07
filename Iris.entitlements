@@ -23,6 +23,8 @@
 		<string>$(TeamIdentifierPrefix)com.wudan.iris.security.xpc</string>
 		<string>$(TeamIdentifierPrefix)com.wudan.iris.network.xpc</string>
 		<string>$(TeamIdentifierPrefix)com.wudan.iris.dns.xpc</string>
+		<string>$(TeamIdentifierPrefix)com.wudan.iris.endpoint.xpc</string>
+		<string>$(TeamIdentifierPrefix)com.wudan.iris.proxy.xpc</string>
 	</array>
 </dict>
 </plist>

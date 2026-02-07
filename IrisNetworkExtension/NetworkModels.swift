@@ -1,25 +1,62 @@
 import Foundation
 
-// MARK: - Security Rule
+// MARK: - Security Rule (matches app-side SecurityRule encoding)
 
 struct SecurityRule: Codable {
     let id: UUID
     let processPath: String?
+    let signingId: String?
     let remoteAddress: String?
-    let action: Action
-    var isActive: Bool
+    let remotePort: String?
+    let action: RuleAction
+    let scope: RuleScope
+    let createdAt: Date
+    var isEnabled: Bool
+    var expiresAt: Date?
 
-    enum Action: String, Codable {
+    enum RuleAction: String, Codable {
         case allow, block
     }
 
+    enum RuleScope: String, Codable {
+        case process, endpoint
+    }
+
+    var isExpired: Bool {
+        guard let expiresAt = expiresAt else { return false }
+        return Date() > expiresAt
+    }
+
+    var isActive: Bool {
+        isEnabled && !isExpired
+    }
+
     func matches(connection: NetworkConnection) -> Bool {
-        if let path = processPath, path != connection.processPath {
-            return false
+        guard isActive else { return false }
+
+        if let ruleSigningId = signingId {
+            if let connSigningId = connection.signingId {
+                if ruleSigningId != connSigningId { return false }
+            } else if let processPath = processPath {
+                if processPath != connection.processPath { return false }
+            } else {
+                return false
+            }
+        } else if let processPath = processPath {
+            if processPath != connection.processPath { return false }
         }
-        if let addr = remoteAddress, addr != "*" && addr != connection.remoteAddress {
-            return false
+
+        if scope == .endpoint {
+            if let remoteAddress = remoteAddress, remoteAddress != "*" {
+                if remoteAddress != connection.remoteAddress { return false }
+            }
+            if let remotePort = remotePort, remotePort != "*" {
+                if let port = UInt16(remotePort), port != connection.remotePort {
+                    return false
+                }
+            }
         }
+
         return true
     }
 }
@@ -31,6 +68,7 @@ struct NetworkConnection: Codable {
     let processId: Int32
     let processPath: String
     let processName: String
+    let signingId: String?
     let localAddress: String
     let localPort: UInt16
     let remoteAddress: String

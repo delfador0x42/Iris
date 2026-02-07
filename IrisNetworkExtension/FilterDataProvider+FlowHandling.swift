@@ -1,5 +1,6 @@
 import Foundation
 import NetworkExtension
+import Security
 import os.log
 
 // MARK: - Flow Handling
@@ -11,7 +12,6 @@ extension FilterDataProvider {
             return .allow()
         }
 
-        // Extract process information from audit token
         guard let auditToken = flow.sourceAppAuditToken else {
             logger.warning("Flow without audit token, allowing")
             return .allow()
@@ -20,16 +20,14 @@ extension FilterDataProvider {
         let pid = audit_token_to_pid(auditToken)
         let processPath = getProcessPath(pid: pid)
         let processName = URL(fileURLWithPath: processPath).lastPathComponent
+        let signingId = getSigningIdentifier(pid: pid)
 
-        // Extract remote endpoint
         guard let remoteEndpoint = socketFlow.remoteEndpoint as? NWHostEndpoint else {
             return .allow()
         }
 
-        // Extract local endpoint
         let localEndpoint = socketFlow.localEndpoint as? NWHostEndpoint
 
-        // Determine protocol
         let proto: NetworkConnection.NetworkProtocol
         switch socketFlow.socketProtocol {
         case IPPROTO_TCP:
@@ -40,13 +38,13 @@ extension FilterDataProvider {
             proto = .other
         }
 
-        // Create connection record
         let connectionId = UUID()
         let connection = NetworkConnection(
             id: connectionId,
             processId: pid,
             processPath: processPath,
             processName: processName,
+            signingId: signingId,
             localAddress: localEndpoint?.hostname ?? "0.0.0.0",
             localPort: UInt16(localEndpoint?.port ?? "0") ?? 0,
             remoteAddress: remoteEndpoint.hostname,
@@ -70,7 +68,15 @@ extension FilterDataProvider {
             httpRawResponse: nil
         )
 
-        // Track the connection
+        // Check rules BEFORE tracking (prevents leak of blocked flow entries)
+        let verdict = evaluateRules(for: connection)
+
+        if verdict == .block {
+            logger.info("Blocking connection from \(processName) to \(remoteEndpoint.hostname)")
+            return .drop()
+        }
+
+        // Track only allowed flows
         connectionsLock.lock()
         connections[connectionId] = ConnectionTracker(
             connection: connection,
@@ -78,10 +84,8 @@ extension FilterDataProvider {
             localPort: UInt16(localEndpoint?.port ?? "0") ?? 0,
             flowId: connectionId
         )
-        // Store flow mapping for byte tracking
         flowToConnection[ObjectIdentifier(flow)] = connectionId
 
-        // Evict oldest if over capacity
         if connections.count > Self.maxConnections {
             let oldest = connections.min { $0.value.lastActivity < $1.value.lastActivity }
             if let oldId = oldest?.key {
@@ -93,16 +97,11 @@ extension FilterDataProvider {
 
         logger.debug("New flow: \(processName) → \(remoteEndpoint.hostname):\(remoteEndpoint.port)")
 
-        // Check rules
-        let verdict = evaluateRules(for: connection)
-
-        if verdict == .block {
-            logger.info("Blocking connection from \(processName) to \(remoteEndpoint.hostname)")
-            return .drop()
-        }
-
-        // Allow and continue monitoring for byte counts
-        return .allow()
+        // filterDataVerdict enables handleInboundData/handleOutboundData callbacks
+        return .filterDataVerdict(
+            withFilterInbound: true, peekInboundBytes: Int.max,
+            filterOutbound: true, peekOutboundBytes: Int.max
+        )
     }
 
     override func handleInboundData(from flow: NEFilterFlow,

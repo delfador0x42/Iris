@@ -27,6 +27,9 @@ final class TLSSession {
     /// The SSL context
     var sslContext: SSLContext?
 
+    /// Retained self reference for SSL callbacks (prevents use-after-free)
+    private var retainedRef: Unmanaged<TLSSession>?
+
     /// The flow providing raw bytes
     let flow: NEAppProxyTCPFlow
 
@@ -67,7 +70,9 @@ final class TLSSession {
             throw TLSSessionError.configurationFailed(status)
         }
 
-        let connectionRef = Unmanaged.passUnretained(self).toOpaque()
+        let retained = Unmanaged.passRetained(self)
+        self.retainedRef = retained
+        let connectionRef = retained.toOpaque()
         let refStatus = SSLSetConnection(ctx, connectionRef)
         guard refStatus == errSecSuccess else {
             throw TLSSessionError.configurationFailed(refStatus)
@@ -101,7 +106,10 @@ final class TLSSession {
         sslContext = nil
         isClosed = true
 
-        // Wake any async waiters
+        // Release the retain from init (breaks retain cycle)
+        retainedRef?.release()
+        retainedRef = nil
+
         signalDataAvailable()
 
         logger.debug("TLS session closed")

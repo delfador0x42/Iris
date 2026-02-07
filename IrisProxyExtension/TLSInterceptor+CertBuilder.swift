@@ -91,6 +91,7 @@ extension TLSInterceptor {
 
         let identityQuery: [String: Any] = [
             kSecClass as String: kSecClassIdentity,
+            kSecAttrApplicationTag as String: keyTag.data(using: .utf8)!,
             kSecReturnRef as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne
         ]
