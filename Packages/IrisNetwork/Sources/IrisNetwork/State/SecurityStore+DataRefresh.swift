@@ -83,60 +83,88 @@ extension SecurityStore {
             try? decoder.decode(NetworkConnection.self, from: data)
         }
 
-        // Enrich with geolocation data
-        newConnections = await enrichWithGeolocation(newConnections)
+        // Carry over existing enrichment data for IPs we've already seen
+        let existingByIP = Dictionary(grouping: connections) { $0.remoteAddress }
+        newConnections = newConnections.map { conn in
+            if let existing = existingByIP[conn.remoteAddress]?.first,
+               existing.remoteCountry != nil {
+                var enriched = conn
+                enriched.remoteCountry = existing.remoteCountry
+                enriched.remoteCountryCode = existing.remoteCountryCode
+                enriched.remoteCity = existing.remoteCity
+                enriched.remoteLatitude = existing.remoteLatitude
+                enriched.remoteLongitude = existing.remoteLongitude
+                enriched.remoteASN = existing.remoteASN
+                enriched.remoteOrganization = existing.remoteOrganization
+                enriched.remoteOpenPorts = existing.remoteOpenPorts
+                enriched.remoteHostnames = existing.remoteHostnames
+                enriched.remoteCVEs = existing.remoteCVEs
+                enriched.remoteServiceTags = existing.remoteServiceTags
+                enriched.remoteCPEs = existing.remoteCPEs
+                enriched.abuseScore = existing.abuseScore
+                enriched.isKnownScanner = existing.isKnownScanner
+                enriched.isBenignService = existing.isBenignService
+                enriched.threatClassification = existing.threatClassification
+                enriched.isTor = existing.isTor
+                enriched.enrichmentSources = existing.enrichmentSources
+                return enriched
+            }
+            return conn
+        }
 
+        // Show connections immediately (before enrichment)
         connections = newConnections
-
-        // Group by process
         connectionsByProcess = Dictionary(grouping: newConnections) { $0.processId }
-    }
 
-    /// Enrich connections with geolocation, security, and threat intelligence data
-    /// Uses the unified IPEnrichmentService which provides fallback logic
-    func enrichWithGeolocation(_ connections: [NetworkConnection]) async -> [NetworkConnection] {
-        // Get unique remote IPs that need lookup
-        let uniqueIPs = Set(connections.map { $0.remoteAddress })
+        // Find IPs that still need enrichment
+        let enrichedIPs = Set(newConnections.filter { $0.remoteCountry != nil }.map { $0.remoteAddress })
+        let needsEnrichment = Set(newConnections.map { $0.remoteAddress })
+            .subtracting(enrichedIPs)
             .filter { !$0.isEmpty }
 
-        // Skip if no IPs to look up
-        guard !uniqueIPs.isEmpty else { return connections }
+        guard !needsEnrichment.isEmpty else { return }
 
-        // Use unified enrichment service with fallback logic
-        let enrichmentResults = await IPEnrichmentService.shared.batchEnrich(Array(uniqueIPs))
-
-        // Enrich each connection with all data sources
-        return connections.map { connection in
-            var enriched = connection
-
-            if let result = enrichmentResults[connection.remoteAddress] {
-                // Geolocation data
-                enriched.remoteCountry = result.country
-                enriched.remoteCountryCode = result.countryCode
-                enriched.remoteCity = result.city
-                enriched.remoteLatitude = result.latitude
-                enriched.remoteLongitude = result.longitude
-                enriched.remoteASN = result.asn
-                enriched.remoteOrganization = result.organization
-
-                // Security data from InternetDB (or reverse DNS for hostnames)
-                enriched.remoteOpenPorts = result.openPorts
-                enriched.remoteHostnames = result.hostnames
-                enriched.remoteCVEs = result.cves
-                enriched.remoteServiceTags = result.serviceTags
-                enriched.remoteCPEs = result.cpes
-
-                // Threat intelligence data
-                enriched.abuseScore = result.abuseScore
-                enriched.isKnownScanner = result.isKnownScanner
-                enriched.isBenignService = result.isBenignService
-                enriched.threatClassification = result.threatClassification
-                enriched.isTor = result.isTor
-                enriched.enrichmentSources = result.sources
-            }
-
-            return enriched
+        // Enrich in background, then merge results
+        Task { [weak self] in
+            let results = await IPEnrichmentService.shared.batchEnrich(Array(needsEnrichment))
+            guard !results.isEmpty else { return }
+            await self?.applyEnrichmentResults(results)
         }
+    }
+
+    /// Applies enrichment results to current connections without blocking refresh
+    func applyEnrichmentResults(_ results: [String: IPEnrichmentService.EnrichmentResult]) {
+        connections = connections.map { connection in
+            guard let result = results[connection.remoteAddress] else { return connection }
+            return Self.applyEnrichment(to: connection, result: result)
+        }
+        connectionsByProcess = Dictionary(grouping: connections) { $0.processId }
+    }
+
+    static func applyEnrichment(
+        to connection: NetworkConnection,
+        result: IPEnrichmentService.EnrichmentResult
+    ) -> NetworkConnection {
+        var enriched = connection
+        enriched.remoteCountry = result.country
+        enriched.remoteCountryCode = result.countryCode
+        enriched.remoteCity = result.city
+        enriched.remoteLatitude = result.latitude
+        enriched.remoteLongitude = result.longitude
+        enriched.remoteASN = result.asn
+        enriched.remoteOrganization = result.organization
+        enriched.remoteOpenPorts = result.openPorts
+        enriched.remoteHostnames = result.hostnames
+        enriched.remoteCVEs = result.cves
+        enriched.remoteServiceTags = result.serviceTags
+        enriched.remoteCPEs = result.cpes
+        enriched.abuseScore = result.abuseScore
+        enriched.isKnownScanner = result.isKnownScanner
+        enriched.isBenignService = result.isBenignService
+        enriched.threatClassification = result.threatClassification
+        enriched.isTor = result.isTor
+        enriched.enrichmentSources = result.sources
+        return enriched
     }
 
     // MARK: - Rules Fetching

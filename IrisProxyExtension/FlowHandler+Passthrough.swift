@@ -29,6 +29,13 @@ extension FlowHandler {
         }
 
         await withTaskGroup(of: Void.self) { group in
+            // Overall relay timeout guard
+            group.addTask {
+                try? await Task.sleep(nanoseconds: UInt64(Self.maxRelayDuration * 1_000_000_000))
+                connection.cancel()
+                flow.closeWriteWithError(nil)
+            }
+
             // Client → Server
             group.addTask {
                 while true {

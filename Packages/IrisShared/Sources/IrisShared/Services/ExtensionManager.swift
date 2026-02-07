@@ -17,6 +17,9 @@ public class ExtensionManager: NSObject, ObservableObject {
     /// State of the endpoint extension
     @Published public internal(set) var endpointExtensionState: ExtensionState = .unknown
 
+    /// State of the HTTPS proxy extension
+    @Published public internal(set) var proxyExtensionState: ExtensionState = .unknown
+
     /// State of the DNS proxy extension
     @Published public internal(set) var dnsExtensionState: ExtensionState = .unknown
 
@@ -52,6 +55,7 @@ public class ExtensionManager: NSObject, ObservableObject {
     /// Callbacks when extensions become ready
     public var onNetworkExtensionReady: (() -> Void)?
     public var onEndpointExtensionReady: (() -> Void)?
+    public var onProxyExtensionReady: (() -> Void)?
     public var onDNSExtensionReady: (() -> Void)?
 
     // MARK: - Singleton
@@ -96,9 +100,9 @@ public class ExtensionManager: NSObject, ObservableObject {
         endpointExtensionState.isReady
     }
 
-    /// Check if all extensions are ready
-    public var areAllExtensionsReady: Bool {
-        isNetworkExtensionReady && isEndpointExtensionReady
+    /// Check if proxy extension is ready
+    public var isProxyExtensionReady: Bool {
+        proxyExtensionState.isReady
     }
 
     /// Check if DNS extension is ready
@@ -106,11 +110,18 @@ public class ExtensionManager: NSObject, ObservableObject {
         dnsExtensionState.isReady
     }
 
+    /// Check if all extensions are ready
+    public var areAllExtensionsReady: Bool {
+        isNetworkExtensionReady && isEndpointExtensionReady
+            && isProxyExtensionReady && isDNSExtensionReady
+    }
+
     /// Get state for a specific extension type
     public func state(for type: ExtensionType) -> ExtensionState {
         switch type {
         case .network: return networkExtensionState
         case .endpoint: return endpointExtensionState
+        case .proxy: return proxyExtensionState
         case .dns: return dnsExtensionState
         }
     }

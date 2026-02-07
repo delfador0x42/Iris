@@ -123,23 +123,44 @@ actor FlowHandler {
         )
     }
 
+    /// Connection establishment timeout
+    static let connectionTimeout: TimeInterval = 15
+
+    /// Max time a relay can be idle (no data in either direction)
+    static let idleTimeout: TimeInterval = 60
+
+    /// Max total relay lifetime
+    static let maxRelayDuration: TimeInterval = 300
+
     // MARK: - Connection Helper
 
     func waitForConnection(_ connection: NWConnection) async -> Bool {
-        return await withCheckedContinuation { continuation in
-            connection.stateUpdateHandler = { state in
-                switch state {
-                case .ready:
-                    connection.stateUpdateHandler = nil
-                    continuation.resume(returning: true)
-                case .failed, .cancelled:
-                    connection.stateUpdateHandler = nil
-                    continuation.resume(returning: false)
-                default:
-                    break
+        return await withTaskGroup(of: Bool.self) { group in
+            group.addTask {
+                await withCheckedContinuation { continuation in
+                    connection.stateUpdateHandler = { state in
+                        switch state {
+                        case .ready:
+                            connection.stateUpdateHandler = nil
+                            continuation.resume(returning: true)
+                        case .failed, .cancelled:
+                            connection.stateUpdateHandler = nil
+                            continuation.resume(returning: false)
+                        default:
+                            break
+                        }
+                    }
+                    connection.start(queue: .global(qos: .userInitiated))
                 }
             }
-            connection.start(queue: .global(qos: .userInitiated))
+            group.addTask {
+                try? await Task.sleep(nanoseconds: UInt64(Self.connectionTimeout * 1_000_000_000))
+                return false
+            }
+            let result = await group.next() ?? false
+            group.cancelAll()
+            if !result { connection.cancel() }
+            return result
         }
     }
 }

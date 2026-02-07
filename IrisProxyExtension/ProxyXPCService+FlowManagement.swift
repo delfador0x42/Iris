@@ -13,7 +13,7 @@ import os.log
 extension ProxyXPCService {
 
     /// Adds a captured flow.
-    func addFlow(_ flow: CapturedFlow) {
+    func addFlow(_ flow: ProxyCapturedFlow) {
         flowsLock.lock()
         defer { flowsLock.unlock() }
 
@@ -29,7 +29,7 @@ extension ProxyXPCService {
     }
 
     /// Updates an existing flow (e.g., when response arrives).
-    func updateFlow(_ flowId: UUID, response: CapturedResponse) {
+    func updateFlow(_ flowId: UUID, response: ProxyCapturedResponse) {
         flowsLock.lock()
         defer { flowsLock.unlock() }
 
@@ -40,7 +40,7 @@ extension ProxyXPCService {
     }
 
     /// Notifies connected clients about a flow update.
-    func notifyFlowUpdate(_ flow: CapturedFlow) {
+    func notifyFlowUpdate(_ flow: ProxyCapturedFlow) {
         // TODO: Implement push notifications to connected clients
     }
 }
@@ -53,7 +53,7 @@ extension ProxyXPCService: NSXPCListenerDelegate {
                   shouldAcceptNewConnection newConnection: NSXPCConnection) -> Bool {
         logger.info("New XPC connection request")
 
-        newConnection.exportedInterface = NSXPCInterface(with: ProxyExtensionXPCProtocol.self)
+        newConnection.exportedInterface = NSXPCInterface(with: ProxyXPCProtocol.self)
         newConnection.exportedObject = self
 
         newConnection.invalidationHandler = { [weak self] in

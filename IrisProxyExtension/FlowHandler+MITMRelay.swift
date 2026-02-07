@@ -24,6 +24,13 @@ extension FlowHandler {
         let xpcService = self.provider?.xpcService
 
         await withTaskGroup(of: Void.self) { group in
+            // Overall relay timeout guard
+            group.addTask {
+                try? await Task.sleep(nanoseconds: UInt64(Self.maxRelayDuration * 1_000_000_000))
+                serverConnection.cancel()
+                clientTLS.close()
+            }
+
             // Client → Server
             group.addTask { [weak self] in
                 guard let self = self else { return }
@@ -36,12 +43,12 @@ extension FlowHandler {
                             if let request = HTTPParser.parseRequest(from: state.getRequestBuffer()) {
                                 let url = "https://\(host)\(request.path)"
                                 let body = Self.extractRequestBody(from: state.getRequestBuffer(), request: request)
-                                let capturedRequest = CapturedRequest(
+                                let capturedRequest = ProxyCapturedRequest(
                                     method: request.method, url: url,
                                     httpVersion: request.httpVersion,
                                     headers: request.headers, body: body
                                 )
-                                let capturedFlow = CapturedFlow(id: flowId, request: capturedRequest, processName: processName)
+                                let capturedFlow = ProxyCapturedFlow(id: flowId, request: capturedRequest, processName: processName)
                                 state.markRequestCaptured()
                                 xpcService?.addFlow(capturedFlow)
                                 self.logger.info("MITM captured: \(request.method) \(url) from \(processName)")
@@ -70,7 +77,7 @@ extension FlowHandler {
                             if let response = HTTPParser.parseResponse(from: state.getResponseBuffer()) {
                                 let elapsed = CFAbsoluteTimeGetCurrent() - startTime
                                 let body = Self.extractResponseBody(from: state.getResponseBuffer(), response: response)
-                                let capturedResponse = CapturedResponse(
+                                let capturedResponse = ProxyCapturedResponse(
                                     statusCode: response.statusCode, reason: response.reason,
                                     httpVersion: response.httpVersion,
                                     headers: response.headers, body: body, duration: elapsed

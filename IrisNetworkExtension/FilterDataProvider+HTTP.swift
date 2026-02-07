@@ -34,8 +34,7 @@ extension FilterDataProvider {
             )
 
             connectionsLock.lock()
-            let flowHash = ObjectIdentifier(flow).hashValue
-            if let connectionId = flowToConnection[flowHash],
+            if let connectionId = flowToConnection[ObjectIdentifier(flow)],
                var tracker = connections[connectionId] {
                 tracker.httpRequest = httpRequest
                 tracker.isHTTPParsed = true
@@ -71,8 +70,7 @@ extension FilterDataProvider {
             )
 
             connectionsLock.lock()
-            let flowHash = ObjectIdentifier(flow).hashValue
-            if let connectionId = flowToConnection[flowHash],
+            if let connectionId = flowToConnection[ObjectIdentifier(flow)],
                var tracker = connections[connectionId] {
                 tracker.httpResponse = httpResponse
                 connections[connectionId] = tracker

@@ -19,16 +19,14 @@ extension FilterDataProvider {
         connectionsLock.lock()
         defer { connectionsLock.unlock() }
 
-        // Look up the specific connection by flow hash
-        let flowHash = ObjectIdentifier(flow).hashValue
-        guard let connectionId = flowToConnection[flowHash],
+        guard let connectionId = flowToConnection[ObjectIdentifier(flow)],
               var tracker = connections[connectionId] else {
             return
         }
 
-        // Update byte counts for this specific connection only
         tracker.bytesUp += bytesUp
         tracker.bytesDown += bytesDown
+        tracker.lastActivity = Date()
 
         // Update local endpoint if it wasn't available initially
         if tracker.localAddress == "0.0.0.0" || tracker.localPort == 0 {

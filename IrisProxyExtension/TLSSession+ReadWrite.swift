@@ -3,6 +3,9 @@
 //  IrisProxyExtension
 //
 //  TLS read/write operations and flow reader.
+//  Read uses a non-blocking retry loop: tries SSLRead on sslQueue, if buffer is empty
+//  (errSSLWouldBlock), releases sslQueue and waits asynchronously for data, then retries.
+//  This prevents deadlock: write() can use sslQueue while read() is waiting for data.
 //
 
 import Foundation
@@ -12,34 +15,58 @@ import os.log
 
 extension TLSSession {
 
+    /// Result of a single SSLRead attempt
+    enum SSLReadResult {
+        case data(Data)
+        case wouldBlock
+        case closed
+        case error(OSStatus)
+    }
+
     // MARK: - Read
 
     /// Reads decrypted data from the TLS session.
+    /// Non-blocking retry loop: tries SSLRead, if no data available, waits
+    /// asynchronously (releasing sslQueue), then retries.
     func read(maxLength: Int = 65536) async throws -> Data {
-        guard let ctx = sslContext else {
-            throw TLSSessionError.sessionClosed
-        }
+        while true {
+            guard !isClosed else { throw TLSSessionError.connectionClosed }
+            guard sslContext != nil else { throw TLSSessionError.sessionClosed }
 
-        return try await withCheckedThrowingContinuation { continuation in
-            sslQueue.async { [weak self] in
-                guard let self = self, let ctx = self.sslContext else {
-                    continuation.resume(throwing: TLSSessionError.sessionClosed)
-                    return
+            let result: SSLReadResult = await withCheckedContinuation { continuation in
+                sslQueue.async { [weak self] in
+                    guard let self = self, let ctx = self.sslContext else {
+                        continuation.resume(returning: .closed)
+                        return
+                    }
+
+                    var buffer = [UInt8](repeating: 0, count: maxLength)
+                    var bytesRead = 0
+                    let status = SSLRead(ctx, &buffer, maxLength, &bytesRead)
+
+                    if status == errSecSuccess || (status == errSSLWouldBlock && bytesRead > 0) {
+                        continuation.resume(returning: .data(Data(buffer[..<bytesRead])))
+                    } else if status == errSSLWouldBlock {
+                        continuation.resume(returning: .wouldBlock)
+                    } else if status == errSSLClosedGraceful || status == errSSLClosedAbort {
+                        continuation.resume(returning: .closed)
+                    } else {
+                        continuation.resume(returning: .error(status))
+                    }
                 }
+            }
 
-                var buffer = [UInt8](repeating: 0, count: maxLength)
-                var bytesRead = 0
-
-                let status = SSLRead(ctx, &buffer, maxLength, &bytesRead)
-
-                if status == errSecSuccess || (status == errSSLWouldBlock && bytesRead > 0) {
-                    continuation.resume(returning: Data(buffer[..<bytesRead]))
-                } else if status == errSSLClosedGraceful || status == errSSLClosedAbort {
-                    continuation.resume(throwing: TLSSessionError.connectionClosed)
-                } else {
-                    self.logger.error("TLS read error: \(status)")
-                    continuation.resume(throwing: TLSSessionError.readFailed(status))
-                }
+            switch result {
+            case .data(let data):
+                return data
+            case .wouldBlock:
+                // sslQueue is now free — write() can proceed while we wait
+                await waitForData()
+            case .closed:
+                throw TLSSessionError.connectionClosed
+            case .error(let status):
+                logger.error("TLS read error: \(status)")
+                throw TLSSessionError.readFailed(status)
             }
         }
     }
@@ -48,7 +75,7 @@ extension TLSSession {
 
     /// Writes data to the TLS session (encrypts and sends).
     func write(_ data: Data) async throws {
-        guard let ctx = sslContext else {
+        guard sslContext != nil else {
             throw TLSSessionError.sessionClosed
         }
 
@@ -108,25 +135,21 @@ extension TLSSession {
                     self.logger.error("Flow read error: \(error.localizedDescription)")
                 }
                 self.isClosed = true
-                self.dataAvailable.signal()
+                self.signalDataAvailable()
                 return
             }
 
             guard let data = data, !data.isEmpty else {
                 self.isClosed = true
-                self.dataAvailable.signal()
+                self.signalDataAvailable()
                 return
             }
 
-            // Append to read buffer
             self.readBufferLock.lock()
             self.readBuffer.append(data)
             self.readBufferLock.unlock()
 
-            // Signal that data is available
-            self.dataAvailable.signal()
-
-            // Continue reading
+            self.signalDataAvailable()
             self.readFromFlow()
         }
     }

@@ -68,7 +68,7 @@ extension ESXPCService: NSXPCListenerDelegate {
         logger.info("New XPC connection request")
 
         // Configure the connection
-        newConnection.exportedInterface = NSXPCInterface(with: EndpointExtensionXPCProtocol.self)
+        newConnection.exportedInterface = NSXPCInterface(with: EndpointXPCProtocol.self)
         newConnection.exportedObject = self
 
         // Set up invalidation handler
@@ -96,28 +96,9 @@ extension ESXPCService: NSXPCListenerDelegate {
     }
 }
 
-// MARK: - EndpointExtensionXPCProtocol Definition
+// MARK: - EndpointXPCProtocol Implementation
 
-@objc protocol EndpointExtensionXPCProtocol {
-    /// Get all tracked processes
-    func getProcesses(reply: @escaping ([Data]) -> Void)
-
-    /// Get a specific process by PID
-    func getProcess(pid: Int32, reply: @escaping (Data?) -> Void)
-
-    /// Get recent events
-    func getRecentEvents(limit: Int, reply: @escaping ([Data]) -> Void)
-
-    /// Get extension status
-    func getStatus(reply: @escaping ([String: Any]) -> Void)
-
-    /// Check if ES is available and running
-    func isEndpointSecurityAvailable(reply: @escaping (Bool) -> Void)
-}
-
-// MARK: - EndpointExtensionXPCProtocol Implementation
-
-extension ESXPCService: EndpointExtensionXPCProtocol {
+extension ESXPCService: EndpointXPCProtocol {
 
     func getProcesses(reply: @escaping ([Data]) -> Void) {
         logger.debug("XPC: getProcesses")

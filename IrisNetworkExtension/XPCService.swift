@@ -68,7 +68,7 @@ extension XPCService: NSXPCListenerDelegate {
         logger.info("New XPC connection request")
 
         // Configure the connection
-        newConnection.exportedInterface = NSXPCInterface(with: SecurityExtensionXPCProtocol.self)
+        newConnection.exportedInterface = NSXPCInterface(with: NetworkXPCProtocol.self)
         newConnection.exportedObject = self
 
         // Set up invalidation handler
@@ -96,37 +96,9 @@ extension XPCService: NSXPCListenerDelegate {
     }
 }
 
-// MARK: - SecurityExtensionXPCProtocol Implementation
+// MARK: - NetworkXPCProtocol Implementation
 
-@objc protocol SecurityExtensionXPCProtocol {
-    func getProcesses(reply: @escaping ([Data]) -> Void)
-    func getProcess(pid: Int32, reply: @escaping (Data?) -> Void)
-    func getConnections(reply: @escaping ([Data]) -> Void)
-    func getConnectionsForPid(_ pid: Int32, reply: @escaping ([Data]) -> Void)
-    func getRules(reply: @escaping ([Data]) -> Void)
-    func addRule(_ ruleData: Data, reply: @escaping (Bool, String?) -> Void)
-    func updateRule(_ ruleData: Data, reply: @escaping (Bool, String?) -> Void)
-    func removeRule(_ ruleId: String, reply: @escaping (Bool) -> Void)
-    func toggleRule(_ ruleId: String, reply: @escaping (Bool) -> Void)
-    func cleanupExpiredRules(reply: @escaping (Int) -> Void)
-    func getStatus(reply: @escaping ([String: Any]) -> Void)
-    func setFilteringEnabled(_ enabled: Bool, reply: @escaping (Bool) -> Void)
-}
-
-extension XPCService: SecurityExtensionXPCProtocol {
-
-    func getProcesses(reply: @escaping ([Data]) -> Void) {
-        logger.debug("XPC: getProcesses")
-        // Return tracked processes
-        // TODO: Implement process tracking from ES events
-        reply([])
-    }
-
-    func getProcess(pid: Int32, reply: @escaping (Data?) -> Void) {
-        logger.debug("XPC: getProcess(\(pid))")
-        // TODO: Implement
-        reply(nil)
-    }
+extension XPCService: NetworkXPCProtocol {
 
     func getConnections(reply: @escaping ([Data]) -> Void) {
         logger.debug("XPC: getConnections")
@@ -147,8 +119,8 @@ extension XPCService: SecurityExtensionXPCProtocol {
         reply(data)
     }
 
-    func getConnectionsForPid(_ pid: Int32, reply: @escaping ([Data]) -> Void) {
-        logger.debug("XPC: getConnectionsForPid(\(pid))")
+    func getConnections(forPid pid: Int32, reply: @escaping ([Data]) -> Void) {
+        logger.debug("XPC: getConnections(forPid: \(pid))")
 
         guard let provider = filterProvider else {
             reply([])

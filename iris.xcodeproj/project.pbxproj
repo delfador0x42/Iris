@@ -125,6 +125,11 @@
 			path = Packages/IrisDNS/Sources/IrisDNS;
 			sourceTree = "<group>";
 		};
+		3F0001002F28000000000100 /* Shared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Shared;
+			sourceTree = "<group>";
+		};
 		3F0974A82F24FCC30004D070 /* IrisNetworkExtension */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = IrisNetworkExtension;
@@ -221,6 +226,7 @@
 				3FE000022F25A0000004D070 /* IrisEndpointExtension */,
 				3FA000062F2600000004D070 /* IrisProxyExtension */,
 				3FB000062F2600000004D070 /* IrisDNSExtension */,
+				3F0001002F28000000000100 /* Shared */,
 				3F0974A52F24FCC20004D070 /* Frameworks */,
 				3F5108762F24FBE0004CFE8D /* Products */,
 			);
@@ -254,6 +260,7 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
+				3F0001002F28000000000100 /* Shared */,
 				3F0974A82F24FCC30004D070 /* IrisNetworkExtension */,
 			);
 			name = IrisNetworkExtension;
@@ -291,6 +298,7 @@
 				3F0001002F28000000000009 /* Packages/IrisCertificates/Sources/IrisCertificates */,
 				3F0001002F2800000000000A /* Packages/IrisWiFi/Sources/IrisWiFi */,
 				3F0001002F2800000000000B /* Packages/IrisDNS/Sources/IrisDNS */,
+				3F0001002F28000000000100 /* Shared */,
 				3F5108772F24FBE0004CFE8D /* IrisApp */,
 			);
 			name = Iris;
@@ -313,6 +321,7 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
+				3F0001002F28000000000100 /* Shared */,
 				3FA000062F2600000004D070 /* IrisProxyExtension */,
 			);
 			name = IrisProxyExtension;
@@ -335,6 +344,7 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
+				3F0001002F28000000000100 /* Shared */,
 				3FB000062F2600000004D070 /* IrisDNSExtension */,
 			);
 			name = IrisDNSExtension;
@@ -357,6 +367,7 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
+				3F0001002F28000000000100 /* Shared */,
 				3FE000022F25A0000004D070 /* IrisEndpointExtension */,
 			);
 			name = IrisEndpointExtension;

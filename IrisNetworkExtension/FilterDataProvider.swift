@@ -13,8 +13,17 @@ class FilterDataProvider: NEFilterDataProvider {
     var connections: [UUID: ConnectionTracker] = [:]
     let connectionsLock = NSLock()
 
-    /// Maps flow hash to connection ID for byte tracking
-    var flowToConnection: [Int: UUID] = [:]
+    /// Maps flow identity to connection ID for byte tracking
+    var flowToConnection: [ObjectIdentifier: UUID] = [:]
+
+    /// Cleanup timer for stale connections
+    var cleanupTimer: Timer?
+
+    /// Max tracked connections before eviction
+    static let maxConnections = 10000
+
+    /// Connections with no activity for this long are removed
+    static let staleTimeout: TimeInterval = 120
 
     /// XPC service for communicating with main app
     var xpcService: XPCService?
@@ -32,6 +41,7 @@ class FilterDataProvider: NEFilterDataProvider {
         var localAddress: String
         var localPort: UInt16
         let flowId: UUID
+        var lastActivity: Date = Date()
 
         // HTTP tracking
         var httpRequest: ParsedHTTPRequest?
@@ -95,14 +105,43 @@ class FilterDataProvider: NEFilterDataProvider {
                 self.logger.error("Failed to apply filter settings: \(error.localizedDescription)")
             } else {
                 self.logger.info("Filter settings applied successfully")
+                self.startCleanupTimer()
             }
             completionHandler(error)
         }
     }
 
+    func startCleanupTimer() {
+        cleanupTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+            self?.cleanupStaleConnections()
+        }
+    }
+
+    func cleanupStaleConnections() {
+        connectionsLock.lock()
+        let now = Date()
+        let staleIds = connections.filter { now.timeIntervalSince($0.value.lastActivity) > Self.staleTimeout }
+            .map { $0.key }
+
+        for id in staleIds {
+            connections.removeValue(forKey: id)
+        }
+
+        // Also clean flowToConnection entries that reference removed connections
+        let validIds = Set(connections.keys)
+        flowToConnection = flowToConnection.filter { validIds.contains($0.value) }
+
+        if !staleIds.isEmpty {
+            logger.debug("Cleaned up \(staleIds.count) stale connections, \(self.connections.count) remaining")
+        }
+        connectionsLock.unlock()
+    }
+
     override func stopFilter(with reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {
         logger.info("Stopping network filter, reason: \(String(describing: reason))")
 
+        cleanupTimer?.invalidate()
+        cleanupTimer = nil
         xpcService?.stop()
         xpcService = nil
 

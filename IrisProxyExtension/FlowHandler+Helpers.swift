@@ -23,22 +23,33 @@ extension FlowHandler {
         }
     }
 
-    /// Receives data from a server NWConnection.
+    /// Receives data from a server NWConnection with idle timeout.
     static func receiveFromServer(_ connection: NWConnection) async throws -> Data {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data, Error>) in
-            connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { data, _, isComplete, error in
-                if let error = error {
-                    continuation.resume(throwing: error)
-                    return
-                }
-                if let data = data, !data.isEmpty {
-                    continuation.resume(returning: data)
-                } else if isComplete {
-                    continuation.resume(throwing: TLSSessionError.connectionClosed)
-                } else {
-                    continuation.resume(returning: Data())
+        try await withThrowingTaskGroup(of: Data.self) { group in
+            group.addTask {
+                try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data, Error>) in
+                    connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { data, _, isComplete, error in
+                        if let error = error {
+                            continuation.resume(throwing: error)
+                            return
+                        }
+                        if let data = data, !data.isEmpty {
+                            continuation.resume(returning: data)
+                        } else if isComplete {
+                            continuation.resume(throwing: TLSSessionError.connectionClosed)
+                        } else {
+                            continuation.resume(returning: Data())
+                        }
+                    }
                 }
             }
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(FlowHandler.idleTimeout * 1_000_000_000))
+                throw TLSSessionError.timeout
+            }
+            let result = try await group.next() ?? Data()
+            group.cancelAll()
+            return result
         }
     }
 

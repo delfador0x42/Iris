@@ -27,6 +27,8 @@ extension ExtensionManager: OSSystemExtensionRequestDelegate {
             case .endpoint:
                 endpointExtensionState = .needsUserApproval
                 startPollingForEndpointApproval()
+            case .proxy:
+                proxyExtensionState = .needsUserApproval
             case .dns:
                 dnsExtensionState = .needsUserApproval
             }
@@ -53,6 +55,8 @@ extension ExtensionManager: OSSystemExtensionRequestDelegate {
                     networkExtensionState = .needsUserApproval
                 case .endpoint:
                     endpointExtensionState = .needsUserApproval
+                case .proxy:
+                    proxyExtensionState = .needsUserApproval
                 case .dns:
                     dnsExtensionState = .needsUserApproval
                 }
@@ -176,14 +180,7 @@ extension ExtensionManager {
             failedState = .failed("\(error.localizedDescription)\n\(errorDetails)")
         }
 
-        switch type {
-        case .network:
-            networkExtensionState = failedState
-        case .endpoint:
-            endpointExtensionState = failedState
-        case .dns:
-            dnsExtensionState = failedState
-        }
+        setExtensionState(type, to: failedState)
 
         lastError = "\(error.localizedDescription)\n\(errorDetails)"
         pendingInstallationType = nil

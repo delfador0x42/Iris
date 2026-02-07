@@ -8,18 +8,6 @@
 import Foundation
 import os.log
 
-/// XPC protocol matching the shared DNSXPCProtocol.
-@objc protocol DNSExtensionXPCProtocol {
-    func getStatus(reply: @escaping ([String: Any]) -> Void)
-    func getQueries(limit: Int, reply: @escaping ([Data]) -> Void)
-    func clearQueries(reply: @escaping (Bool) -> Void)
-    func setEnabled(_ enabled: Bool, reply: @escaping (Bool) -> Void)
-    func isEnabled(reply: @escaping (Bool) -> Void)
-    func setServer(_ serverName: String, reply: @escaping (Bool) -> Void)
-    func getServer(reply: @escaping (String) -> Void)
-    func getStatistics(reply: @escaping ([String: Any]) -> Void)
-}
-
 /// XPC service that listens for connections from the main app.
 final class DNSExtensionXPCService: NSObject, @unchecked Sendable {
 
@@ -55,7 +43,7 @@ extension DNSExtensionXPCService: NSXPCListenerDelegate {
     func listener(_ listener: NSXPCListener, shouldAcceptNewConnection connection: NSXPCConnection) -> Bool {
         logger.info("DNS XPC: accepting new connection")
 
-        let interface = NSXPCInterface(with: DNSExtensionXPCProtocol.self)
+        let interface = NSXPCInterface(with: DNSXPCProtocol.self)
         connection.exportedInterface = interface
         connection.exportedObject = self
 
@@ -68,9 +56,9 @@ extension DNSExtensionXPCService: NSXPCListenerDelegate {
     }
 }
 
-// MARK: - DNSExtensionXPCProtocol
+// MARK: - DNSXPCProtocol
 
-extension DNSExtensionXPCService: DNSExtensionXPCProtocol {
+extension DNSExtensionXPCService: DNSXPCProtocol {
 
     func getStatus(reply: @escaping ([String: Any]) -> Void) {
         let status = provider?.getStatus() ?? [

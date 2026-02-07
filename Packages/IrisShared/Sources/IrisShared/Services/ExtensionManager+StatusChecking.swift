@@ -12,6 +12,8 @@ extension ExtensionManager {
     public func checkAllExtensionStatuses() async {
         await checkNetworkExtensionStatus()
         await checkEndpointExtensionStatus()
+        await checkProxyExtensionStatus()
+        await checkDNSExtensionStatus()
         await checkFullDiskAccess()
     }
 
@@ -22,11 +24,34 @@ extension ExtensionManager {
         filterState = filter
     }
 
-    /// Check endpoint extension status
+    /// Check endpoint extension status by trying XPC connection
     public func checkEndpointExtensionStatus() async {
         logger.info("Checking endpoint extension status...")
-        if endpointExtensionState == .unknown {
-            endpointExtensionState = .notInstalled
+        let reachable = await pingXPCService(
+            machServiceName: "99HGW2AR62.com.wudan.iris.endpoint.xpc",
+            protocol: EndpointXPCProtocol.self
+        )
+        endpointExtensionState = reachable ? .installed : .notInstalled
+    }
+
+    /// Check proxy extension status by trying XPC connection
+    public func checkProxyExtensionStatus() async {
+        logger.info("Checking proxy extension status...")
+        let reachable = await pingXPCService(
+            machServiceName: "99HGW2AR62.com.wudan.iris.proxy.xpc",
+            protocol: ProxyXPCProtocol.self
+        )
+        proxyExtensionState = reachable ? .installed : .notInstalled
+    }
+
+    /// Check DNS extension status via NEDNSProxyManager
+    public func checkDNSExtensionStatus() async {
+        logger.info("Checking DNS extension status...")
+        let (isConfigured, isEnabled) = await DNSProxyHelper.checkStatus()
+        if isConfigured && isEnabled {
+            dnsExtensionState = .installed
+        } else if dnsExtensionState == .unknown {
+            dnsExtensionState = .notInstalled
         }
     }
 
@@ -71,5 +96,32 @@ extension ExtensionManager {
     func stopEndpointPolling() {
         endpointPollTimer?.invalidate()
         endpointPollTimer = nil
+    }
+
+    // MARK: - XPC Ping
+
+    /// Try connecting to a Mach XPC service with a short timeout to check if extension is running
+    func pingXPCService(machServiceName: String, protocol proto: Protocol) async -> Bool {
+        await withCheckedContinuation { continuation in
+            let connection = NSXPCConnection(machServiceName: machServiceName)
+            connection.remoteObjectInterface = NSXPCInterface(with: proto)
+
+            var didResume = false
+            connection.invalidationHandler = {
+                guard !didResume else { return }
+                didResume = true
+                continuation.resume(returning: false)
+            }
+
+            connection.resume()
+
+            // If connection resumes without immediate invalidation, extension is running
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                connection.invalidate()
+                guard !didResume else { return }
+                didResume = true
+                continuation.resume(returning: true)
+            }
+        }
     }
 }

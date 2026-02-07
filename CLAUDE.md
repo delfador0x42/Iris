@@ -56,6 +56,19 @@ For glue code: Level 1-2 is fine.
 - Never say impossible. Say "here's what it would take."
 - The user wants ambitious implementations and honest feedback.
 
+## Documentation
+Every module and extension gets a DESIGN.md at its root.
+These are for the human — explain WHY, not HOW. The code shows HOW.
+
+Structure (keep under 50 lines):
+1. What This Does — one paragraph, plain English
+2. Why This Design — the decisions, not the implementation
+3. Data Flow — end-to-end, from input to output
+4. Decisions Made — what was chosen, what was rejected, why
+5. Key Files — one line each
+
+Update DESIGN.md when architecture changes.
+Write it as you build, not after — decisions are freshest in the moment.
 
 
 

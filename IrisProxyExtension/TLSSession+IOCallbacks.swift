@@ -3,6 +3,8 @@
 //  IrisProxyExtension
 //
 //  SSL I/O callback functions and buffer management for TLSSession.
+//  Read callback is NON-BLOCKING: returns errSSLWouldBlock when buffer is empty,
+//  letting the caller retry asynchronously without holding sslQueue.
 //
 
 import Foundation
@@ -15,30 +17,17 @@ extension TLSSession {
     // MARK: - SSL I/O Buffer Methods
 
     /// Consumes data from the read buffer (called by SSL).
+    /// NON-BLOCKING: returns errSSLWouldBlock immediately when empty.
+    /// The caller (read()) handles waiting asynchronously outside sslQueue.
     func consumeFromBuffer(_ buffer: UnsafeMutableRawPointer, maxLength: Int) -> (Int, OSStatus) {
         readBufferLock.lock()
 
         if readBuffer.isEmpty {
             readBufferLock.unlock()
-
             if isClosed {
                 return (0, errSSLClosedGraceful)
             }
-
-            // Wait for data with timeout
-            let result = dataAvailable.wait(timeout: .now() + .seconds(10))
-            if result == .timedOut {
-                return (0, OSStatus(errSSLWouldBlock))
-            }
-
-            readBufferLock.lock()
-            if readBuffer.isEmpty {
-                readBufferLock.unlock()
-                if isClosed {
-                    return (0, errSSLClosedGraceful)
-                }
-                return (0, OSStatus(errSSLWouldBlock))
-            }
+            return (0, OSStatus(errSSLWouldBlock))
         }
 
         let bytesToRead = min(maxLength, readBuffer.count)
@@ -50,6 +39,7 @@ extension TLSSession {
     }
 
     /// Writes encrypted data to the flow (called by SSL).
+    /// Uses a per-write semaphore (fine since flow.write completes quickly).
     func writeToFlow(_ data: UnsafeRawPointer, length: Int) -> (Int, OSStatus) {
         let writeData = Data(bytes: data, count: length)
 
@@ -77,7 +67,7 @@ extension TLSSession {
 
 // MARK: - SSL Callback Functions
 
-/// SSL read callback - reads encrypted data from the flow's buffer.
+/// SSL read callback — returns immediately with errSSLWouldBlock when no data.
 func tlsReadFunc(
     connection: SSLConnectionRef,
     data: UnsafeMutableRawPointer,
@@ -92,7 +82,7 @@ func tlsReadFunc(
     return status
 }
 
-/// SSL write callback - writes encrypted data to the flow.
+/// SSL write callback — writes encrypted data to the flow.
 func tlsWriteFunc(
     connection: SSLConnectionRef,
     data: UnsafeRawPointer,

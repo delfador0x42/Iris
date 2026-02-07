@@ -18,8 +18,8 @@ import NetworkExtension
 import os.log
 
 /// TLS session wrapping SSLCreateContext for use with NEAppProxyTCPFlow.
-/// Bridges between SSL's synchronous read/write callbacks and NEAppProxyTCPFlow's
-/// async completion-handler API using a ring buffer.
+/// Uses non-blocking I/O callbacks with async continuation-based signaling
+/// to avoid deadlocking the SSL queue between concurrent read and write.
 final class TLSSession {
 
     let logger = Logger(subsystem: "com.wudan.iris.proxy", category: "TLSSession")
@@ -37,27 +37,22 @@ final class TLSSession {
     var readBuffer = Data()
     let readBufferLock = NSLock()
 
-    /// Semaphore to signal when new data is available
-    let dataAvailable = DispatchSemaphore(value: 0)
+    /// Async waiters for new data (replaces DispatchSemaphore)
+    var dataWaiters: [CheckedContinuation<Void, Never>] = []
+    let waiterLock = NSLock()
 
     /// Whether the flow is closed
     var isClosed = false
 
-    /// Queue for blocking SSL operations
+    /// Queue for SSL operations (read and write are serialized through here)
     let sslQueue = DispatchQueue(label: "com.wudan.iris.proxy.tls", qos: .userInitiated)
 
     // MARK: - Initialization
 
-    /// Creates a TLS session.
-    /// - Parameters:
-    ///   - flow: The NEAppProxyTCPFlow to wrap
-    ///   - identity: The SecIdentity to present (for server mode)
-    ///   - isServer: Whether we're the TLS server (true) or client (false)
     init(flow: NEAppProxyTCPFlow, identity: SecIdentity? = nil, isServer: Bool) throws {
         self.flow = flow
         self.isServer = isServer
 
-        // Create SSL context
         guard let ctx = SSLCreateContext(
             nil,
             isServer ? .serverSide : .clientSide,
@@ -67,20 +62,17 @@ final class TLSSession {
         }
         self.sslContext = ctx
 
-        // Set I/O callbacks
         let status = SSLSetIOFuncs(ctx, tlsReadFunc, tlsWriteFunc)
         guard status == errSecSuccess else {
             throw TLSSessionError.configurationFailed(status)
         }
 
-        // Set connection ref (self pointer for callbacks)
         let connectionRef = Unmanaged.passUnretained(self).toOpaque()
         let refStatus = SSLSetConnection(ctx, connectionRef)
         guard refStatus == errSecSuccess else {
             throw TLSSessionError.configurationFailed(refStatus)
         }
 
-        // Set certificate for server mode
         if isServer, let identity = identity {
             let certArray = [identity] as CFArray
             let certStatus = SSLSetCertificate(ctx, certArray)
@@ -89,7 +81,6 @@ final class TLSSession {
             }
         }
 
-        // For client mode, accept any server cert (we're connecting to the real server)
         if !isServer {
             SSLSetSessionOption(ctx, .breakOnServerAuth, true)
         }
@@ -110,9 +101,49 @@ final class TLSSession {
         sslContext = nil
         isClosed = true
 
-        // Signal any waiting reads
-        dataAvailable.signal()
+        // Wake any async waiters
+        signalDataAvailable()
 
         logger.debug("TLS session closed")
+    }
+
+    // MARK: - Async Data Signaling
+
+    /// Waits asynchronously for new data in the read buffer.
+    /// Does NOT hold sslQueue, allowing writes to proceed.
+    func waitForData() async {
+        // Check if data is already available before suspending
+        readBufferLock.lock()
+        if !readBuffer.isEmpty || isClosed {
+            readBufferLock.unlock()
+            return
+        }
+        readBufferLock.unlock()
+
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            waiterLock.lock()
+            // Double-check after acquiring lock
+            readBufferLock.lock()
+            if !readBuffer.isEmpty || isClosed {
+                readBufferLock.unlock()
+                waiterLock.unlock()
+                continuation.resume()
+                return
+            }
+            readBufferLock.unlock()
+            dataWaiters.append(continuation)
+            waiterLock.unlock()
+        }
+    }
+
+    /// Wakes all tasks waiting for data.
+    func signalDataAvailable() {
+        waiterLock.lock()
+        let waiters = dataWaiters
+        dataWaiters.removeAll()
+        waiterLock.unlock()
+        for waiter in waiters {
+            waiter.resume()
+        }
     }
 }

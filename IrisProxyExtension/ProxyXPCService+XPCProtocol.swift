@@ -2,7 +2,7 @@
 //  ProxyXPCService+XPCProtocol.swift
 //  IrisProxyExtension
 //
-//  ProxyExtensionXPCProtocol conformance for ProxyXPCService.
+//  ProxyXPCProtocol conformance for ProxyXPCService.
 //
 
 import Foundation
@@ -10,7 +10,7 @@ import os.log
 
 // MARK: - ProxyExtensionXPCProtocol
 
-extension ProxyXPCService: ProxyExtensionXPCProtocol {
+extension ProxyXPCService: ProxyXPCProtocol {
 
     func getStatus(reply: @escaping ([String: Any]) -> Void) {
         logger.debug("XPC: getStatus")

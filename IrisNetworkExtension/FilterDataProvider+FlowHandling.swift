@@ -79,8 +79,16 @@ extension FilterDataProvider {
             flowId: connectionId
         )
         // Store flow mapping for byte tracking
-        let flowHash = ObjectIdentifier(flow).hashValue
-        flowToConnection[flowHash] = connectionId
+        flowToConnection[ObjectIdentifier(flow)] = connectionId
+
+        // Evict oldest if over capacity
+        if connections.count > Self.maxConnections {
+            let oldest = connections.min { $0.value.lastActivity < $1.value.lastActivity }
+            if let oldId = oldest?.key {
+                connections.removeValue(forKey: oldId)
+                flowToConnection = flowToConnection.filter { $0.value != oldId }
+            }
+        }
         connectionsLock.unlock()
 
         logger.debug("New flow: \(processName) → \(remoteEndpoint.hostname):\(remoteEndpoint.port)")

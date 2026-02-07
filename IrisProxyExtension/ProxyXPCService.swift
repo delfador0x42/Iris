@@ -9,27 +9,6 @@
 import Foundation
 import os.log
 
-/// XPC protocol for proxy extension communication.
-@objc protocol ProxyExtensionXPCProtocol {
-    /// Gets the current proxy status.
-    func getStatus(reply: @escaping ([String: Any]) -> Void)
-
-    /// Gets all captured HTTP flows.
-    func getFlows(reply: @escaping ([Data]) -> Void)
-
-    /// Gets a specific flow by ID.
-    func getFlow(_ flowId: String, reply: @escaping (Data?) -> Void)
-
-    /// Clears all captured flows.
-    func clearFlows(reply: @escaping (Bool) -> Void)
-
-    /// Sets whether interception is enabled.
-    func setInterceptionEnabled(_ enabled: Bool, reply: @escaping (Bool) -> Void)
-
-    /// Gets interception enabled state.
-    func isInterceptionEnabled(reply: @escaping (Bool) -> Void)
-}
-
 /// XPC Service for the proxy extension.
 class ProxyXPCService: NSObject {
 
@@ -44,7 +23,7 @@ class ProxyXPCService: NSObject {
     weak var provider: AppProxyProvider?
 
     /// Captured HTTP flows (stored in memory)
-    var capturedFlows: [CapturedFlow] = []
+    var capturedFlows: [ProxyCapturedFlow] = []
     let flowsLock = NSLock()
     let maxFlows = 10000
 

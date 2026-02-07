@@ -63,9 +63,9 @@ extension ExtensionManager {
 
     // MARK: - System Settings
 
-    /// Open System Settings to Privacy & Security
+    /// Open System Settings to Privacy & Security (Extensions)
     public func openSystemSettings() {
-        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy") {
             NSWorkspace.shared.open(url)
         }
     }

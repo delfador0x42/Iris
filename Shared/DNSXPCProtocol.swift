@@ -1,58 +1,27 @@
-//
-//  DNSXPCProtocol.swift
-//  IrisShared
-//
-//  XPC protocol for communication between the main app and the DNS proxy extension.
-//
-
 import Foundation
 
-/// XPC protocol for the DNS proxy extension.
-/// Used by the main app to communicate with IrisDNSExtension.
+/// XPC protocol for communication between the main app and the DNS Proxy Extension.
+/// Single source of truth — compiled into BOTH the app and extension targets.
 @objc public protocol DNSXPCProtocol {
-
-    /// Gets the current DNS proxy status.
-    /// Returns dictionary with: isActive, totalQueries, encryptedQueries, serverName, averageLatencyMs
     func getStatus(reply: @escaping ([String: Any]) -> Void)
-
-    /// Gets recent DNS queries.
-    /// Returns array of JSON-encoded DNSQueryRecord objects.
     func getQueries(limit: Int, reply: @escaping ([Data]) -> Void)
-
-    /// Clears all captured DNS queries.
     func clearQueries(reply: @escaping (Bool) -> Void)
-
-    /// Enables or disables encrypted DNS.
     func setEnabled(_ enabled: Bool, reply: @escaping (Bool) -> Void)
-
-    /// Gets whether encrypted DNS is currently enabled.
     func isEnabled(reply: @escaping (Bool) -> Void)
-
-    /// Sets the DoH server by name (e.g., "cloudflare", "google", "quad9").
     func setServer(_ serverName: String, reply: @escaping (Bool) -> Void)
-
-    /// Gets the current DoH server name.
     func getServer(reply: @escaping (String) -> Void)
-
-    /// Gets DNS statistics.
-    /// Returns dictionary with: totalQueries, failedQueries, averageLatencyMs, successRate
     func getStatistics(reply: @escaping ([String: Any]) -> Void)
 }
 
 // MARK: - XPC Interface Helper
 
-/// Helper for creating XPC interface for the DNS proxy extension.
 public enum DNSXPCInterface {
-
-    /// The Mach service name for the DNS proxy extension.
     public static let serviceName = "99HGW2AR62.com.wudan.iris.dns.xpc"
 
-    /// Creates an NSXPCInterface for the DNS protocol.
     public static func createInterface() -> NSXPCInterface {
         return NSXPCInterface(with: DNSXPCProtocol.self)
     }
 
-    /// Creates an NSXPCConnection to the DNS proxy extension.
     public static func createConnection() -> NSXPCConnection {
         let connection = NSXPCConnection(machServiceName: serviceName, options: [])
         connection.remoteObjectInterface = createInterface()
@@ -60,7 +29,7 @@ public enum DNSXPCInterface {
     }
 }
 
-// MARK: - DNS Query Record (Shared between extension and app)
+// MARK: - DNS Query Record
 
 /// A captured DNS query record for XPC transport.
 public struct DNSQueryRecord: Codable, Identifiable, Sendable, Equatable, Hashable {
