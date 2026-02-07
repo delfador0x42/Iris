@@ -24,11 +24,19 @@ actor FlowHandler {
         self.provider = provider
     }
 
+    /// Valid port range for network connections
+    static let validPortRange = 1...65535
+
     /// Routes a TCP flow to the appropriate handler based on port.
     func handleFlow(
         flowId: UUID, flow: NEAppProxyTCPFlow,
         host: String, port: Int, processName: String
     ) async {
+        guard Self.validPortRange.contains(port) else {
+            logger.error("Invalid port \(port) for \(host), dropping flow")
+            provider?.removeFlow(flowId)
+            return
+        }
         logger.info("Handling flow \(flowId) to \(host):\(port) from \(processName)")
         if port == 443 {
             await handleHTTPSFlow(flowId: flowId, flow: flow, host: host, port: port, processName: processName)
@@ -46,7 +54,7 @@ actor FlowHandler {
         logger.debug("Processing HTTP flow to \(host):\(port)")
         let serverConnection = NWConnection(
             host: NWEndpoint.Host(host),
-            port: NWEndpoint.Port(integerLiteral: UInt16(port)),
+            port: NWEndpoint.Port(rawValue: UInt16(clamping: port))!,
             using: .tcp
         )
 
@@ -104,7 +112,7 @@ actor FlowHandler {
         let tlsParams = tlsInterceptor.createClientTLSParameters(for: host)
         let serverConnection = NWConnection(
             host: NWEndpoint.Host(host),
-            port: NWEndpoint.Port(integerLiteral: UInt16(port)),
+            port: NWEndpoint.Port(rawValue: UInt16(clamping: port))!,
             using: tlsParams
         )
 

@@ -85,7 +85,7 @@ public actor IPEnrichmentService {
     // MARK: - Properties
 
     private let logger = Logger(subsystem: "com.wudan.iris", category: "IPEnrichmentService")
-    private var cache: [String: EnrichmentResult] = [:]
+    private var cache = BoundedCache<EnrichmentResult>(maxSize: 5000, ttl: 3600)
 
     // MARK: - Public Methods
 
@@ -94,7 +94,7 @@ public actor IPEnrichmentService {
     /// - Returns: Comprehensive enrichment result
     public func enrich(_ ip: String) async -> EnrichmentResult {
         // Check cache first
-        if let cached = cache[ip] {
+        if let cached = cache.get(ip) {
             return cached
         }
 
@@ -165,7 +165,7 @@ public actor IPEnrichmentService {
         }
 
         // Cache the result
-        cache[ip] = result
+        cache.set(ip, value: result)
 
         logger.debug("Enriched \(ip) with sources: \(result.sources.joined(separator: ", "))")
 
@@ -186,7 +186,7 @@ public actor IPEnrichmentService {
         var uncachedIPs: [String] = []
 
         for ip in publicIPs {
-            if let cached = cache[ip] {
+            if let cached = cache.get(ip) {
                 results[ip] = cached
             } else {
                 uncachedIPs.append(ip)
@@ -195,20 +195,22 @@ public actor IPEnrichmentService {
 
         guard !uncachedIPs.isEmpty else { return results }
 
-        // Fetch uncached IPs concurrently
-        // Limit concurrency to avoid overwhelming APIs
-        let maxConcurrent = 20
-
-        await withTaskGroup(of: (String, EnrichmentResult).self) { group in
-            for ip in uncachedIPs.prefix(maxConcurrent) {
-                group.addTask {
-                    let result = await self.enrich(ip)
-                    return (ip, result)
+        // Process ALL uncached IPs in chunks of 20 concurrent requests.
+        // Previous code used prefix(20) which silently dropped remaining IPs.
+        let chunkSize = 20
+        for chunk in stride(from: 0, to: uncachedIPs.count, by: chunkSize).map({
+            Array(uncachedIPs[$0..<min($0 + chunkSize, uncachedIPs.count)])
+        }) {
+            await withTaskGroup(of: (String, EnrichmentResult).self) { group in
+                for ip in chunk {
+                    group.addTask {
+                        let result = await self.enrich(ip)
+                        return (ip, result)
+                    }
                 }
-            }
-
-            for await (ip, result) in group {
-                results[ip] = result
+                for await (ip, result) in group {
+                    results[ip] = result
+                }
             }
         }
 

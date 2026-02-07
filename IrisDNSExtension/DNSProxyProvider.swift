@@ -23,9 +23,37 @@ class DNSProxyProvider: NEDNSProxyProvider {
     let queriesLock = NSLock()
     static let maxCapturedQueries = 10000
 
-    var totalQueries: Int = 0
-    var failedQueries: Int = 0
-    var totalLatencyMs: Double = 0
+    /// Stats protected by statsLock for thread-safe access from data path
+    private var _totalQueries: Int = 0
+    private var _failedQueries: Int = 0
+    private var _totalLatencyMs: Double = 0
+    private let statsLock = NSLock()
+
+    var totalQueries: Int {
+        statsLock.lock(); defer { statsLock.unlock() }; return _totalQueries
+    }
+    var failedQueries: Int {
+        statsLock.lock(); defer { statsLock.unlock() }; return _failedQueries
+    }
+    var totalLatencyMs: Double {
+        statsLock.lock(); defer { statsLock.unlock() }; return _totalLatencyMs
+    }
+
+    /// Atomic increment methods for cross-file access
+    func incrementTotalQueries() {
+        statsLock.lock(); _totalQueries += 1; statsLock.unlock()
+    }
+    func incrementFailedQueries() {
+        statsLock.lock(); _failedQueries += 1; statsLock.unlock()
+    }
+    func addLatency(_ ms: Double) {
+        statsLock.lock(); _totalLatencyMs += ms; statsLock.unlock()
+    }
+    func resetStats() {
+        statsLock.lock()
+        _totalQueries = 0; _failedQueries = 0; _totalLatencyMs = 0
+        statsLock.unlock()
+    }
     var isProxyEnabled: Bool = true
     var serverName: String = "Cloudflare"
 
@@ -88,7 +116,7 @@ class DNSProxyProvider: NEDNSProxyProvider {
         queriesLock.lock()
         capturedQueries.removeAll()
         queriesLock.unlock()
-        totalQueries = 0; failedQueries = 0; totalLatencyMs = 0
+        resetStats()
     }
 
     func setEnabled(_ enabled: Bool) {

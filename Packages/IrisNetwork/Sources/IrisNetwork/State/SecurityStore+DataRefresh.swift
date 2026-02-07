@@ -149,8 +149,12 @@ extension SecurityStore {
         enriched.remoteCountry = result.country
         enriched.remoteCountryCode = result.countryCode
         enriched.remoteCity = result.city
-        enriched.remoteLatitude = result.latitude
-        enriched.remoteLongitude = result.longitude
+        // Skip 0,0 coordinates (Null Island) — almost always means "unknown"
+        if let lat = result.latitude, let lon = result.longitude,
+           !(lat == 0 && lon == 0) {
+            enriched.remoteLatitude = lat
+            enriched.remoteLongitude = lon
+        }
         enriched.remoteASN = result.asn
         enriched.remoteOrganization = result.organization
         enriched.remoteOpenPorts = result.openPorts

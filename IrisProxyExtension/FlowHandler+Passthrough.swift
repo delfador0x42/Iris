@@ -19,7 +19,7 @@ extension FlowHandler {
     ) async {
         let connection = NWConnection(
             host: NWEndpoint.Host(host),
-            port: NWEndpoint.Port(integerLiteral: UInt16(port)),
+            port: NWEndpoint.Port(rawValue: UInt16(clamping: port))!,
             using: .tcp
         )
 

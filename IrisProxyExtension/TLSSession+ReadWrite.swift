@@ -62,6 +62,9 @@ extension TLSSession {
             case .wouldBlock:
                 // sslQueue is now free — write() can proceed while we wait
                 await waitForData()
+                // Re-check after waking — prevents livelock when isClosed
+                // changed between the top guard and the SSLRead dispatch
+                if isClosed { throw TLSSessionError.connectionClosed }
             case .closed:
                 throw TLSSessionError.connectionClosed
             case .error(let status):

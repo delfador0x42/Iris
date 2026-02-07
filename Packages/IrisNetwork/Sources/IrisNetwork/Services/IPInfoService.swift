@@ -28,7 +28,7 @@ public actor IPInfoService {
     // MARK: - Properties
 
     private let logger = Logger(subsystem: "com.wudan.iris", category: "IPInfoService")
-    private var cache: [String: GeoIPService.GeoIPResult] = [:]
+    private var cache = BoundedCache<GeoIPService.GeoIPResult>(maxSize: 5000, ttl: 3600)
     private let endpoint = "https://ipinfo.io"
 
     // MARK: - Public Methods
@@ -41,14 +41,14 @@ public actor IPInfoService {
         guard !isPrivateIP(ip) else { return nil }
 
         // Check cache
-        if let cached = cache[ip] {
+        if let cached = cache.get(ip) {
             return cached
         }
 
         // Fetch from API
         guard let result = await fetchSingle(ip) else { return nil }
 
-        cache[ip] = result
+        cache.set(ip, value: result)
         return result
     }
 
@@ -62,7 +62,7 @@ public actor IPInfoService {
 
         // Start with cached results
         for ip in publicIPs {
-            if let cached = cache[ip] {
+            if let cached = cache.get(ip) {
                 results[ip] = cached
             } else {
                 uncachedIPs.append(ip)

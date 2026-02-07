@@ -123,13 +123,13 @@ class FilterDataProvider: NEFilterDataProvider {
         let staleIds = connections.filter { now.timeIntervalSince($0.value.lastActivity) > Self.staleTimeout }
             .map { $0.key }
 
+        // Remove stale connections and their flow mappings atomically
+        let staleIdSet = Set(staleIds)
         for id in staleIds {
             connections.removeValue(forKey: id)
         }
-
-        // Also clean flowToConnection entries that reference removed connections
-        let validIds = Set(connections.keys)
-        flowToConnection = flowToConnection.filter { validIds.contains($0.value) }
+        // Only remove flow entries pointing to stale IDs (avoids rebuilding entire dict)
+        flowToConnection = flowToConnection.filter { !staleIdSet.contains($0.value) }
 
         if !staleIds.isEmpty {
             logger.debug("Cleaned up \(staleIds.count) stale connections, \(self.connections.count) remaining")

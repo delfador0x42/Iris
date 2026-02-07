@@ -41,22 +41,24 @@ extension DNSProxyProvider {
             }
             guard let datagrams = result.datagrams, let endpoints = result.endpoints, !datagrams.isEmpty else { break }
 
-            for (index, datagram) in datagrams.enumerated() {
-                await processDNSDatagram(datagram, from: flow, originalEndpoint: endpoints[index])
+            // Use min() to guard against count mismatch between arrays
+            let count = min(datagrams.count, endpoints.count)
+            for index in 0..<count {
+                await processDNSDatagram(datagrams[index], from: flow, originalEndpoint: endpoints[index])
             }
         }
     }
 
     func processDNSDatagram(_ datagram: Data, from flow: NEAppProxyUDPFlow, originalEndpoint: NWEndpoint) async {
         let startTime = CFAbsoluteTimeGetCurrent()
-        totalQueries += 1
+        incrementTotalQueries()
         let queryInfo = parseDNSQueryInfo(datagram)
         logger.debug("DNS query: \(queryInfo.domain) (\(queryInfo.type))")
 
         do {
             let responseData = try await dohClient.query(datagram)
             let elapsed = (CFAbsoluteTimeGetCurrent() - startTime) * 1000
-            totalLatencyMs += elapsed
+            addLatency(elapsed)
             let responseInfo = parseDNSResponseInfo(responseData)
 
             recordQuery(
@@ -73,7 +75,7 @@ extension DNSProxyProvider {
                 }
             }
         } catch {
-            failedQueries += 1
+            incrementFailedQueries()
             logger.error("DoH query failed for \(queryInfo.domain): \(error.localizedDescription)")
             recordQuery(
                 domain: queryInfo.domain, type: queryInfo.type,
@@ -129,14 +131,14 @@ extension DNSProxyProvider {
 
     func processTCPDNSDatagram(_ datagram: Data, flow: NEAppProxyTCPFlow) async {
         let startTime = CFAbsoluteTimeGetCurrent()
-        totalQueries += 1
+        incrementTotalQueries()
         let queryInfo = parseDNSQueryInfo(datagram)
         logger.debug("TCP DNS query: \(queryInfo.domain) (\(queryInfo.type))")
 
         do {
             let responseData = try await dohClient.query(datagram)
             let elapsed = (CFAbsoluteTimeGetCurrent() - startTime) * 1000
-            totalLatencyMs += elapsed
+            addLatency(elapsed)
             let responseInfo = parseDNSResponseInfo(responseData)
 
             recordQuery(
@@ -156,7 +158,7 @@ extension DNSProxyProvider {
                 flow.write(tcpResponse) { _ in continuation.resume() }
             }
         } catch {
-            failedQueries += 1
+            incrementFailedQueries()
             logger.error("DoH query failed for TCP \(queryInfo.domain): \(error.localizedDescription)")
             recordQuery(
                 domain: queryInfo.domain, type: queryInfo.type,

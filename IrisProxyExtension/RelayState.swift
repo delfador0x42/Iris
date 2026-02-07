@@ -53,6 +53,20 @@ final class RelayState: @unchecked Sendable {
         return _responseBuffer
     }
 
+    /// Access request buffer under lock without copying
+    func withRequestBuffer<T>(_ body: (Data) -> T) -> T {
+        lock.lock()
+        defer { lock.unlock() }
+        return body(_requestBuffer)
+    }
+
+    /// Access response buffer under lock without copying
+    func withResponseBuffer<T>(_ body: (Data) -> T) -> T {
+        lock.lock()
+        defer { lock.unlock() }
+        return body(_responseBuffer)
+    }
+
     func markRequestCaptured() {
         lock.lock()
         _hasRequest = true

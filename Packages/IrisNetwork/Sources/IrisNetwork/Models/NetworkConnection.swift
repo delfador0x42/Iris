@@ -6,6 +6,7 @@ public struct NetworkConnection: Identifiable, Sendable, Codable, Equatable {
     public let processId: Int32
     public let processPath: String
     public let processName: String
+    public let signingId: String?
     public let localAddress: String
     public let localPort: UInt16
     public let remoteAddress: String
@@ -63,6 +64,7 @@ public struct NetworkConnection: Identifiable, Sendable, Codable, Equatable {
         processId: Int32,
         processPath: String,
         processName: String,
+        signingId: String? = nil,
         localAddress: String,
         localPort: UInt16,
         remoteAddress: String,
@@ -107,6 +109,7 @@ public struct NetworkConnection: Identifiable, Sendable, Codable, Equatable {
         self.processId = processId
         self.processPath = processPath
         self.processName = processName
+        self.signingId = signingId
         self.localAddress = localAddress
         self.localPort = localPort
         self.remoteAddress = remoteAddress

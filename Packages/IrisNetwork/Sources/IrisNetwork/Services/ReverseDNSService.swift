@@ -13,7 +13,7 @@ public actor ReverseDNSService {
     // MARK: - Properties
 
     private let logger = Logger(subsystem: "com.wudan.iris", category: "ReverseDNSService")
-    private var cache: [String: String?] = [:]  // IP -> hostname (nil means lookup failed)
+    private var cache = BoundedCache<String>(maxSize: 5000, ttl: 3600)
     private let maxConcurrent = 10
 
     // MARK: - Public Methods
@@ -23,13 +23,12 @@ public actor ReverseDNSService {
     /// - Returns: The hostname if found, nil otherwise
     public func lookup(_ ip: String) async -> String? {
         // Check cache first
-        if let cached = cache[ip] {
+        if let cached = cache.get(ip) {
             return cached
         }
 
         // Skip private IPs - they won't have public DNS records
         guard !isPrivateIP(ip) else {
-            cache[ip] = nil
             return nil
         }
 
@@ -41,9 +40,8 @@ public actor ReverseDNSService {
             }
         }
 
-        cache[ip] = hostname
-
         if let hostname = hostname {
+            cache.set(ip, value: hostname)
             logger.debug("Reverse DNS for \(ip): \(hostname)")
         }
 
@@ -61,10 +59,8 @@ public actor ReverseDNSService {
 
         // Start with cached results
         for ip in publicIPs {
-            if let cached = cache[ip] {
-                if let hostname = cached {
-                    results[ip] = hostname
-                }
+            if let cached = cache.get(ip) {
+                results[ip] = cached
             } else {
                 uncachedIPs.append(ip)
             }

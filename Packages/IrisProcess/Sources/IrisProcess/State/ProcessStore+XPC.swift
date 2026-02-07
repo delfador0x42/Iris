@@ -89,16 +89,11 @@ extension ProcessStore {
 // MARK: - Username Resolution
 
 extension ProcessStore {
-    /// Get username for a user ID
+    /// Get username for a user ID using the system password database
     public static func username(forUID uid: UInt32) -> String {
-        switch uid {
-        case 0: return "root"
-        case 501: return "user"
-        default:
-            if let pw = getpwuid(uid) {
-                return String(cString: pw.pointee.pw_name)
-            }
-            return "\(uid)"
+        if let pw = getpwuid(uid) {
+            return String(cString: pw.pointee.pw_name)
         }
+        return "\(uid)"
     }
 }

@@ -29,7 +29,7 @@ public actor InternetDBService {
     // MARK: - Properties
 
     private let logger = Logger(subsystem: "com.wudan.iris", category: "InternetDBService")
-    private var cache: [String: InternetDBResult] = [:]
+    private var cache = BoundedCache<InternetDBResult>(maxSize: 5000, ttl: 3600)
     private let endpoint = "https://internetdb.shodan.io"
 
     // MARK: - Public Methods
@@ -40,7 +40,7 @@ public actor InternetDBService {
         guard !isPrivateIP(ip) else { return nil }
 
         // Check cache first
-        if let cached = cache[ip] {
+        if let cached = cache.get(ip) {
             return cached
         }
 
@@ -64,7 +64,7 @@ public actor InternetDBService {
             }
 
             let result = try JSONDecoder().decode(InternetDBResult.self, from: data)
-            cache[ip] = result
+            cache.set(ip, value: result)
             logger.debug("InternetDB lookup success for \(ip): \(result.ports.count) ports, \(result.vulns.count) vulns")
             return result
         } catch {
@@ -86,7 +86,7 @@ public actor InternetDBService {
         var uncachedIPs: [String] = []
 
         for ip in publicIPs {
-            if let cached = cache[ip] {
+            if let cached = cache.get(ip) {
                 results[ip] = cached
             } else {
                 uncachedIPs.append(ip)

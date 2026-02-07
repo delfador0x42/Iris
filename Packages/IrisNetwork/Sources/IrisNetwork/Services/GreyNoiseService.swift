@@ -58,7 +58,7 @@ public actor GreyNoiseService {
     // MARK: - Properties
 
     private let logger = Logger(subsystem: "com.wudan.iris", category: "GreyNoiseService")
-    private var cache: [String: GreyNoiseResult?] = [:]
+    private var cache = BoundedCache<GreyNoiseResult>(maxSize: 2000, ttl: 7200)
     private let endpoint = "https://api.greynoise.io/v3/community"
 
     /// Track daily request count to avoid hitting rate limit
@@ -98,13 +98,15 @@ public actor GreyNoiseService {
         guard !isPrivateIP(ip) else { return nil }
 
         // Check cache
-        if let cached = cache[ip] {
+        if let cached = cache.get(ip) {
             return cached
         }
 
         // Fetch from API
         let result = await fetchSingle(ip)
-        cache[ip] = result
+        if let result = result {
+            cache.set(ip, value: result)
+        }
         return result
     }
 
@@ -119,9 +121,9 @@ public actor GreyNoiseService {
 
         // Start with cached results
         for ip in publicIPs {
-            if let cached = cache[ip], let result = cached {
-                results[ip] = result
-            } else if cache[ip] == nil {
+            if let cached = cache.get(ip) {
+                results[ip] = cached
+            } else {
                 uncachedIPs.append(ip)
             }
         }

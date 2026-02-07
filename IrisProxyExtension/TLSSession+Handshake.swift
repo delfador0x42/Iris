@@ -23,6 +23,8 @@ extension TLSSession {
         startFlowReader()
 
         while true {
+            guard !isClosed else { throw TLSSessionError.connectionClosed }
+
             let status: OSStatus = await withCheckedContinuation { continuation in
                 sslQueue.async { [weak self] in
                     guard let self = self, let ctx = self.sslContext else {
@@ -40,6 +42,7 @@ extension TLSSession {
             } else if status == errSSLWouldBlock {
                 // Buffer was empty — wait for flow reader to deliver data
                 await waitForData()
+                if isClosed { throw TLSSessionError.connectionClosed }
             } else if status == errSSLPeerAuthCompleted {
                 // Client mode: server auth callback, continue handshake
                 continue

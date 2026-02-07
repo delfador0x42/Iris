@@ -50,7 +50,7 @@ public actor GeoIPService {
     // MARK: - Properties
 
     private let logger = Logger(subsystem: "com.wudan.iris", category: "GeoIPService")
-    private var cache: [String: GeoIPResult] = [:]
+    private var cache = BoundedCache<GeoIPResult>(maxSize: 5000, ttl: 3600)
     private let batchEndpoint = "http://ip-api.com/batch?fields=status,country,countryCode,city,lat,lon,isp,org,as,query"
     private let singleEndpoint = "http://ip-api.com/json/"
 
@@ -62,14 +62,14 @@ public actor GeoIPService {
         guard !isPrivateIP(ipAddress) else { return nil }
 
         // Check cache
-        if let cached = cache[ipAddress] {
+        if let cached = cache.get(ipAddress) {
             return cached
         }
 
         // Fetch from API with retry logic
         guard let result = await fetchWithRetry(ipAddress) else { return nil }
 
-        cache[ipAddress] = result
+        cache.set(ipAddress, value: result)
         return result
     }
 
@@ -92,12 +92,12 @@ public actor GeoIPService {
     public func batchLookup(_ ipAddresses: [String]) async -> [String: GeoIPResult] {
         // Filter out private IPs and already-cached
         let publicIPs = ipAddresses.filter { !isPrivateIP($0) }
-        let uncachedIPs = publicIPs.filter { cache[$0] == nil }
+        let uncachedIPs = publicIPs.filter { cache.get($0) == nil }
 
         // Start with cached results
         var results: [String: GeoIPResult] = [:]
         for ip in publicIPs {
-            if let cached = cache[ip] {
+            if let cached = cache.get(ip) {
                 results[ip] = cached
             }
         }
@@ -109,7 +109,7 @@ public actor GeoIPService {
         for chunk in uncachedIPs.chunked(into: 100) {
             let newResults = await fetchBatch(chunk)
             for (ip, result) in newResults {
-                cache[ip] = result
+                cache.set(ip, value: result)
                 results[ip] = result
             }
         }

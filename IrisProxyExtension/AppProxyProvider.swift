@@ -25,8 +25,14 @@ class AppProxyProvider: NEAppProxyProvider {
     private var activeFlows: [UUID: NEAppProxyTCPFlow] = [:]
     private let flowsLock = NSLock()
 
+    /// Active UDP flows (tracked for cleanup)
+    private var activeUDPFlows: [UUID: NEAppProxyUDPFlow] = [:]
+
     /// Whether the proxy is currently active
     private var isActive = false
+
+    /// Max duration for UDP relay (5 minutes)
+    private static let udpRelayTimeout: UInt64 = 300_000_000_000
 
     // MARK: - Lifecycle
 
@@ -49,6 +55,12 @@ class AppProxyProvider: NEAppProxyProvider {
             flow.closeWriteWithError(nil)
         }
         activeFlows.removeAll()
+        // Close UDP flows too
+        for (_, flow) in activeUDPFlows {
+            flow.closeReadWithError(nil)
+            flow.closeWriteWithError(nil)
+        }
+        activeUDPFlows.removeAll()
         flowsLock.unlock()
 
         xpcService.stop()
@@ -109,24 +121,54 @@ class AppProxyProvider: NEAppProxyProvider {
     }
 
     private func handleUDPFlow(_ flow: NEAppProxyUDPFlow) -> Bool {
-        logger.debug("UDP flow received, passing through")
+        let flowId = UUID()
+        logger.debug("UDP flow \(flowId) received, passing through")
+
+        flowsLock.lock()
+        activeUDPFlows[flowId] = flow
+        flowsLock.unlock()
+
         flow.open(withLocalEndpoint: nil) { [weak self] error in
             if let error = error {
                 self?.logger.error("Failed to open UDP flow: \(error.localizedDescription)")
+                self?.removeUDPFlow(flowId)
                 return
             }
-            self?.relayUDPFlow(flow)
+            self?.relayUDPFlow(flow, flowId: flowId)
         }
         return true
     }
 
-    private func relayUDPFlow(_ flow: NEAppProxyUDPFlow) {
+    private func relayUDPFlow(_ flow: NEAppProxyUDPFlow, flowId: UUID) {
+        // Schedule cleanup after timeout
+        Task {
+            try? await Task.sleep(nanoseconds: Self.udpRelayTimeout)
+            flow.closeReadWithError(nil)
+            flow.closeWriteWithError(nil)
+            removeUDPFlow(flowId)
+        }
+
         func readLoop() {
-            flow.readDatagrams { datagrams, endpoints, error in
-                if error != nil { return }
-                guard let datagrams = datagrams, let endpoints = endpoints else { return }
-                flow.writeDatagrams(datagrams, sentBy: endpoints) { writeError in
+            flow.readDatagrams { [weak self] datagrams, endpoints, error in
+                if error != nil {
+                    self?.removeUDPFlow(flowId)
+                    return
+                }
+                guard let datagrams = datagrams, let endpoints = endpoints else {
+                    self?.removeUDPFlow(flowId)
+                    return
+                }
+                let count = min(datagrams.count, endpoints.count)
+                guard count > 0 else {
+                    self?.removeUDPFlow(flowId)
+                    return
+                }
+                flow.writeDatagrams(
+                    Array(datagrams.prefix(count)),
+                    sentBy: Array(endpoints.prefix(count))
+                ) { writeError in
                     if writeError == nil { readLoop() }
+                    else { self?.removeUDPFlow(flowId) }
                 }
             }
         }
@@ -144,9 +186,15 @@ class AppProxyProvider: NEAppProxyProvider {
         flowsLock.unlock()
     }
 
+    private func removeUDPFlow(_ flowId: UUID) {
+        flowsLock.lock()
+        activeUDPFlows.removeValue(forKey: flowId)
+        flowsLock.unlock()
+    }
+
     func activeFlowCount() -> Int {
         flowsLock.lock()
-        let count = activeFlows.count
+        let count = activeFlows.count + activeUDPFlows.count
         flowsLock.unlock()
         return count
     }

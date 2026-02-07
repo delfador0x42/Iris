@@ -114,10 +114,13 @@ extension SecurityRule {
         guard isActive else { return false }
 
         // Check process match (by signing ID or path)
-        if signingId != nil {
-            // TODO: Match by signing ID when connection has signing info
-            // For now, fall back to path matching
-            if let processPath = processPath, processPath != connection.processPath {
+        if let ruleSigningId = signingId {
+            if let connSigningId = connection.signingId {
+                if ruleSigningId != connSigningId { return false }
+            } else if let processPath = processPath {
+                // Connection has no signing ID — fall back to path match
+                if processPath != connection.processPath { return false }
+            } else {
                 return false
             }
         } else if let processPath = processPath {

@@ -19,7 +19,13 @@ public final class CertificateGenerator: Sendable {
 
     // MARK: - CA Certificate Generation
 
+    /// Valid RSA key sizes for certificate generation
+    public static let validKeySizes = [2048, 3072, 4096]
+
     public func createCA(keySize: Int = defaultKeySize) throws -> (privateKey: SecKey, certificate: SecCertificate) {
+        guard Self.validKeySizes.contains(keySize) else {
+            throw CertificateError.keyGenerationFailed("Invalid key size \(keySize). Must be one of: \(Self.validKeySizes)")
+        }
         logger.info("Generating new CA certificate with \(keySize)-bit RSA key")
         let privateKey = try generateRSAKeyPair(keySize: keySize)
         let certificate = try createCACertificate(privateKey: privateKey)
