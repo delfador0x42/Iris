@@ -8,14 +8,17 @@ public enum SuspicionReason: String, Codable, CaseIterable, Sendable {
     case hiddenProcess = "Hidden process"
     case notAppleSigned = "Not Apple signed"
     case noManPage = "No man page"
+    case highCPU = "High CPU usage"
+    case deletedBinary = "Deleted binary"
+    case recentlySpawned = "Recently spawned"
 
     public var description: String { rawValue }
 
     public var severity: SuspicionSeverity {
         switch self {
-        case .unsigned, .suspiciousLocation: return .high
-        case .adHocSigned, .hiddenProcess: return .medium
-        case .notAppleSigned, .noManPage: return .low
+        case .unsigned, .suspiciousLocation, .deletedBinary: return .high
+        case .adHocSigned, .hiddenProcess, .highCPU: return .medium
+        case .notAppleSigned, .noManPage, .recentlySpawned: return .low
         }
     }
 }
@@ -53,6 +56,8 @@ public struct ProcessInfo: Identifiable, Sendable, Codable, Equatable {
     public let timestamp: Date
     /// Whether this process has a man page (nil if not checked yet)
     public var hasManPage: Bool?
+    /// CPU, memory, thread, and file descriptor metrics
+    public var resources: ProcessResourceInfo?
 
     public init(
         id: UUID = UUID(),
@@ -65,7 +70,8 @@ public struct ProcessInfo: Identifiable, Sendable, Codable, Equatable {
         groupId: UInt32,
         codeSigningInfo: CodeSigningInfo? = nil,
         timestamp: Date = Date(),
-        hasManPage: Bool? = nil
+        hasManPage: Bool? = nil,
+        resources: ProcessResourceInfo? = nil
     ) {
         self.id = id
         self.pid = pid
@@ -78,6 +84,7 @@ public struct ProcessInfo: Identifiable, Sendable, Codable, Equatable {
         self.codeSigningInfo = codeSigningInfo
         self.timestamp = timestamp
         self.hasManPage = hasManPage
+        self.resources = resources
     }
 
     /// Code signing information for a process
@@ -192,6 +199,21 @@ public struct ProcessInfo: Identifiable, Sendable, Codable, Equatable {
         // Only flag if we've checked and confirmed no man page exists
         if hasManPage == false {
             reasons.append(.noManPage)
+        }
+
+        // Check for high CPU (medium severity) - sustained >80%
+        if let res = resources, res.cpuUsagePercent > 80 {
+            reasons.append(.highCPU)
+        }
+
+        // Check for deleted binary (high severity) - binary no longer on disk
+        if !FileManager.default.fileExists(atPath: path) {
+            reasons.append(.deletedBinary)
+        }
+
+        // Check for recently spawned (low severity) - within last 10 seconds
+        if Date().timeIntervalSince(timestamp) < 10 {
+            reasons.append(.recentlySpawned)
         }
 
         return reasons

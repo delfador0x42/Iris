@@ -15,6 +15,7 @@ public final class ProcessStore: ObservableObject {
     @Published public var filterText: String = ""
     @Published public var showOnlySuspicious: Bool = false
     @Published public var sortOrder: SortOrder = .name
+    @Published public var viewMode: ViewMode = .list
 
     // MARK: - Types
 
@@ -22,7 +23,15 @@ public final class ProcessStore: ObservableObject {
         case name = "Name"
         case pid = "PID"
         case user = "User"
+        case cpu = "CPU"
+        case memory = "Memory"
         case suspicious = "Suspicious"
+    }
+
+    /// View mode: flat list or process tree
+    public enum ViewMode: String, CaseIterable {
+        case list = "List"
+        case tree = "Tree"
     }
 
     // MARK: - Properties
@@ -67,6 +76,10 @@ public final class ProcessStore: ObservableObject {
             result.sort { $0.pid < $1.pid }
         case .user:
             result.sort { $0.userId < $1.userId }
+        case .cpu:
+            result.sort { ($0.resources?.cpuUsagePercent ?? 0) > ($1.resources?.cpuUsagePercent ?? 0) }
+        case .memory:
+            result.sort { ($0.resources?.residentMemory ?? 0) > ($1.resources?.residentMemory ?? 0) }
         case .suspicious:
             result.sort { lhs, rhs in
                 if lhs.isSuspicious != rhs.isSuspicious {

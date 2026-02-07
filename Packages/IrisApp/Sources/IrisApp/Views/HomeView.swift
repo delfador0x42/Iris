@@ -5,6 +5,7 @@ enum MenuDestination: String, CaseIterable {
     case statistics = "Statistics"
     case processList = "Process List"
     case firewall = "Firewall Rules"
+    case securityAssessment = "Security Assessment"
     case settings = "Settings"
     case networkMonitor = "Network Monitor"
     case dnsMonitor = "DNS Monitor"
@@ -16,6 +17,7 @@ enum MenuDestination: String, CaseIterable {
         case .statistics: return "internaldrive.fill"
         case .processList: return "list.bullet.rectangle.fill"
         case .firewall: return "flame.fill"
+        case .securityAssessment: return "shield.checkered"
         case .settings: return "gearshape.fill"
         case .networkMonitor: return "network.badge.shield.half.filled"
         case .dnsMonitor: return "lock.shield.fill"
@@ -29,6 +31,7 @@ enum MenuDestination: String, CaseIterable {
         case .statistics: return "View disk usage"
         case .processList: return "View running processes"
         case .firewall: return "Manage network rules"
+        case .securityAssessment: return "System security posture"
         case .settings: return "Extension & permissions"
         case .networkMonitor: return "Monitor network & HTTP traffic"
         case .dnsMonitor: return "Encrypted DNS & query monitor"
@@ -46,7 +49,7 @@ public struct HomeView: View {
         .satelliteTracker,  // Top (0)
         .statistics,        // Top-right (1)
         .processList,       // Right (2)
-        .firewall,          // Bottom-right (3)
+        .securityAssessment, // Bottom-right (3)
         .settings,          // Bottom (4)
         .networkMonitor,    // Bottom-left (5)
         .dnsMonitor,        // Left (6)
@@ -107,6 +110,8 @@ public struct HomeView: View {
                     WiFiMonitorView()
                 case .dnsMonitor:
                     DNSMonitorView()
+                case .securityAssessment:
+                    PlaceholderView(title: destination.rawValue, description: destination.description)
                 case .settings:
                     SettingsView()
                 default:

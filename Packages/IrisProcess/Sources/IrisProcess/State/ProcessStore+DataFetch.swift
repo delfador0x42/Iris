@@ -26,6 +26,9 @@ extension ProcessStore {
             await fetchProcessesLocally()
         }
 
+        // Enrich with resource metrics (CPU, memory, threads, FDs)
+        await enrichWithResources()
+
         // Check man pages for processes (in background, don't block refresh)
         Task {
             await checkManPagesForProcesses()
@@ -150,18 +153,80 @@ extension ProcessStore {
         // Get code signing info
         let codeSigningInfo = getCodeSigningInfo(forPath: path)
 
+        let arguments = Self.getProcessArguments(pid: pid)
+
         return ProcessInfo(
             pid: pid,
             ppid: ppid,
             path: path,
             name: name,
-            arguments: [],
+            arguments: arguments,
             userId: uid,
             groupId: gid,
             codeSigningInfo: codeSigningInfo,
             timestamp: Date()
         )
     }
+
+    // MARK: - Resource Enrichment
+
+    /// Enrich all processes with CPU, memory, thread, and FD metrics
+    func enrichWithResources() async {
+        let collector = ProcessResourceCollector.shared
+        let activePids = Set(processes.map { $0.pid })
+        await collector.pruneStale(activePids: activePids)
+
+        for i in processes.indices {
+            let pid = processes[i].pid
+            if let info = await collector.collect(pid: pid) {
+                processes[i].resources = info
+            }
+        }
+    }
+
+    // MARK: - Process Arguments
+
+    /// Parse command-line arguments from KERN_PROCARGS2 sysctl data.
+    /// Format: [4-byte argc][exec path \0][padding \0s][arg0 \0][arg1 \0]...
+    static func getProcessArguments(pid: pid_t) -> [String] {
+        var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, pid]
+        var size: Int = 0
+
+        guard sysctl(&mib, 3, nil, &size, nil, 0) == 0, size > 0 else { return [] }
+
+        var buffer = [UInt8](repeating: 0, count: size)
+        guard sysctl(&mib, 3, &buffer, &size, nil, 0) == 0 else { return [] }
+        guard size > MemoryLayout<Int32>.size else { return [] }
+
+        // Read argc from first 4 bytes
+        let argc: Int32 = buffer.withUnsafeBufferPointer {
+            $0.baseAddress!.withMemoryRebound(to: Int32.self, capacity: 1) { $0.pointee }
+        }
+        guard argc > 0, argc < 256 else { return [] }
+
+        var offset = MemoryLayout<Int32>.size
+
+        // Skip executable path (null-terminated)
+        while offset < size && buffer[offset] != 0 { offset += 1 }
+        // Skip null padding after exec path
+        while offset < size && buffer[offset] == 0 { offset += 1 }
+
+        // Parse null-terminated argument strings
+        var args: [String] = []
+        while args.count < Int(argc) && offset < size {
+            let start = offset
+            while offset < size && buffer[offset] != 0 { offset += 1 }
+            if offset > start,
+               let arg = String(bytes: buffer[start..<offset], encoding: .utf8) {
+                args.append(arg)
+            }
+            offset += 1
+        }
+
+        return args
+    }
+
+    // MARK: - Code Signing
 
     func getCodeSigningInfo(forPath path: String) -> ProcessInfo.CodeSigningInfo? {
         var staticCode: SecStaticCode?

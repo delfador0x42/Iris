@@ -46,6 +46,16 @@ struct ProcessDetailView: View {
                         DetailRow(label: "Has Man Page", value: manPageStatusText)
                     }
 
+                    // Resource metrics
+                    if let res = process.resources {
+                        DetailSection(title: "Resources") {
+                            DetailRow(label: "CPU Usage", value: res.formattedCPU)
+                            DetailRow(label: "Memory (RSS)", value: res.formattedMemory)
+                            DetailRow(label: "Threads", value: "\(res.threadCount)")
+                            DetailRow(label: "Open Files", value: "\(res.openFileCount)")
+                        }
+                    }
+
                     // Code signing
                     if let csInfo = process.codeSigningInfo {
                         DetailSection(title: "Code Signing") {

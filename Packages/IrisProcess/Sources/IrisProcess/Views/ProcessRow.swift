@@ -29,6 +29,18 @@ struct ProcessRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
+            // CPU
+            Text(process.resources?.formattedCPU ?? "-")
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundColor(cpuColor)
+                .frame(width: 70, alignment: .trailing)
+
+            // Memory
+            Text(process.resources?.formattedMemory ?? "-")
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundColor(.green.opacity(0.8))
+                .frame(width: 80, alignment: .trailing)
+
             // User
             Text(ProcessStore.username(forUID: process.userId))
                 .font(.system(size: 12, design: .monospaced))
@@ -40,14 +52,6 @@ struct ProcessRow: View {
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundColor(signingColor)
                 .frame(width: 140, alignment: .leading)
-
-            // Path (truncated)
-            Text(process.path)
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundColor(.gray.opacity(0.7))
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .frame(width: 250, alignment: .leading)
         }
         .padding(.vertical, 6)
         .padding(.horizontal, 4)
@@ -76,6 +80,13 @@ struct ProcessRow: View {
 
     private var signingStatus: String {
         process.codeSigningInfo?.signerDescription ?? "Unknown"
+    }
+
+    private var cpuColor: Color {
+        guard let cpu = process.resources?.cpuUsagePercent else { return .gray }
+        if cpu > 80 { return .red }
+        if cpu > 40 { return .orange }
+        return .cyan
     }
 
     private var signingColor: Color {

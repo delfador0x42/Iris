@@ -34,6 +34,14 @@ public struct ProcessListView: View {
                     loadingView
                 } else if store.displayedProcesses.isEmpty {
                     emptyView
+                } else if store.viewMode == .tree {
+                    ProcessTreeView(
+                        processes: store.displayedProcesses,
+                        onSelect: { process in
+                            selectedProcess = process
+                            showingDetail = true
+                        }
+                    )
                 } else {
                     processListView
                 }
@@ -136,14 +144,17 @@ public struct ProcessListView: View {
             Text("COMMAND")
                 .frame(maxWidth: .infinity, alignment: .leading)
 
+            Text("CPU")
+                .frame(width: 70, alignment: .trailing)
+
+            Text("MEM")
+                .frame(width: 80, alignment: .trailing)
+
             Text("USER")
                 .frame(width: 100, alignment: .leading)
 
             Text("SIGNING")
                 .frame(width: 140, alignment: .leading)
-
-            Text("PATH")
-                .frame(width: 250, alignment: .leading)
         }
         .font(.system(size: 11, weight: .medium, design: .monospaced))
         .foregroundColor(Color(red: 0.0, green: 0.8, blue: 0.8))

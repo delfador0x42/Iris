@@ -45,6 +45,16 @@ struct ProcessListToolbar: View {
             }
             .buttonStyle(.plain)
 
+            // View mode toggle (List / Tree)
+            Picker("", selection: $store.viewMode) {
+                ForEach(ProcessStore.ViewMode.allCases, id: \.self) { mode in
+                    Label(mode.rawValue, systemImage: mode == .list ? "list.bullet" : "sidebar.left")
+                        .tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .frame(width: 120)
+
             Spacer()
 
             // Sort picker
