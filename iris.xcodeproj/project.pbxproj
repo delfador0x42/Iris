@@ -9,6 +9,10 @@
 /* Begin PBXBuildFile section */
 		3F0974A72F24FCC30004D070 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3F0974A62F24FCC20004D070 /* NetworkExtension.framework */; };
 		3F0974B12F24FCC30004D070 /* com.wudan.iris.network.extension.systemextension in Embed System Extensions */ = {isa = PBXBuildFile; fileRef = 3F0974A42F24FCC20004D070 /* com.wudan.iris.network.extension.systemextension */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		3FA000052F2600000004D070 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3F0974A62F24FCC20004D070 /* NetworkExtension.framework */; };
+		3FA000092F2600000004D070 /* com.wudan.iris.proxy.extension.systemextension in Embed System Extensions */ = {isa = PBXBuildFile; fileRef = 3FA000042F2600000004D070 /* com.wudan.iris.proxy.extension.systemextension */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		3FB000052F2600000004D070 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3F0974A62F24FCC20004D070 /* NetworkExtension.framework */; };
+		3FB000092F2600000004D070 /* com.wudan.iris.dns.extension.systemextension in Embed System Extensions */ = {isa = PBXBuildFile; fileRef = 3FB000042F2600000004D070 /* com.wudan.iris.dns.extension.systemextension */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		3FE0000C2F25A0000004D070 /* com.wudan.iris.endpoint.extension.systemextension in Embed System Extensions */ = {isa = PBXBuildFile; fileRef = 3FE000012F25A0000004D070 /* com.wudan.iris.endpoint.extension.systemextension */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
@@ -19,6 +23,20 @@
 			proxyType = 1;
 			remoteGlobalIDString = 3F0974A32F24FCC20004D070;
 			remoteInfo = IrisNetworkExtension;
+		};
+		3FA000072F2600000004D070 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 3F51086D2F24FBE0004CFE8D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 3FA000032F2600000004D070;
+			remoteInfo = IrisProxyExtension;
+		};
+		3FB000072F2600000004D070 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 3F51086D2F24FBE0004CFE8D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 3FB000032F2600000004D070;
+			remoteInfo = IrisDNSExtension;
 		};
 		3FE0000A2F25A0000004D070 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -38,6 +56,8 @@
 			files = (
 				3F0974B12F24FCC30004D070 /* com.wudan.iris.network.extension.systemextension in Embed System Extensions */,
 				3FE0000C2F25A0000004D070 /* com.wudan.iris.endpoint.extension.systemextension in Embed System Extensions */,
+				3FA000092F2600000004D070 /* com.wudan.iris.proxy.extension.systemextension in Embed System Extensions */,
+				3FB000092F2600000004D070 /* com.wudan.iris.dns.extension.systemextension in Embed System Extensions */,
 			);
 			name = "Embed System Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -48,6 +68,8 @@
 		3F0974A42F24FCC20004D070 /* com.wudan.iris.network.extension.systemextension */ = {isa = PBXFileReference; explicitFileType = "wrapper.system-extension"; includeInIndex = 0; path = com.wudan.iris.network.extension.systemextension; sourceTree = BUILT_PRODUCTS_DIR; };
 		3F0974A62F24FCC20004D070 /* NetworkExtension.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = NetworkExtension.framework; path = System/Library/Frameworks/NetworkExtension.framework; sourceTree = SDKROOT; };
 		3F5108752F24FBE0004CFE8D /* Iris.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Iris.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		3FA000042F2600000004D070 /* com.wudan.iris.proxy.extension.systemextension */ = {isa = PBXFileReference; explicitFileType = "wrapper.system-extension"; includeInIndex = 0; path = com.wudan.iris.proxy.extension.systemextension; sourceTree = BUILT_PRODUCTS_DIR; };
+		3FB000042F2600000004D070 /* com.wudan.iris.dns.extension.systemextension */ = {isa = PBXFileReference; explicitFileType = "wrapper.system-extension"; includeInIndex = 0; path = com.wudan.iris.dns.extension.systemextension; sourceTree = BUILT_PRODUCTS_DIR; };
 		3FE000012F25A0000004D070 /* com.wudan.iris.endpoint.extension.systemextension */ = {isa = PBXFileReference; explicitFileType = "wrapper.system-extension"; includeInIndex = 0; path = com.wudan.iris.endpoint.extension.systemextension; sourceTree = BUILT_PRODUCTS_DIR; };
 		3FFBF9372F25539F00E3D581 /* Iris.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Iris.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -98,6 +120,11 @@
 			path = Packages/IrisWiFi/Sources/IrisWiFi;
 			sourceTree = "<group>";
 		};
+		3F0001002F2800000000000B /* Packages/IrisDNS/Sources/IrisDNS */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Packages/IrisDNS/Sources/IrisDNS;
+			sourceTree = "<group>";
+		};
 		3F0974A82F24FCC30004D070 /* IrisNetworkExtension */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = IrisNetworkExtension;
@@ -106,6 +133,16 @@
 		3F5108772F24FBE0004CFE8D /* IrisApp */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = IrisApp;
+			sourceTree = "<group>";
+		};
+		3FA000062F2600000004D070 /* IrisProxyExtension */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = IrisProxyExtension;
+			sourceTree = "<group>";
+		};
+		3FB000062F2600000004D070 /* IrisDNSExtension */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = IrisDNSExtension;
 			sourceTree = "<group>";
 		};
 		3FE000022F25A0000004D070 /* IrisEndpointExtension */ = {
@@ -128,6 +165,22 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3FA000012F2600000004D070 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3FA000052F2600000004D070 /* NetworkExtension.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3FB000012F2600000004D070 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3FB000052F2600000004D070 /* NetworkExtension.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -163,8 +216,11 @@
 				3F0001002F28000000000008 /* Packages/IrisProxy/Sources/IrisProxy */,
 				3F0001002F28000000000009 /* Packages/IrisCertificates/Sources/IrisCertificates */,
 				3F0001002F2800000000000A /* Packages/IrisWiFi/Sources/IrisWiFi */,
+				3F0001002F2800000000000B /* Packages/IrisDNS/Sources/IrisDNS */,
 				3F0974A82F24FCC30004D070 /* IrisNetworkExtension */,
 				3FE000022F25A0000004D070 /* IrisEndpointExtension */,
+				3FA000062F2600000004D070 /* IrisProxyExtension */,
+				3FB000062F2600000004D070 /* IrisDNSExtension */,
 				3F0974A52F24FCC20004D070 /* Frameworks */,
 				3F5108762F24FBE0004CFE8D /* Products */,
 			);
@@ -176,6 +232,8 @@
 				3F5108752F24FBE0004CFE8D /* Iris.app */,
 				3F0974A42F24FCC20004D070 /* com.wudan.iris.network.extension.systemextension */,
 				3FE000012F25A0000004D070 /* com.wudan.iris.endpoint.extension.systemextension */,
+				3FA000042F2600000004D070 /* com.wudan.iris.proxy.extension.systemextension */,
+				3FB000042F2600000004D070 /* com.wudan.iris.dns.extension.systemextension */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -219,6 +277,8 @@
 			dependencies = (
 				3F0974B02F24FCC30004D070 /* PBXTargetDependency */,
 				3FE0000B2F25A0000004D070 /* PBXTargetDependency */,
+				3FA000082F2600000004D070 /* PBXTargetDependency */,
+				3FB000082F2600000004D070 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				3F0001002F28000000000002 /* Packages/IrisShared/Sources/IrisShared */,
@@ -230,6 +290,7 @@
 				3F0001002F28000000000008 /* Packages/IrisProxy/Sources/IrisProxy */,
 				3F0001002F28000000000009 /* Packages/IrisCertificates/Sources/IrisCertificates */,
 				3F0001002F2800000000000A /* Packages/IrisWiFi/Sources/IrisWiFi */,
+				3F0001002F2800000000000B /* Packages/IrisDNS/Sources/IrisDNS */,
 				3F5108772F24FBE0004CFE8D /* IrisApp */,
 			);
 			name = Iris;
@@ -238,6 +299,50 @@
 			productName = Iris;
 			productReference = 3F5108752F24FBE0004CFE8D /* Iris.app */;
 			productType = "com.apple.product-type.application";
+		};
+		3FA000032F2600000004D070 /* IrisProxyExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3FA0000C2F2600000004D070 /* Build configuration list for PBXNativeTarget "IrisProxyExtension" */;
+			buildPhases = (
+				3FA000002F2600000004D070 /* Sources */,
+				3FA000012F2600000004D070 /* Frameworks */,
+				3FA000022F2600000004D070 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				3FA000062F2600000004D070 /* IrisProxyExtension */,
+			);
+			name = IrisProxyExtension;
+			packageProductDependencies = (
+			);
+			productName = IrisProxyExtension;
+			productReference = 3FA000042F2600000004D070 /* com.wudan.iris.proxy.extension.systemextension */;
+			productType = "com.apple.product-type.system-extension";
+		};
+		3FB000032F2600000004D070 /* IrisDNSExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3FB0000C2F2600000004D070 /* Build configuration list for PBXNativeTarget "IrisDNSExtension" */;
+			buildPhases = (
+				3FB000002F2600000004D070 /* Sources */,
+				3FB000012F2600000004D070 /* Frameworks */,
+				3FB000022F2600000004D070 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				3FB000062F2600000004D070 /* IrisDNSExtension */,
+			);
+			name = IrisDNSExtension;
+			packageProductDependencies = (
+			);
+			productName = IrisDNSExtension;
+			productReference = 3FB000042F2600000004D070 /* com.wudan.iris.dns.extension.systemextension */;
+			productType = "com.apple.product-type.system-extension";
 		};
 		3FE000062F25A0000004D070 /* IrisEndpointExtension */ = {
 			isa = PBXNativeTarget;
@@ -277,6 +382,12 @@
 					3F5108742F24FBE0004CFE8D = {
 						CreatedOnToolsVersion = 26.1;
 					};
+					3FA000032F2600000004D070 = {
+						CreatedOnToolsVersion = 26.2;
+					};
+					3FB000032F2600000004D070 = {
+						CreatedOnToolsVersion = 26.2;
+					};
 					3FE000062F25A0000004D070 = {
 						CreatedOnToolsVersion = 26.1;
 					};
@@ -301,6 +412,8 @@
 				3F5108742F24FBE0004CFE8D /* Iris */,
 				3F0974A32F24FCC20004D070 /* IrisNetworkExtension */,
 				3FE000062F25A0000004D070 /* IrisEndpointExtension */,
+				3FA000032F2600000004D070 /* IrisProxyExtension */,
+				3FB000032F2600000004D070 /* IrisDNSExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -314,6 +427,20 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		3F5108732F24FBE0004CFE8D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3FA000022F2600000004D070 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3FB000022F2600000004D070 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -344,6 +471,20 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		3FA000002F2600000004D070 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3FB000002F2600000004D070 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		3FE000032F25A0000004D070 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -358,6 +499,16 @@
 			isa = PBXTargetDependency;
 			target = 3F0974A32F24FCC20004D070 /* IrisNetworkExtension */;
 			targetProxy = 3F0974AF2F24FCC30004D070 /* PBXContainerItemProxy */;
+		};
+		3FA000082F2600000004D070 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 3FA000032F2600000004D070 /* IrisProxyExtension */;
+			targetProxy = 3FA000072F2600000004D070 /* PBXContainerItemProxy */;
+		};
+		3FB000082F2600000004D070 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 3FB000032F2600000004D070 /* IrisDNSExtension */;
+			targetProxy = 3FB000072F2600000004D070 /* PBXContainerItemProxy */;
 		};
 		3FE0000B2F25A0000004D070 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -689,6 +840,206 @@
 			};
 			name = Release;
 		};
+		3FA0000A2F2600000004D070 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				AUTOMATION_APPLE_EVENTS = NO;
+				CODE_SIGN_ENTITLEMENTS = IrisProxyExtension/IrisProxyExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 99HGW2AR62;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = IrisProxyExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = IrisProxyExtension;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2025 Wudan. All rights reserved.";
+				INFOPLIST_KEY_NSSystemExtensionUsageDescription = "Iris needs this extension to intercept and analyze HTTP/HTTPS traffic.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.wudan.iris.proxy.extension;
+				PRODUCT_NAME = "$(inherited)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				REGISTER_APP_GROUPS = YES;
+				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
+				RUNTIME_EXCEPTION_ALLOW_JIT = NO;
+				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = NO;
+				RUNTIME_EXCEPTION_DEBUGGING_TOOL = NO;
+				RUNTIME_EXCEPTION_DISABLE_EXECUTABLE_PAGE_PROTECTION = NO;
+				RUNTIME_EXCEPTION_DISABLE_LIBRARY_VALIDATION = NO;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		3FA0000B2F2600000004D070 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				AUTOMATION_APPLE_EVENTS = NO;
+				CODE_SIGN_ENTITLEMENTS = IrisProxyExtension/IrisProxyExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 99HGW2AR62;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = IrisProxyExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = IrisProxyExtension;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2025 Wudan. All rights reserved.";
+				INFOPLIST_KEY_NSSystemExtensionUsageDescription = "Iris needs this extension to intercept and analyze HTTP/HTTPS traffic.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.wudan.iris.proxy.extension;
+				PRODUCT_NAME = "$(inherited)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				REGISTER_APP_GROUPS = YES;
+				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
+				RUNTIME_EXCEPTION_ALLOW_JIT = NO;
+				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = NO;
+				RUNTIME_EXCEPTION_DEBUGGING_TOOL = NO;
+				RUNTIME_EXCEPTION_DISABLE_EXECUTABLE_PAGE_PROTECTION = NO;
+				RUNTIME_EXCEPTION_DISABLE_LIBRARY_VALIDATION = NO;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		3FB0000A2F2600000004D070 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				AUTOMATION_APPLE_EVENTS = NO;
+				CODE_SIGN_ENTITLEMENTS = IrisDNSExtension/IrisDNSExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 99HGW2AR62;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = IrisDNSExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = IrisDNSExtension;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2025 Wudan. All rights reserved.";
+				INFOPLIST_KEY_NSSystemExtensionUsageDescription = "Iris needs this extension to encrypt and monitor DNS queries.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.wudan.iris.dns.extension;
+				PRODUCT_NAME = "$(inherited)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				REGISTER_APP_GROUPS = YES;
+				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
+				RUNTIME_EXCEPTION_ALLOW_JIT = NO;
+				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = NO;
+				RUNTIME_EXCEPTION_DEBUGGING_TOOL = NO;
+				RUNTIME_EXCEPTION_DISABLE_EXECUTABLE_PAGE_PROTECTION = NO;
+				RUNTIME_EXCEPTION_DISABLE_LIBRARY_VALIDATION = NO;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		3FB0000B2F2600000004D070 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				AUTOMATION_APPLE_EVENTS = NO;
+				CODE_SIGN_ENTITLEMENTS = IrisDNSExtension/IrisDNSExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 99HGW2AR62;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = IrisDNSExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = IrisDNSExtension;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2025 Wudan. All rights reserved.";
+				INFOPLIST_KEY_NSSystemExtensionUsageDescription = "Iris needs this extension to encrypt and monitor DNS queries.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.wudan.iris.dns.extension;
+				PRODUCT_NAME = "$(inherited)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				REGISTER_APP_GROUPS = YES;
+				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
+				RUNTIME_EXCEPTION_ALLOW_JIT = NO;
+				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = NO;
+				RUNTIME_EXCEPTION_DEBUGGING_TOOL = NO;
+				RUNTIME_EXCEPTION_DISABLE_EXECUTABLE_PAGE_PROTECTION = NO;
+				RUNTIME_EXCEPTION_DISABLE_LIBRARY_VALIDATION = NO;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 		3FE000072F25A0000004D070 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -815,6 +1166,24 @@
 			buildConfigurations = (
 				3F5108812F24FBE0004CFE8D /* Debug */,
 				3F5108822F24FBE0004CFE8D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		3FA0000C2F2600000004D070 /* Build configuration list for PBXNativeTarget "IrisProxyExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3FA0000A2F2600000004D070 /* Debug */,
+				3FA0000B2F2600000004D070 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		3FB0000C2F2600000004D070 /* Build configuration list for PBXNativeTarget "IrisDNSExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3FB0000A2F2600000004D070 /* Debug */,
+				3FB0000B2F2600000004D070 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

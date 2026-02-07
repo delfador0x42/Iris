@@ -7,7 +7,7 @@ enum MenuDestination: String, CaseIterable {
     case firewall = "Firewall Rules"
     case settings = "Settings"
     case networkMonitor = "Network Monitor"
-    case help = "Help"
+    case dnsMonitor = "DNS Monitor"
     case wifiMonitor = "WiFi Monitor"
 
     var icon: String {
@@ -18,7 +18,7 @@ enum MenuDestination: String, CaseIterable {
         case .firewall: return "flame.fill"
         case .settings: return "gearshape.fill"
         case .networkMonitor: return "network.badge.shield.half.filled"
-        case .help: return "questionmark.circle.fill"
+        case .dnsMonitor: return "lock.shield.fill"
         case .wifiMonitor: return "wifi"
         }
     }
@@ -31,7 +31,7 @@ enum MenuDestination: String, CaseIterable {
         case .firewall: return "Manage network rules"
         case .settings: return "Extension & permissions"
         case .networkMonitor: return "Monitor network & HTTP traffic"
-        case .help: return "Help & documentation"
+        case .dnsMonitor: return "Encrypted DNS & query monitor"
         case .wifiMonitor: return "WiFi signal & networks"
         }
     }
@@ -49,7 +49,7 @@ public struct HomeView: View {
         .firewall,          // Bottom-right (3)
         .settings,          // Bottom (4)
         .networkMonitor,    // Bottom-left (5)
-        .help,              // Left (6)
+        .dnsMonitor,        // Left (6)
         .wifiMonitor        // Top-left (7)
     ]
 
@@ -105,6 +105,8 @@ public struct HomeView: View {
                     NetworkMonitorView()
                 case .wifiMonitor:
                     WiFiMonitorView()
+                case .dnsMonitor:
+                    DNSMonitorView()
                 case .settings:
                     SettingsView()
                 default:

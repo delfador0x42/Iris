@@ -6,11 +6,13 @@ import Foundation
 public enum ExtensionType: CaseIterable {
     case network
     case endpoint
+    case dns
 
     public var bundleIdentifier: String {
         switch self {
         case .network: return "com.wudan.iris.network.extension"
         case .endpoint: return "com.wudan.iris.endpoint.extension"
+        case .dns: return "com.wudan.iris.dns.extension"
         }
     }
 
@@ -18,6 +20,7 @@ public enum ExtensionType: CaseIterable {
         switch self {
         case .network: return "Network Filter"
         case .endpoint: return "Process Monitor"
+        case .dns: return "DNS Proxy"
         }
     }
 
@@ -25,6 +28,7 @@ public enum ExtensionType: CaseIterable {
         switch self {
         case .network: return "Monitors and filters network connections"
         case .endpoint: return "Monitors process execution"
+        case .dns: return "Encrypts DNS queries via DoH"
         }
     }
 }
