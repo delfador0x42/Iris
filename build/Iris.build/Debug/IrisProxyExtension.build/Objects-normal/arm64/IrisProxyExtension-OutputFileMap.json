@@ -1,0 +1,69 @@
+{
+  "" : {
+    "diagnostics" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/IrisProxyExtension-primary.dia",
+    "emit-module-dependencies" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/IrisProxyExtension-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/IrisProxyExtension-primary-emit-module.dia",
+    "pch" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/IrisProxyExtension-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/IrisProxyExtension-primary.swiftdeps"
+  },
+  "/Users/tal/wudan/dojo/iris/IrisProxyExtension/AppProxyProvider.swift" : {
+    "const-values" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/AppProxyProvider.swiftconstvalues",
+    "dependencies" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/AppProxyProvider.d",
+    "diagnostics" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/AppProxyProvider.dia",
+    "index-unit-output-path" : "/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/AppProxyProvider.o",
+    "llvm-bc" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/AppProxyProvider.bc",
+    "object" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/AppProxyProvider.o",
+    "swift-dependencies" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/AppProxyProvider.swiftdeps",
+    "swiftmodule" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/AppProxyProvider~partial.swiftmodule"
+  },
+  "/Users/tal/wudan/dojo/iris/IrisProxyExtension/HTTPParser.swift" : {
+    "const-values" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/HTTPParser.swiftconstvalues",
+    "dependencies" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/HTTPParser.d",
+    "diagnostics" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/HTTPParser.dia",
+    "index-unit-output-path" : "/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/HTTPParser.o",
+    "llvm-bc" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/HTTPParser.bc",
+    "object" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/HTTPParser.o",
+    "swift-dependencies" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/HTTPParser.swiftdeps",
+    "swiftmodule" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/HTTPParser~partial.swiftmodule"
+  },
+  "/Users/tal/wudan/dojo/iris/IrisProxyExtension/ProxyXPCService.swift" : {
+    "const-values" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/ProxyXPCService.swiftconstvalues",
+    "dependencies" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/ProxyXPCService.d",
+    "diagnostics" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/ProxyXPCService.dia",
+    "index-unit-output-path" : "/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/ProxyXPCService.o",
+    "llvm-bc" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/ProxyXPCService.bc",
+    "object" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/ProxyXPCService.o",
+    "swift-dependencies" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/ProxyXPCService.swiftdeps",
+    "swiftmodule" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/ProxyXPCService~partial.swiftmodule"
+  },
+  "/Users/tal/wudan/dojo/iris/IrisProxyExtension/TLSInterceptor.swift" : {
+    "const-values" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/TLSInterceptor.swiftconstvalues",
+    "dependencies" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/TLSInterceptor.d",
+    "diagnostics" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/TLSInterceptor.dia",
+    "index-unit-output-path" : "/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/TLSInterceptor.o",
+    "llvm-bc" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/TLSInterceptor.bc",
+    "object" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/TLSInterceptor.o",
+    "swift-dependencies" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/TLSInterceptor.swiftdeps",
+    "swiftmodule" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/TLSInterceptor~partial.swiftmodule"
+  },
+  "/Users/tal/wudan/dojo/iris/IrisProxyExtension/TLSSession.swift" : {
+    "const-values" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/TLSSession.swiftconstvalues",
+    "dependencies" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/TLSSession.d",
+    "diagnostics" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/TLSSession.dia",
+    "index-unit-output-path" : "/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/TLSSession.o",
+    "llvm-bc" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/TLSSession.bc",
+    "object" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/TLSSession.o",
+    "swift-dependencies" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/TLSSession.swiftdeps",
+    "swiftmodule" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/TLSSession~partial.swiftmodule"
+  },
+  "/Users/tal/wudan/dojo/iris/IrisProxyExtension/main.swift" : {
+    "const-values" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/main.swiftconstvalues",
+    "dependencies" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/main.d",
+    "diagnostics" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/main.dia",
+    "index-unit-output-path" : "/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/main.o",
+    "llvm-bc" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/main.bc",
+    "object" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/main.o",
+    "swift-dependencies" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/main.swiftdeps",
+    "swiftmodule" : "/Users/tal/wudan/dojo/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/main~partial.swiftmodule"
+  }
+}
