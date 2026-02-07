@@ -344,7 +344,7 @@ public actor CredentialAccessDetector {
         var info = proc_bsdinfo()
         let size = proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, Int32(MemoryLayout<proc_bsdinfo>.size))
         guard size > 0 else { return 0 }
-        return info.pbi_ppid
+        return pid_t(info.pbi_ppid)
     }
 
     private func getProcessArguments(_ pid: pid_t) -> [String] {

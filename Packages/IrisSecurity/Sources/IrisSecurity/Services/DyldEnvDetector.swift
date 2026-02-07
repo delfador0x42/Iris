@@ -156,7 +156,7 @@ public actor DyldEnvDetector {
     /// Check if our own process has DYLD_ environment variables
     private func checkSelfEnvironment() -> [ProcessAnomaly] {
         var anomalies: [ProcessAnomaly] = []
-        let env = ProcessInfo.processInfo.environment
+        let env = Foundation.ProcessInfo.processInfo.environment
 
         for (key, value) in env {
             for dangerVar in Self.dangerousVars where key == dangerVar.name {

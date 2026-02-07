@@ -388,10 +388,14 @@ Full red team report, scanner inventory, and gap analysis are in `../iris-resear
 - **[SCANNER_INVENTORY.md](../iris-research/SCANNER_INVENTORY.md)** — All 20+ scanners cataloged with capabilities and gaps
 - **[DETECTION_GAPS.md](../iris-research/DETECTION_GAPS.md)** — P0-P3 gap analysis with effort/impact matrix
 
-### Critical Finding: Iris Has 20 Scanners, Only 8 Execute
+### Critical Finding: IrisSecurity Package Not In Xcode Project
 
-SecurityAssessor.assess() only calls SystemSecurityChecks.runAll(). These 16 scanners exist as complete, functional code but NEVER run:
-PersistenceScanner, DylibHijackScanner, EventTapScanner, StealthScanner, LOLBinDetector, TCCMonitor, NetworkAnomalyDetector, ProcessIntegrityChecker, FileSystemBaseline, SupplyChainAuditor, XPCServiceAuditor, PersistenceMonitor, RansomwareDetector, EntropyAnalyzer, AVMonitor, SigningVerifier
+SecurityAssessor.assess() only calls SystemSecurityChecks.runAll() (8 checks).
+BUT: 14 of 18 scanners ARE wired to Views (ThreatScanView runs 11, plus PersistenceView/EventTapView/DylibHijackView/FileIntegrityView/SupplyChainView).
+The REAL blocker: IrisSecurity package has ZERO entries in pbxproj. HomeView line 114 renders PlaceholderView instead of SecurityHubView. Package compiles in isolation but is invisible to the app binary.
+
+**Truly orphaned scanners (4, not 16):** RansomwareDetector, EntropyAnalyzer, AVMonitor, PersistenceMonitor
+**Wired to views but unreachable:** All 14 others (package not in Xcode project)
 
 ### Top 10 Attack/Parry Pairs
 
@@ -445,31 +449,67 @@ Direct TCC.db modification grants FDA/ScreenRecording/Accessibility
 **PARRY**: TCCMonitor SHA256 baselines TCC.db + flags high-risk grants → needs WIRING
 **STATUS**: Detector exists, orphaned
 
-### IrisSecurity Package — Scanner Summary (41 files, 5377 lines)
+### IrisSecurity Package — Scanner Summary (51 files, 8095 lines)
 
-| Scanner | MITRE | Status |
-|---------|-------|--------|
-| SystemSecurityChecks (8 checks) | T1562, T1486, T1553, T1021, T1078 | ACTIVE |
-| PersistenceScanner (13 types) | T1543, T1547, T1053, T1546, T1176, T1574 | Orphaned |
-| DylibHijackScanner + MachOParser | T1574.001, T1574.004 | Orphaned |
-| EventTapScanner | T1056.001 | Orphaned |
-| RansomwareDetector + EntropyAnalyzer | T1486 | Orphaned |
-| AVMonitor | T1123, T1125 | Orphaned |
-| StealthScanner (9 techniques) | T1564, T1546, T1556, T1548, T1098, T1053, T1574, T1553 | Orphaned |
-| LOLBinDetector (40+ LOLBins) | T1059, T1218, T1555, T1005 | Orphaned |
-| TCCMonitor | T1557, T1005 | Orphaned |
-| NetworkAnomalyDetector | T1571, T1573, T1071 | Orphaned |
-| ProcessIntegrityChecker | T1055, T1574.006 | Orphaned |
-| FileSystemBaseline (FIM) | T1565, T1036 | Orphaned |
-| SupplyChainAuditor | T1195 | Orphaned |
-| XPCServiceAuditor | T1559 | Orphaned |
-| PersistenceMonitor | T1543, T1547 | Orphaned |
+| Scanner | MITRE | Effectiveness | Critical Bugs |
+|---------|-------|--------------|---------------|
+| SystemSecurityChecks (8) | T1562, T1486, T1553, T1021, T1078 | ACTIVE, works | None |
+| DyldEnvDetector | T1574 | 85% — best scanner | Minor: shell eval/sourcing evasion |
+| DylibHijackScanner + MachOParser | T1574.001, T1574.004 | 50% | Fat binary: only parses first arch; no runtime verification |
+| AuthorizationDBMonitor | T1547.002 | 50% | Only monitors 10 of 1000+ rights; mtime check bypassable |
+| FileSystemBaseline (FIM) | T1565, T1036 | 40-50% | 50MB file limit; no code signing check; baseline persistence fragile |
+| LOLBinDetector (33 LOLBins) | T1059, T1218, T1555, T1005 | 35-40% | Only 33 entries (not 40+); parent-child only 1 level deep; renamed bins bypass |
+| EventTapScanner | T1056.001 | 30% | flagsMask vs eventsOfInterest bug; benign list only 5 entries (massive FPs) |
+| ProcessIntegrityChecker | T1055, T1574.006 | 25-30% | proc_regionfilename scans 10K of 50-200K regions; same-name hijack miss |
+| CredentialAccessDetector | T1552, T1555 | 20% | Browser cookie touch = FP; bash-wrapped commands invisible |
+| StealthScanner (9 techniques) | T1564, T1546, T1556, T1548 | 20% | Emond check dead (removed macOS 10.11+); SUID scan only 5 dirs |
+| NetworkAnomalyDetector | T1571, T1573, T1071 | 15% | **BROKEN**: netstat has no PIDs on macOS; beaconing dead code (never called); CV<0.3 = 80% FP |
+| TCCMonitor | T1557, T1005 | 5% | **BROKEN**: SIP blocks TCC.db reads on ALL modern macOS; sqlite3 schema outdated |
+| SupplyChainAuditor | T1195 | 40% | Typosquatting: no legit-package reference set; Xcode plugin check obsolete (Xcode 9+) |
+| XPCServiceAuditor | T1559 | 40% | Mach service: no known-good whitelist; socket perms unchecked |
+| KextAnomalyDetector | T1547.006 | 40% | Half the rootkit patterns are Linux-only (diamorphine, adore-ng, reptile) |
+| PersistenceScanner (13 types) | T1543, T1547, T1053, T1546 | 40% | Shell config: detects existence only, no content analysis; cron: user only |
+| PersistenceMonitor | T1543, T1547 | 10% | Claims "ES-ready" but ZERO ES integration; polling-only; truly orphaned |
+| RansomwareDetector + EntropyAnalyzer | T1486 | N/A | Truly orphaned (zero call sites) |
+| AVMonitor | T1123, T1125 | N/A | Truly orphaned (zero call sites) |
+| SigningVerifier (shared) | — | 50% | No entitlements check; no Team ID extraction; no revocation check |
 
-### Priority Fix Order
-1. **P0**: Wire SecurityAssessor to call all scanners (~200 lines)
-2. **P0**: DNSThreatAnalyzer — entropy/DGA/beaconing on DNS data (~100 lines)
-3. **P0**: ShellConfigAnalyzer — content analysis of shell configs (~80 lines)
-4. **P0**: NetworkThreatAnalyzer — exfil ratio/volume analysis (~100 lines)
-5. **P1**: PersistenceScanner+Auth — auth.db parsing (~60 lines)
-6. **P1**: PersistenceScanner+System — FinderSync/Spotlight/QuickLook (~40 lines)
-7. **P1**: PersistenceScanner+Launch — WatchPaths/QueueDirs/Sockets (~15 lines)
+### Scanner Bug Details (for fixing)
+
+**BROKEN — must rewrite or remove:**
+1. **TCCMonitor**: SIP prevents reading TCC.db on any modern Mac. sqlite3 CLI output parsing assumes pre-macOS-13 schema. Baseline has no persistence (lost on restart). **Fix: Use ES file events or private TCC APIs, not direct DB reads.**
+2. **NetworkAnomalyDetector**: macOS `netstat -anp tcp` has no PID column. `scanCurrentConnections()` returns empty or wrong data. `recordConnection()` (beaconing input) has zero call sites — dead code. CV threshold 0.3 flags NTP/CloudKit/Slack as beaconing. **Fix: Use NEFilterDataProvider connection data via XPC, not netstat.**
+3. **PersistenceMonitor**: `processFileEvent()` is never called by ES extension. Polling-only, not event-driven. Diff reports `pid: 0, processName: "unknown"` for all changes. **Fix: Wire to ESClient events or delete.**
+
+**SIGNIFICANT BUGS — fix in place:**
+4. **EventTapScanner line ~42**: Checks `tap.flagsMask` instead of `tap.eventsOfInterest` for flagsChanged events — misses keyboard-only taps. Known benign list has only 5 entries; needs Karabiner, Alfred, 1Password, BetterTouchTool, Keyboard Maestro, etc.
+5. **LOLBinDetector**: Only checks direct parent PID (`getParentPID(pid)` once). Attack chains like `Safari→bash→curl→python3` only see `bash→curl`. Need recursive ancestry. Also: 33 entries, not 40+.
+6. **ProcessIntegrityChecker**: `proc_regionfilename()` iterates 10K addresses × 0x1000 step = first 40MB of address space. Real processes have 50-200K regions spanning TB of virtual space. **Fix: Use `task_info(TASK_DYLD_INFO)` to get dyld_all_image_infos for loaded dylib list.**
+7. **KextAnomalyDetector**: Rootkit patterns include Linux-only names (diamorphine, adore-ng, reptile, jynx). Replace with macOS-specific: Fruitfly, ThiefQuest, ZuRu, CDRThief, Shlayer.
+8. **StealthScanner**: Emond check is dead code (daemon removed macOS 10.11). SUID scan limited to 5 dirs, misses /opt/, /usr/local/sbin, home dirs.
+9. **CredentialAccessDetector**: Browser cookie "theft" triggers on every Chrome launch (DB modified = flagged). Script interpreter detection flags `python3 -c "print('keychain')"`.
+10. **SupplyChainAuditor**: Pip typosquatting strips pattern prefixes but never verifies base package exists on PyPI. Xcode plugin detection is obsolete (plugins disabled since Xcode 9).
+11. **SigningVerifier**: Only checks signature validity, not entitlements, Team ID, or revocation. `SecStaticCodeCheckValidity` with empty flags skips hardened runtime check.
+12. **FileSystemBaseline**: Skips files >50MB silently. No symlink handling. Unlimited recursion (no depth guard). Baseline stored in user-writable location (attacker can overwrite).
+13. **PersistenceScanner+Shell**: Detects shell config FILES exist but never reads content. Can't distinguish clean `.zshrc` from one containing `curl|bash`.
+
+**CODE QUALITY ISSUES:**
+- 6-8 identical copies of `getRunningPIDs()`/`getProcessPath()`/`getParentPID()` across scanner files — extract to shared helper
+- 3 files exceed 300-line limit: ThreatScanView (421), CredentialAccessDetector (388), StealthScanner (368)
+- Zero test files for IrisSecurity (every other package has tests)
+
+### Priority Fix Order (REVISED after deep audit)
+1. **P0**: Add IrisSecurity to pbxproj + wire HomeView → SecurityHubView (unblocks everything)
+2. **P0**: Rewrite NetworkAnomalyDetector to use NEFilter connection data via XPC (not netstat)
+3. **P0**: Rewrite TCCMonitor to use ES file events or remove it
+4. **P0**: Fix EventTapScanner flagsMask bug + expand benign list
+5. **P0**: Fix LOLBinDetector: recursive ancestry + real LOLBin count
+6. **P1**: Fix ProcessIntegrityChecker: use task_info(TASK_DYLD_INFO) instead of proc_regionfilename
+7. **P1**: Fix KextAnomalyDetector: replace Linux rootkit names with macOS-specific
+8. **P1**: Extract shared ProcessEnumeration helper (deduplicate 6-8 copies)
+9. **P1**: Add shell config content analysis to PersistenceScanner
+10. **P1**: Fix SigningVerifier: add entitlements + Team ID extraction
+11. **P2**: Fix StealthScanner: remove emond, expand SUID scan dirs
+12. **P2**: Fix CredentialAccessDetector: filter browser cookie FPs
+13. **P2**: Fix SupplyChainAuditor: remove obsolete Xcode plugin check
+14. **P2**: Wire PersistenceMonitor to ES extension or delete it

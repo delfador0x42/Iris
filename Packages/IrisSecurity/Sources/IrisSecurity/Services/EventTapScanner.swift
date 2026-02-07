@@ -41,7 +41,7 @@ public actor EventTapScanner {
                              (tap.eventsOfInterest & keyDownMask) != 0 ||
                              (tap.eventsOfInterest & flagsMask) != 0
 
-            let isActive = tap.options == CGEventTapOptions.defaultTap.rawValue
+            let isActive = tap.options == .defaultTap
             let isSystemWide = tap.processBeingTapped == 0
             let processPath = Self.getProcessPath(tap.tappingProcess)
             let processName = URL(fileURLWithPath: processPath).lastPathComponent

@@ -111,7 +111,7 @@ public struct HomeView: View {
                 case .dnsMonitor:
                     DNSMonitorView()
                 case .securityAssessment:
-                    PlaceholderView(title: destination.rawValue, description: destination.description)
+                    SecurityHubView()
                 case .settings:
                     SettingsView()
                 default:

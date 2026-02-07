@@ -36,7 +36,8 @@ public actor TCCMonitor {
     public func takeBaseline() async {
         for path in tccPaths {
             guard FileManager.default.fileExists(atPath: path) else { continue }
-            if let hash = hashFile(path) {
+            let hash = hashFile(path)
+            if let hash {
                 baselineHashes[path] = hash
             }
             let entries = await readTCCEntries(path: path)

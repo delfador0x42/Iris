@@ -5,7 +5,7 @@ import os.log
 public actor PersistenceScanner {
     public static let shared = PersistenceScanner()
     private let logger = Logger(subsystem: "com.wudan.iris", category: "PersistenceScanner")
-    private let verifier = SigningVerifier.shared
+    let verifier = SigningVerifier.shared
 
     /// Scan all persistence locations and return combined results
     public func scanAll() async -> [PersistenceItem] {

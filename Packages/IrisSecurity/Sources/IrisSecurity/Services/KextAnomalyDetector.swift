@@ -212,14 +212,12 @@ public actor KextAnomalyDetector {
     private func checkKernelIntegrity() -> [ProcessAnomaly] {
         var anomalies: [ProcessAnomaly] = []
 
-        // Check boot-args for suspicious flags via nvram
-        // These would need root but we can check sysctl
-        var mib: [Int32] = [CTL_KERN, KERN_BOOTARGS]
+        // Check boot-args for suspicious flags via sysctl
         var size: Int = 0
-        if sysctl(&mib, 2, nil, &size, nil, 0) == 0, size > 0 {
+        if sysctlbyname("kern.bootargs", nil, &size, nil, 0) == 0, size > 0 {
             let buf = UnsafeMutablePointer<CChar>.allocate(capacity: size)
             defer { buf.deallocate() }
-            if sysctl(&mib, 2, buf, &size, nil, 0) == 0 {
+            if sysctlbyname("kern.bootargs", buf, &size, nil, 0) == 0 {
                 let bootArgs = String(cString: buf).lowercased()
 
                 // Suspicious boot arguments that weaken security

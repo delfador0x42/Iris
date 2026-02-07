@@ -182,7 +182,7 @@ struct PersistenceItemRow: View {
                     if let sigId = item.signingIdentifier {
                         detailRow("Signing ID", sigId)
                     }
-                    for reason in item.suspicionReasons {
+                    ForEach(item.suspicionReasons, id: \.self) { reason in
                         HStack(spacing: 6) {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .foregroundColor(.orange).font(.system(size: 10))
