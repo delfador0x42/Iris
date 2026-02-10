@@ -55,6 +55,7 @@ extension ProxyStore {
 
     func handleConnectionInvalidated() {
         logger.warning("XPC connection invalidated")
+        stopRefreshTimer()
         xpcConnection = nil
         isEnabled = false
         errorMessage = "Connection to proxy extension lost"

@@ -15,6 +15,9 @@ extension TLSSession {
 
     // MARK: - Handshake
 
+    /// Handshake timeout in seconds
+    static let handshakeTimeout: TimeInterval = 30
+
     func handshake() async throws {
         guard sslContext != nil else {
             throw TLSSessionError.sessionClosed
@@ -22,8 +25,14 @@ extension TLSSession {
 
         startFlowReader()
 
+        let deadline = CFAbsoluteTimeGetCurrent() + Self.handshakeTimeout
+
         while true {
             guard !isClosed else { throw TLSSessionError.connectionClosed }
+            if CFAbsoluteTimeGetCurrent() > deadline {
+                logger.error("TLS handshake timed out")
+                throw TLSSessionError.timeout
+            }
 
             let status: OSStatus = await withCheckedContinuation { continuation in
                 sslQueue.async { [weak self] in
@@ -40,11 +49,9 @@ extension TLSSession {
                 logger.debug("TLS handshake completed successfully")
                 return
             } else if status == errSSLWouldBlock {
-                // Buffer was empty — wait for flow reader to deliver data
                 await waitForData()
                 if isClosed { throw TLSSessionError.connectionClosed }
             } else if status == errSSLPeerAuthCompleted {
-                // Client mode: server auth callback, continue handshake
                 continue
             } else {
                 logger.error("TLS handshake failed: \(status)")

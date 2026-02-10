@@ -5,7 +5,6 @@ public struct DylibHijackView: View {
     @State private var hijacks: [DylibHijack] = []
     @State private var isLoading = true
     @State private var scanTarget = ScanTarget.running
-    @Environment(\.dismiss) private var dismiss
 
     enum ScanTarget: String, CaseIterable {
         case running = "Running Processes"
@@ -23,9 +22,6 @@ public struct DylibHijackView: View {
             }
         }
         .task { await scan() }
-        .toolbar {
-            ToolbarItem(placement: .navigation) { backButton }
-        }
     }
 
     private var header: some View {
@@ -79,15 +75,6 @@ public struct DylibHijackView: View {
                      Color(red: 0.05, green: 0.07, blue: 0.1)],
             startPoint: .top, endPoint: .bottom
         ).ignoresSafeArea()
-    }
-
-    private var backButton: some View {
-        Button(action: { dismiss() }) {
-            HStack(spacing: 4) {
-                Image(systemName: "chevron.left")
-                Text("Back")
-            }.foregroundColor(Color(red: 0.4, green: 0.7, blue: 1.0))
-        }
     }
 
     private func scan() async {

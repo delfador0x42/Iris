@@ -215,9 +215,12 @@ public actor KextAnomalyDetector {
         // Check boot-args for suspicious flags via sysctl
         var size: Int = 0
         if sysctlbyname("kern.bootargs", nil, &size, nil, 0) == 0, size > 0 {
-            let buf = UnsafeMutablePointer<CChar>.allocate(capacity: size)
+            // Allocate with margin to handle size changes between calls
+            let allocSize = size + 256
+            let buf = UnsafeMutablePointer<CChar>.allocate(capacity: allocSize)
             defer { buf.deallocate() }
-            if sysctlbyname("kern.bootargs", buf, &size, nil, 0) == 0 {
+            var actualSize = allocSize
+            if sysctlbyname("kern.bootargs", buf, &actualSize, nil, 0) == 0 {
                 let bootArgs = String(cString: buf).lowercased()
 
                 // Suspicious boot arguments that weaken security

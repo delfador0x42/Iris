@@ -225,7 +225,7 @@ extension ProcessStore {
 
         return args
     }
-
+    
     // MARK: - Code Signing
 
     func getCodeSigningInfo(forPath path: String) -> ProcessInfo.CodeSigningInfo? {

@@ -10,7 +10,6 @@ public struct ThreatScanView: View {
     @State private var scanPhase = ""
     @State private var scanProgress: Double = 0
     @State private var showCriticalOnly = false
-    @Environment(\.dismiss) private var dismiss
 
     public init() {}
 
@@ -29,9 +28,6 @@ public struct ThreatScanView: View {
             }
         }
         .task { await runFullScan() }
-        .toolbar {
-            ToolbarItem(placement: .navigation) { backButton }
-        }
     }
 
     private var allFindingsEmpty: Bool {
@@ -149,15 +145,6 @@ public struct ThreatScanView: View {
                      Color(red: 0.05, green: 0.07, blue: 0.1)],
             startPoint: .top, endPoint: .bottom
         ).ignoresSafeArea()
-    }
-
-    private var backButton: some View {
-        Button(action: { dismiss() }) {
-            HStack(spacing: 4) {
-                Image(systemName: "chevron.left")
-                Text("Back")
-            }.foregroundColor(Color(red: 0.4, green: 0.7, blue: 1.0))
-        }
     }
 
     private func runFullScan() async {

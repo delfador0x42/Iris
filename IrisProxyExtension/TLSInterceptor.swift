@@ -85,11 +85,11 @@ final class TLSInterceptor: @unchecked Sendable {
     // MARK: - Certificate Cache
 
     /// Gets or generates a certificate for a hostname.
+    /// Double-checked locking prevents duplicate generation for the same host.
     func getCertificate(for hostname: String) -> (identity: SecIdentity, certificate: SecCertificate)? {
         cacheLock.lock()
         if let cached = certificateCache[hostname] {
             cacheLock.unlock()
-            logger.debug("Using cached certificate for \(hostname)")
             return cached
         }
         cacheLock.unlock()
@@ -97,6 +97,11 @@ final class TLSInterceptor: @unchecked Sendable {
         guard let result = generateCertificate(for: hostname) else { return nil }
 
         cacheLock.lock()
+        // Re-check: another thread may have generated while we were unlocked
+        if let existing = certificateCache[hostname] {
+            cacheLock.unlock()
+            return existing
+        }
         if certificateCache.count >= maxCacheSize {
             let keysToRemove = Array(certificateCache.keys.prefix(maxCacheSize / 2))
             for key in keysToRemove { certificateCache.removeValue(forKey: key) }

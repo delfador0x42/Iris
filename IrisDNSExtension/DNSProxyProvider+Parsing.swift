@@ -109,8 +109,12 @@ extension DNSProxyProvider {
         while pos < data.count {
             let b = data[pos]
             if b == 0 { return pos + 1 }
-            if b & 0xC0 == 0xC0 { return pos + 2 }
-            pos += Int(b) + 1
+            if b & 0xC0 == 0xC0 {
+                return min(pos + 2, data.count)
+            }
+            let next = pos + Int(b) + 1
+            guard next <= data.count else { return data.count }
+            pos = next
         }
         return pos
     }
@@ -156,12 +160,14 @@ extension DNSProxyProvider {
 
     func buildServfailResponse(for query: Data) -> Data? {
         guard query.count >= 12 else { return nil }
-        var response = query
-        response[2] = (query[2] | 0x80)
-        response[3] = (query[3] & 0xF0) | 0x02
-        response[6] = 0; response[7] = 0
-        response[8] = 0; response[9] = 0
-        response[10] = 0; response[11] = 0
+        // Build minimal SERVFAIL: copy only transaction ID from query,
+        // construct a clean header rather than echoing all query bytes
+        var response = Data(count: 12)
+        response[0] = query[0] // Transaction ID (2 bytes)
+        response[1] = query[1]
+        response[2] = 0x80     // QR=1 (response), OPCODE=0
+        response[3] = 0x02     // RCODE=SERVFAIL
+        // QDCOUNT=0, ANCOUNT=0, NSCOUNT=0, ARCOUNT=0 (all zero from Data(count:))
         return response
     }
 

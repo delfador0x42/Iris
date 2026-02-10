@@ -4,7 +4,6 @@ import SwiftUI
 public struct EventTapView: View {
     @State private var taps: [EventTapInfo] = []
     @State private var isLoading = true
-    @Environment(\.dismiss) private var dismiss
 
     public init() {}
 
@@ -23,9 +22,6 @@ public struct EventTapView: View {
             }
         }
         .task { await loadTaps() }
-        .toolbar {
-            ToolbarItem(placement: .navigation) { backButton }
-        }
     }
 
     private var header: some View {
@@ -79,15 +75,6 @@ public struct EventTapView: View {
                      Color(red: 0.05, green: 0.07, blue: 0.1)],
             startPoint: .top, endPoint: .bottom
         ).ignoresSafeArea()
-    }
-
-    private var backButton: some View {
-        Button(action: { dismiss() }) {
-            HStack(spacing: 4) {
-                Image(systemName: "chevron.left")
-                Text("Back")
-            }.foregroundColor(Color(red: 0.4, green: 0.7, blue: 1.0))
-        }
     }
 
     private func loadTaps() async {

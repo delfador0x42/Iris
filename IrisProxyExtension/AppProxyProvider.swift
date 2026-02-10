@@ -140,15 +140,26 @@ class AppProxyProvider: NEAppProxyProvider {
     }
 
     private func relayUDPFlow(_ flow: NEAppProxyUDPFlow, flowId: UUID) {
+        let closedLock = NSLock()
+        var closed = false
+
         // Schedule cleanup after timeout
         Task {
             try? await Task.sleep(nanoseconds: Self.udpRelayTimeout)
+            closedLock.lock()
+            closed = true
+            closedLock.unlock()
             flow.closeReadWithError(nil)
             flow.closeWriteWithError(nil)
             removeUDPFlow(flowId)
         }
 
         func readLoop() {
+            closedLock.lock()
+            let done = closed
+            closedLock.unlock()
+            if done { return }
+
             flow.readDatagrams { [weak self] datagrams, endpoints, error in
                 if error != nil {
                     self?.removeUDPFlow(flowId)

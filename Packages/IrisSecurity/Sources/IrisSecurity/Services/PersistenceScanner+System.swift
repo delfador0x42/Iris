@@ -15,12 +15,13 @@ extension PersistenceScanner {
             guard let first = trimmed.first,
                   first.isNumber || first == "*" || first == "@" else { continue }
 
+            let suspicious = isCronLineSuspicious(String(trimmed))
             items.append(PersistenceItem(
                 type: .cronJob,
                 name: String(trimmed.prefix(60)),
                 path: "/var/cron/",
-                isSuspicious: true,
-                suspicionReasons: ["Active cron job"]
+                isSuspicious: suspicious,
+                suspicionReasons: suspicious ? ["Suspicious cron job content"] : []
             ))
         }
 
@@ -39,12 +40,13 @@ extension PersistenceScanner {
                     guard let first = trimmed.first,
                           first.isNumber || first == "*" || first == "@" else { continue }
 
+                    let suspicious = isCronLineSuspicious(String(trimmed))
                     items.append(PersistenceItem(
                         type: .cronJob,
                         name: "\(user): \(trimmed.prefix(50))",
                         path: cronFile,
-                        isSuspicious: true,
-                        suspicionReasons: ["Active cron job for \(user)"]
+                        isSuspicious: suspicious,
+                        suspicionReasons: suspicious ? ["Suspicious cron job for \(user)"] : []
                     ))
                 }
             }
@@ -153,6 +155,19 @@ extension PersistenceScanner {
             }
         }
         return items
+    }
+
+    /// Only flag cron jobs with suspicious content patterns
+    private func isCronLineSuspicious(_ line: String) -> Bool {
+        let lower = line.lowercased()
+        let suspiciousPatterns = [
+            "curl", "wget", "nc ", "ncat", "netcat",
+            "bash -c", "sh -c", "python -c", "python3 -c",
+            "base64", "openssl enc", "eval ",
+            "/tmp/", "/var/tmp/", "| sh", "| bash",
+            "chmod +x", "chmod 777"
+        ]
+        return suspiciousPatterns.contains { lower.contains($0) }
     }
 
     func runCommand(_ path: String, args: [String]) async -> String {

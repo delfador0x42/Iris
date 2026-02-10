@@ -17,6 +17,9 @@ final class RelayState: @unchecked Sendable {
     private var _hasRequest = false
     private var _hasResponse = false
 
+    /// Max buffer size per direction (16 MB) to prevent unbounded growth
+    static let maxBufferSize = 16 * 1024 * 1024
+
     var hasRequest: Bool {
         lock.lock()
         defer { lock.unlock() }
@@ -31,13 +34,17 @@ final class RelayState: @unchecked Sendable {
 
     func appendToRequestBuffer(_ data: Data) {
         lock.lock()
-        _requestBuffer.append(data)
+        if _requestBuffer.count < Self.maxBufferSize {
+            _requestBuffer.append(data)
+        }
         lock.unlock()
     }
 
     func appendToResponseBuffer(_ data: Data) {
         lock.lock()
-        _responseBuffer.append(data)
+        if _responseBuffer.count < Self.maxBufferSize {
+            _responseBuffer.append(data)
+        }
         lock.unlock()
     }
 

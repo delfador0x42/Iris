@@ -169,18 +169,34 @@ struct HTTPRawDetailView: View {
         .frame(maxWidth: .infinity, minHeight: 200)
     }
 
+    private static let sensitiveHeaders: Set<String> = [
+        "authorization", "cookie", "set-cookie", "x-api-key",
+        "x-auth-token", "proxy-authorization", "www-authenticate"
+    ]
+
+    private func redactSensitiveHeaders(_ text: String) -> String {
+        text.components(separatedBy: "\r\n").map { line in
+            guard let colonIndex = line.firstIndex(of: ":") else { return line }
+            let name = line[..<colonIndex].trimmingCharacters(in: .whitespaces).lowercased()
+            if Self.sensitiveHeaders.contains(name) {
+                return "\(line[..<colonIndex]): [REDACTED]"
+            }
+            return line
+        }.joined(separator: "\r\n")
+    }
+
     private func copyToClipboard() {
         var content = ""
 
         if let rawRequest = connection.httpRawRequest {
             content += "=== REQUEST ===\n\n"
-            content += rawRequest
+            content += redactSensitiveHeaders(rawRequest)
             content += "\n\n"
         }
 
         if let rawResponse = connection.httpRawResponse {
             content += "=== RESPONSE ===\n\n"
-            content += rawResponse
+            content += redactSensitiveHeaders(rawResponse)
         }
 
         NSPasteboard.general.clearContents()

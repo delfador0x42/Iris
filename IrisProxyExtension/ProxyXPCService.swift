@@ -27,8 +27,22 @@ class ProxyXPCService: NSObject {
     let flowsLock = NSLock()
     let maxFlows = 10000
 
-    /// Whether interception is enabled
-    var interceptionEnabled = true
+    /// Whether interception is enabled (guarded by interceptionLock)
+    private var _interceptionEnabled = true
+    let interceptionLock = NSLock()
+
+    var interceptionEnabled: Bool {
+        get {
+            interceptionLock.lock()
+            defer { interceptionLock.unlock() }
+            return _interceptionEnabled
+        }
+        set {
+            interceptionLock.lock()
+            _interceptionEnabled = newValue
+            interceptionLock.unlock()
+        }
+    }
 
     // MARK: - Service Name
 

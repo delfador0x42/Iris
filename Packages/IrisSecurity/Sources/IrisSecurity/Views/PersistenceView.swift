@@ -7,7 +7,6 @@ public struct PersistenceView: View {
     @State private var searchText = ""
     @State private var showSuspiciousOnly = false
     @State private var selectedType: PersistenceType?
-    @Environment(\.dismiss) private var dismiss
 
     public init() {}
 
@@ -25,9 +24,6 @@ public struct PersistenceView: View {
             }
         }
         .task { await loadItems() }
-        .toolbar {
-            ToolbarItem(placement: .navigation) { backButton }
-        }
     }
 
     private var filteredItems: [PersistenceItem] {
@@ -116,15 +112,6 @@ public struct PersistenceView: View {
                      Color(red: 0.05, green: 0.07, blue: 0.1)],
             startPoint: .top, endPoint: .bottom
         ).ignoresSafeArea()
-    }
-
-    private var backButton: some View {
-        Button(action: { dismiss() }) {
-            HStack(spacing: 4) {
-                Image(systemName: "chevron.left")
-                Text("Back")
-            }.foregroundColor(Color(red: 0.4, green: 0.7, blue: 1.0))
-        }
     }
 
     private func loadItems() async {

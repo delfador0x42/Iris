@@ -16,7 +16,10 @@ extension ProxyXPCService: ProxyXPCProtocol {
         logger.debug("XPC: getStatus")
 
         var status = provider?.getStatus() ?? [:]
-        status["flowCount"] = capturedFlows.count
+        flowsLock.lock()
+        let flowCount = capturedFlows.count
+        flowsLock.unlock()
+        status["flowCount"] = flowCount
         status["interceptionEnabled"] = interceptionEnabled
 
         reply(status)

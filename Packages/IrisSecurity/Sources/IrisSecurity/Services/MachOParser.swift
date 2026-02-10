@@ -138,8 +138,9 @@ public struct MachOParser {
             return nil
         }
 
-        guard nameOffset < cmdSize, nameOffset < data.count else { return nil }
+        guard nameOffset >= 0, nameOffset < cmdSize, nameOffset < data.count else { return nil }
         let maxLen = min(cmdSize - nameOffset, data.count - nameOffset)
+        guard maxLen > 0, nameOffset <= data.count - maxLen else { return nil }
         let nameData = data.subdata(in: nameOffset..<(nameOffset + maxLen))
 
         guard let str = String(bytes: nameData, encoding: .utf8) else { return nil }

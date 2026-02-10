@@ -100,13 +100,14 @@ final class TLSSession {
     // MARK: - Close
 
     func close() {
-        guard let ctx = sslContext else { return }
-
-        SSLClose(ctx)
-        sslContext = nil
+        // Run SSLClose on sslQueue to prevent racing with SSLRead/SSLWrite
+        sslQueue.sync { [weak self] in
+            guard let self = self, let ctx = self.sslContext else { return }
+            SSLClose(ctx)
+            self.sslContext = nil
+        }
         isClosed = true
 
-        // Release the retain from init (breaks retain cycle)
         retainedRef?.release()
         retainedRef = nil
 

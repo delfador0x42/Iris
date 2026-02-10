@@ -7,7 +7,6 @@ public struct SupplyChainView: View {
     @State private var findings: [SupplyChainFinding] = []
     @State private var isScanning = false
     @State private var selectedSource: PackageManagerSource?
-    @Environment(\.dismiss) private var dismiss
 
     public init() {}
 
@@ -27,9 +26,6 @@ public struct SupplyChainView: View {
             }
         }
         .task { await runAudit() }
-        .toolbar {
-            ToolbarItem(placement: .navigation) { backButton }
-        }
     }
 
     private var filteredFindings: [SupplyChainFinding] {
@@ -114,15 +110,6 @@ public struct SupplyChainView: View {
                      Color(red: 0.05, green: 0.07, blue: 0.1)],
             startPoint: .top, endPoint: .bottom
         ).ignoresSafeArea()
-    }
-
-    private var backButton: some View {
-        Button(action: { dismiss() }) {
-            HStack(spacing: 4) {
-                Image(systemName: "chevron.left")
-                Text("Back")
-            }.foregroundColor(Color(red: 0.4, green: 0.7, blue: 1.0))
-        }
     }
 
     private func runAudit() async {

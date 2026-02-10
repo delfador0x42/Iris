@@ -91,6 +91,8 @@ extension TLSSession {
 
                 var totalWritten = 0
                 let bytes = [UInt8](data)
+                var wouldBlockRetries = 0
+                let maxRetries = 100
 
                 while totalWritten < bytes.count {
                     var bytesWritten = 0
@@ -106,6 +108,18 @@ extension TLSSession {
                     }
 
                     totalWritten += bytesWritten
+
+                    if status == errSSLWouldBlock && bytesWritten == 0 {
+                        wouldBlockRetries += 1
+                        if wouldBlockRetries > maxRetries {
+                            self.logger.error("TLS write: too many retries")
+                            continuation.resume(throwing: TLSSessionError.writeFailed(status))
+                            return
+                        }
+                        usleep(1000) // 1ms backoff
+                        continue
+                    }
+                    wouldBlockRetries = 0
 
                     if status != errSecSuccess && status != errSSLWouldBlock {
                         self.logger.error("TLS write error: \(status)")

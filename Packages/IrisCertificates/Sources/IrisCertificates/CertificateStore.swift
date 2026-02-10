@@ -250,7 +250,7 @@ public final class CertificateStore: ObservableObject {
 public enum CertificateStoreError: Error, LocalizedError {
     case caNotInstalled
     case caGenerationFailed(String)
-    case storageFailer(String)
+    case storageFailed(String)
 
     public var errorDescription: String? {
         switch self {
@@ -258,7 +258,7 @@ public enum CertificateStoreError: Error, LocalizedError {
             return "CA certificate is not installed. Please install it first."
         case .caGenerationFailed(let msg):
             return "Failed to generate CA: \(msg)"
-        case .storageFailer(let msg):
+        case .storageFailed(let msg):
             return "Failed to store certificate: \(msg)"
         }
     }

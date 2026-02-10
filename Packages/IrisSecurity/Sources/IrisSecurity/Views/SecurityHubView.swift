@@ -11,13 +11,14 @@ public struct SecurityHubView: View {
     public var body: some View {
         ZStack {
             gridBackground
-            VStack(spacing: 0) {
-                hubHeader
-                moduleGrid
+            if let module = selectedModule {
+                moduleView(for: module)
+            } else {
+                VStack(spacing: 0) {
+                    hubHeader
+                    moduleGrid
+                }
             }
-        }
-        .sheet(item: $selectedModule) { module in
-            moduleView(for: module)
         }
         .toolbar {
             ToolbarItem(placement: .navigation) { backButton }
@@ -118,7 +119,13 @@ public struct SecurityHubView: View {
     }
 
     private var backButton: some View {
-        Button(action: { dismiss() }) {
+        Button(action: {
+            if selectedModule != nil {
+                withAnimation(.easeInOut(duration: 0.2)) { selectedModule = nil }
+            } else {
+                dismiss()
+            }
+        }) {
             HStack(spacing: 4) {
                 Image(systemName: "chevron.left")
                 Text("Back")

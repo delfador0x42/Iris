@@ -105,13 +105,26 @@ public actor DiskScanner {
             .isDirectoryKey,
             .totalFileSizeKey,
             .fileSizeKey,
-            .isHiddenKey
+            .isHiddenKey,
+            .isSymbolicLinkKey
         ]
 
         // Get attributes for current item
         let attributes = try? url.resourceValues(forKeys: resourceKeys)
         let isDirectory = attributes?.isDirectory ?? false
+        let isSymlink = attributes?.isSymbolicLink ?? false
         let fileSize = UInt64(attributes?.totalFileSize ?? attributes?.fileSize ?? 0)
+
+        // Skip symlinks to prevent traversal attacks and infinite loops
+        if isSymlink {
+            return DiskNode(
+                name: url.lastPathComponent,
+                path: url,
+                size: 0,
+                isDirectory: isDirectory,
+                depth: depth
+            )
+        }
 
         // Check for ignored paths
         if configuration.ignoredPaths.contains(url.path) {

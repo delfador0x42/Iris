@@ -12,7 +12,15 @@ extension TLSInterceptor {
 
     func generateSerialNumber() -> Data {
         var bytes = [UInt8](repeating: 0, count: 16)
-        _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        let status = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        if status != errSecSuccess {
+            for i in stride(from: 0, to: bytes.count, by: 4) {
+                var r = arc4random()
+                withUnsafeBytes(of: &r) { src in
+                    for j in 0..<min(4, bytes.count - i) { bytes[i + j] = src[j] }
+                }
+            }
+        }
         bytes[0] &= 0x7F
         return Data(bytes)
     }
@@ -187,14 +195,28 @@ extension TLSInterceptor {
     func buildLeafExtensions(hostname: String) -> Data {
         var extensions = Data()
 
-        // Basic Constraints (CA: false)
+        // Basic Constraints (CA: false, pathLenConstraint: absent = can't issue certs)
         let bcOID = buildOID([2, 5, 29, 19])
-        let bcValueSequence = buildSequence(Data())
+        let bcCritical: [UInt8] = [0x01, 0x01, 0xFF] // BOOLEAN TRUE (critical)
+        let bcValueSequence = buildSequence(Data()) // empty = CA:false
         let bcOctetString = buildOctetString(Data(bcValueSequence))
         var bcExtension = Data()
         bcExtension.append(contentsOf: bcOID)
+        bcExtension.append(contentsOf: bcCritical)
         bcExtension.append(contentsOf: bcOctetString)
         extensions.append(contentsOf: buildSequence(bcExtension))
+
+        // Key Usage (digitalSignature + keyEncipherment) — critical per RFC 5280
+        let kuOID = buildOID([2, 5, 29, 15])
+        let kuCritical: [UInt8] = [0x01, 0x01, 0xFF]
+        let kuBits: [UInt8] = [0x05, 0xA0] // digitalSignature (bit 0) + keyEncipherment (bit 2)
+        let kuBitString: [UInt8] = [0x03, 0x03, kuBits[0], kuBits[1], 0x00]
+        let kuOctetString = buildOctetString(Data(kuBitString))
+        var kuExtension = Data()
+        kuExtension.append(contentsOf: kuOID)
+        kuExtension.append(contentsOf: kuCritical)
+        kuExtension.append(contentsOf: kuOctetString)
+        extensions.append(contentsOf: buildSequence(kuExtension))
 
         // Extended Key Usage (serverAuth)
         let ekuOID = buildOID([2, 5, 29, 37])
@@ -206,10 +228,17 @@ extension TLSInterceptor {
         ekuExtension.append(contentsOf: ekuOctetString)
         extensions.append(contentsOf: buildSequence(ekuExtension))
 
-        // Subject Alternative Name
+        // Subject Alternative Name (DNS or IP)
         let sanOID = buildOID([2, 5, 29, 17])
-        let dnsName = buildImplicitTag(2, content: [UInt8](hostname.utf8))
-        let sanValueSequence = buildSequence(dnsName)
+        var sanValue = Data()
+        if let ipBytes = parseIPAddress(hostname) {
+            // IP address SAN: tag 7 (iPAddress)
+            sanValue.append(contentsOf: buildImplicitTag(7, content: ipBytes))
+        } else {
+            // DNS name SAN: tag 2 (dNSName)
+            sanValue.append(contentsOf: buildImplicitTag(2, content: [UInt8](hostname.utf8)))
+        }
+        let sanValueSequence = buildSequence(sanValue)
         let sanOctetString = buildOctetString(Data(sanValueSequence))
         var sanExtension = Data()
         sanExtension.append(contentsOf: sanOID)
@@ -219,6 +248,20 @@ extension TLSInterceptor {
         return extensions
     }
 
+    /// Parses an IP address string into bytes for SAN encoding.
+    /// Returns 4 bytes for IPv4, 16 bytes for IPv6, nil if not an IP.
+    private func parseIPAddress(_ host: String) -> [UInt8]? {
+        var addr4 = in_addr()
+        if inet_pton(AF_INET, host, &addr4) == 1 {
+            return withUnsafeBytes(of: &addr4) { Array($0) }
+        }
+        var addr6 = in6_addr()
+        if inet_pton(AF_INET6, host, &addr6) == 1 {
+            return withUnsafeBytes(of: &addr6) { Array($0) }
+        }
+        return nil
+    }
+
     func extractSubjectName(from certificate: SecCertificate) -> [UInt8]? {
         guard let certData = SecCertificateCopyData(certificate) as Data? else { return nil }
         let bytes = [UInt8](certData)
@@ -226,31 +269,36 @@ extension TLSInterceptor {
 
         var offset = 1
         _ = parseLength(bytes, offset: &offset)
-        guard bytes[offset] == 0x30 else { return nil }
+        guard offset < bytes.count, bytes[offset] == 0x30 else { return nil }
         offset += 1
         _ = parseLength(bytes, offset: &offset)
 
+        guard offset < bytes.count else { return nil }
         if bytes[offset] == 0xA0 {
             offset += 1
             let vLen = parseLength(bytes, offset: &offset)
+            guard offset + vLen <= bytes.count else { return nil }
             offset += vLen
         }
 
-        guard bytes[offset] == 0x02 else { return nil }
+        guard offset < bytes.count, bytes[offset] == 0x02 else { return nil }
         offset += 1
         let serialLen = parseLength(bytes, offset: &offset)
+        guard offset + serialLen <= bytes.count else { return nil }
         offset += serialLen
 
-        guard bytes[offset] == 0x30 else { return nil }
+        guard offset < bytes.count, bytes[offset] == 0x30 else { return nil }
         offset += 1
         let sigAlgLen = parseLength(bytes, offset: &offset)
+        guard offset + sigAlgLen <= bytes.count else { return nil }
         offset += sigAlgLen
 
-        guard bytes[offset] == 0x30 else { return nil }
+        guard offset < bytes.count, bytes[offset] == 0x30 else { return nil }
         let issuerStart = offset
         offset += 1
         let issuerLen = parseLength(bytes, offset: &offset)
         let issuerTotalLen = 1 + lengthOfLength(issuerLen) + issuerLen
+        guard issuerStart + issuerTotalLen <= bytes.count else { return nil }
 
         return Array(bytes[issuerStart..<(issuerStart + issuerTotalLen)])
     }

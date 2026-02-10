@@ -53,6 +53,7 @@ extension DNSStore {
 
     func handleConnectionInvalidated() {
         logger.warning("DNS XPC connection invalidated")
+        stopRefreshTimer()
         xpcConnection = nil
         isActive = false
         errorMessage = "Connection to DNS proxy extension lost"

@@ -98,13 +98,22 @@ extension CertificateGenerator {
     func buildLeafExtensions(hostname: String) -> Data {
         var extensions = Data()
 
-        // Basic Constraints (CA: false)
+        // Basic Constraints (CA: false, critical)
         let bcOID = buildOID([2, 5, 29, 19])
-        let bcOctetString = buildOctetString(Data(buildSequence(Data())))
         var bcExtension = Data()
         bcExtension.append(contentsOf: bcOID)
-        bcExtension.append(contentsOf: bcOctetString)
+        bcExtension.append(contentsOf: buildBoolean(true))
+        bcExtension.append(contentsOf: buildOctetString(Data(buildSequence(Data()))))
         extensions.append(contentsOf: buildSequence(bcExtension))
+
+        // Key Usage (digitalSignature + keyEncipherment, critical)
+        let kuOID = buildOID([2, 5, 29, 15])
+        let kuBitString: [UInt8] = [0x03, 0x03, 0x05, 0xA0, 0x00]
+        var kuExtension = Data()
+        kuExtension.append(contentsOf: kuOID)
+        kuExtension.append(contentsOf: buildBoolean(true))
+        kuExtension.append(contentsOf: buildOctetString(Data(kuBitString)))
+        extensions.append(contentsOf: buildSequence(kuExtension))
 
         // Extended Key Usage (serverAuth)
         let ekuOID = buildOID([2, 5, 29, 37])
@@ -115,16 +124,33 @@ extension CertificateGenerator {
         ekuExtension.append(contentsOf: ekuOctetString)
         extensions.append(contentsOf: buildSequence(ekuExtension))
 
-        // Subject Alternative Name
+        // Subject Alternative Name (DNS or IP)
         let sanOID = buildOID([2, 5, 29, 17])
-        let dnsName = buildImplicitTag(2, content: [UInt8](hostname.utf8))
-        let sanOctetString = buildOctetString(Data(buildSequence(dnsName)))
+        var sanValue: [UInt8]
+        if let ipBytes = parseIPAddress(hostname) {
+            sanValue = buildImplicitTag(7, content: ipBytes)
+        } else {
+            sanValue = buildImplicitTag(2, content: [UInt8](hostname.utf8))
+        }
+        let sanOctetString = buildOctetString(Data(buildSequence(sanValue)))
         var sanExtension = Data()
         sanExtension.append(contentsOf: sanOID)
         sanExtension.append(contentsOf: sanOctetString)
         extensions.append(contentsOf: buildSequence(sanExtension))
 
         return extensions
+    }
+
+    private func parseIPAddress(_ host: String) -> [UInt8]? {
+        var addr4 = in_addr()
+        if inet_pton(AF_INET, host, &addr4) == 1 {
+            return withUnsafeBytes(of: &addr4) { Array($0) }
+        }
+        var addr6 = in6_addr()
+        if inet_pton(AF_INET6, host, &addr6) == 1 {
+            return withUnsafeBytes(of: &addr6) { Array($0) }
+        }
+        return nil
     }
 
     // MARK: - DER Parsing
@@ -190,7 +216,7 @@ extension CertificateGenerator {
         let first = bytes[offset]
         if first < 128 { return (Int(first), 1) }
         let numBytes = Int(first & 0x7F)
-        guard offset + numBytes < bytes.count else {
+        guard offset + 1 + numBytes <= bytes.count else {
             throw CertificateError.certificateParsingFailed("Invalid length encoding")
         }
         var length = 0

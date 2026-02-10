@@ -201,6 +201,8 @@ extension HTTPParser {
             let hexStr = sizeStr.split(separator: ";").first.map(String.init) ?? sizeStr
             guard let chunkSize = UInt(hexStr.trimmingCharacters(in: .whitespaces), radix: 16) else { return false }
             if chunkSize == 0 { return true }
+            // Cap chunk size to prevent UInt→Int overflow (16MB practical limit)
+            guard chunkSize <= 16_777_216 else { return false }
             let chunkStart = crlfPos + 2
             let chunkEnd = chunkStart + Int(chunkSize) + 2
             guard chunkEnd <= data.count else { return false }
@@ -222,6 +224,8 @@ extension HTTPParser {
             guard let chunkSize = UInt(hexStr.trimmingCharacters(in: .whitespaces), radix: 16) else { break }
 
             if chunkSize == 0 { break }
+            // Cap chunk size to prevent UInt→Int overflow (16MB practical limit)
+            guard chunkSize <= 16_777_216 else { break }
 
             let chunkStart = crlfPos + 2
             let chunkEnd = chunkStart + Int(chunkSize)

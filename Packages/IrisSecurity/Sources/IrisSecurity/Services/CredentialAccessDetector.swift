@@ -162,8 +162,11 @@ public actor CredentialAccessDetector {
                 guard vnodeSize > 0 else { continue }
 
                 let filePath = withUnsafePointer(to: vnodeInfo.pvip.vip_path) { ptr in
-                    ptr.withMemoryRebound(to: CChar.self, capacity: Int(MAXPATHLEN)) {
-                        String(cString: $0)
+                    ptr.withMemoryRebound(to: UInt8.self, capacity: Int(MAXPATHLEN)) { buf in
+                        // Find null terminator within bounds to prevent OOB read
+                        var len = 0
+                        while len < Int(MAXPATHLEN) && buf[len] != 0 { len += 1 }
+                        return String(bytes: UnsafeBufferPointer(start: buf, count: len), encoding: .utf8) ?? ""
                     }
                 }
 
@@ -352,9 +355,13 @@ public actor CredentialAccessDetector {
         var size: Int = 0
         guard sysctl(&mib, 3, nil, &size, nil, 0) == 0, size > 0 else { return [] }
 
-        let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: size)
+        // Allocate with margin to handle size changes between sysctl calls
+        let allocSize = size + 512
+        let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: allocSize)
         defer { buffer.deallocate() }
-        guard sysctl(&mib, 3, buffer, &size, nil, 0) == 0 else { return [] }
+        var actualSize = allocSize
+        guard sysctl(&mib, 3, buffer, &actualSize, nil, 0) == 0 else { return [] }
+        size = actualSize
 
         // First 4 bytes = argc
         guard size > MemoryLayout<Int32>.size else { return [] }

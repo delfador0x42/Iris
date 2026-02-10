@@ -106,20 +106,27 @@ extension ExtensionManager {
             let connection = NSXPCConnection(machServiceName: machServiceName)
             connection.remoteObjectInterface = NSXPCInterface(with: proto)
 
+            // NSLock guards didResume to prevent double-resume crash
+            // (invalidation handler and timer race on different threads)
+            let lock = NSLock()
             var didResume = false
+
             connection.invalidationHandler = {
-                guard !didResume else { return }
+                lock.lock()
+                guard !didResume else { lock.unlock(); return }
                 didResume = true
+                lock.unlock()
                 continuation.resume(returning: false)
             }
 
             connection.resume()
 
-            // If connection resumes without immediate invalidation, extension is running
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 connection.invalidate()
-                guard !didResume else { return }
+                lock.lock()
+                guard !didResume else { lock.unlock(); return }
                 didResume = true
+                lock.unlock()
                 continuation.resume(returning: true)
             }
         }

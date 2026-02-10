@@ -75,9 +75,19 @@ extension HTTPParser {
         let isChunked = headers.first { $0.name.lowercased() == "transfer-encoding" }?
             .value.lowercased().contains("chunked") ?? false
 
-        let contentLength: Int? = isChunked ? nil :
-            headers.first { $0.name.lowercased() == "content-length" }
-                .flatMap { Int($0.value) }
+        // RFC 7230 §3.3.3: Reject requests with multiple differing Content-Length values
+        // (prevents CL-CL request smuggling desync attacks)
+        let contentLength: Int?
+        if isChunked {
+            contentLength = nil
+        } else {
+            let clHeaders = headers.filter { $0.name.lowercased() == "content-length" }
+            let clValues = Set(clHeaders.compactMap { Int($0.value) })
+            if clValues.count > 1 { return nil }
+            // Reject absurdly large Content-Length to prevent infinite buffering
+            if let cl = clValues.first, cl > 104_857_600 { return nil }
+            contentLength = clValues.first
+        }
 
         return ParsedRequest(
             method: method,
@@ -140,9 +150,18 @@ extension HTTPParser {
         let isChunked = headers.first { $0.name.lowercased() == "transfer-encoding" }?
             .value.lowercased().contains("chunked") ?? false
 
-        let contentLength: Int? = isChunked ? nil :
-            headers.first { $0.name.lowercased() == "content-length" }
-                .flatMap { Int($0.value) }
+        // RFC 7230 §3.3.3: Reject responses with multiple differing Content-Length values
+        let contentLength: Int?
+        if isChunked {
+            contentLength = nil
+        } else {
+            let clHeaders = headers.filter { $0.name.lowercased() == "content-length" }
+            let clValues = Set(clHeaders.compactMap { Int($0.value) })
+            if clValues.count > 1 { return nil }
+            // Reject absurdly large Content-Length to prevent infinite buffering
+            if let cl = clValues.first, cl > 104_857_600 { return nil }
+            contentLength = clValues.first
+        }
 
         return ParsedResponse(
             statusCode: statusCode,

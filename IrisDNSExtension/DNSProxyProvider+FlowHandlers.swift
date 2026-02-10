@@ -50,6 +50,7 @@ extension DNSProxyProvider {
     }
 
     func processDNSDatagram(_ datagram: Data, from flow: NEAppProxyUDPFlow, originalEndpoint: NWEndpoint) async {
+        guard datagram.count >= 12 else { return }
         let startTime = CFAbsoluteTimeGetCurrent()
         incrementTotalQueries()
         let queryInfo = parseDNSQueryInfo(datagram)
@@ -57,6 +58,10 @@ extension DNSProxyProvider {
 
         do {
             let responseData = try await dohClient.query(datagram)
+            guard responseData.count <= 65535 else {
+                logger.warning("DNS response oversized: \(responseData.count) bytes, dropping")
+                return
+            }
             let elapsed = (CFAbsoluteTimeGetCurrent() - startTime) * 1000
             addLatency(elapsed)
             let responseInfo = parseDNSResponseInfo(responseData)
@@ -118,9 +123,16 @@ extension DNSProxyProvider {
             }
             guard let data = result.data, !data.isEmpty else { break }
             buffer.append(data)
+            // Cap buffer to prevent unbounded growth from partial messages
+            if buffer.count > 131072 { buffer.removeAll(); break }
 
             while buffer.count >= 2 {
                 let msgLength = Int(buffer[0]) << 8 | Int(buffer[1])
+                // RFC 1035: DNS messages must be > 0 and <= 65535 bytes
+                guard msgLength > 0 && msgLength <= 65535 else {
+                    buffer.removeAll()
+                    break
+                }
                 guard buffer.count >= 2 + msgLength else { break }
                 let dnsMessage = Data(buffer[2..<(2 + msgLength)])
                 buffer.removeFirst(2 + msgLength)
@@ -137,6 +149,11 @@ extension DNSProxyProvider {
 
         do {
             let responseData = try await dohClient.query(datagram)
+            // TCP DNS max message size is 65535 (2-byte length prefix)
+            guard responseData.count <= 65535 else {
+                logger.warning("TCP DNS response oversized: \(responseData.count) bytes, dropping")
+                return
+            }
             let elapsed = (CFAbsoluteTimeGetCurrent() - startTime) * 1000
             addLatency(elapsed)
             let responseInfo = parseDNSResponseInfo(responseData)
