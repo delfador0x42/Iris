@@ -26,7 +26,7 @@ class ESClient {
     private(set) var isRunning = false
 
     /// Error message if ES client failed to start
-    private(set) var startupError: String?
+    var startupError: String?
 
     init() {
         logger.info("ESClient initialized")
