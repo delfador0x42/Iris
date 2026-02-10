@@ -187,8 +187,20 @@ extension XPCService: NetworkXPCProtocol {
 
     func updateRule(_ ruleData: Data, reply: @escaping (Bool, String?) -> Void) {
         logger.debug("XPC: updateRule")
-        // TODO: Implement rule update
-        reply(false, "Not implemented")
+
+        guard let provider = filterProvider else {
+            reply(false, "Filter provider not available")
+            return
+        }
+
+        do {
+            let decoder = JSONDecoder()
+            let rule = try decoder.decode(SecurityRule.self, from: ruleData)
+            let success = provider.updateRule(rule)
+            reply(success, success ? nil : "Rule not found")
+        } catch {
+            reply(false, error.localizedDescription)
+        }
     }
 
     func removeRule(_ ruleId: String, reply: @escaping (Bool) -> Void) {
@@ -206,14 +218,25 @@ extension XPCService: NetworkXPCProtocol {
 
     func toggleRule(_ ruleId: String, reply: @escaping (Bool) -> Void) {
         logger.debug("XPC: toggleRule(\(ruleId))")
-        // TODO: Implement rule toggle
-        reply(false)
+
+        guard let provider = filterProvider,
+              let uuid = UUID(uuidString: ruleId) else {
+            reply(false)
+            return
+        }
+
+        reply(provider.toggleRule(id: uuid))
     }
 
     func cleanupExpiredRules(reply: @escaping (Int) -> Void) {
         logger.debug("XPC: cleanupExpiredRules")
-        // TODO: Implement cleanup
-        reply(0)
+
+        guard let provider = filterProvider else {
+            reply(0)
+            return
+        }
+
+        reply(provider.cleanupExpiredRules())
     }
 
     func getStatus(reply: @escaping ([String: Any]) -> Void) {

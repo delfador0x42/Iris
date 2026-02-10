@@ -8,8 +8,8 @@ public final class SecurityStore: ObservableObject {
 
     // MARK: - Published State
 
-    /// All active network connections grouped by process
-    @Published public internal(set) var connectionsByProcess: [Int32: [NetworkConnection]] = [:]
+    /// All active network connections grouped by binary identity key
+    @Published public internal(set) var connectionsByProcess: [String: [NetworkConnection]] = [:]
 
     /// All tracked connections
     @Published public internal(set) var connections: [NetworkConnection] = []
@@ -62,11 +62,13 @@ public final class SecurityStore: ObservableObject {
         totalBytesDown = connections.reduce(0) { $0 + $1.bytesDown }
         geolocatedCount = connections.filter { $0.hasGeolocation }.count
         uniqueCountries = Set(connections.compactMap { $0.remoteCountryCode })
-        processes = connectionsByProcess.map { pid, conns in
+        processes = connectionsByProcess.map { key, conns in
             ProcessSummary(
-                pid: pid,
+                identityKey: key,
+                signingId: conns.first?.signingId,
                 name: conns.first?.processName ?? "Unknown",
                 path: conns.first?.processPath ?? "",
+                pids: Set(conns.map { $0.processId }),
                 connectionCount: conns.count,
                 totalBytesUp: conns.reduce(0) { $0 + $1.bytesUp },
                 totalBytesDown: conns.reduce(0) { $0 + $1.bytesDown }
@@ -74,17 +76,19 @@ public final class SecurityStore: ObservableObject {
         }
         .sorted {
             let cmp = $0.name.localizedCaseInsensitiveCompare($1.name)
-            return cmp != .orderedSame ? cmp == .orderedAscending : $0.pid < $1.pid
+            return cmp != .orderedSame ? cmp == .orderedAscending : $0.identityKey < $1.identityKey
         }
     }
 
     // MARK: - Types
 
     public struct ProcessSummary: Identifiable {
-        public var id: Int32 { pid }
-        public let pid: Int32
+        public var id: String { identityKey }
+        public let identityKey: String
+        public let signingId: String?
         public let name: String
         public let path: String
+        public let pids: Set<Int32>
         public let connectionCount: Int
         public let totalBytesUp: UInt64
         public let totalBytesDown: UInt64

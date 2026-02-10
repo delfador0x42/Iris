@@ -257,6 +257,12 @@ public struct NetworkConnection: Identifiable, Sendable, Codable, Equatable {
         (capturedOutboundBytes ?? 0) + (capturedInboundBytes ?? 0) > 0
     }
 
+    /// Stable identity key for grouping by binary (not PID).
+    /// Signed → signingId, unsigned → processPath. Matches SecurityRule.key.
+    public var identityKey: String {
+        signingId ?? processPath
+    }
+
     /// Full HTTP URL if available
     public var httpFullURL: String? {
         guard let method = httpMethod, let path = httpPath else { return nil }

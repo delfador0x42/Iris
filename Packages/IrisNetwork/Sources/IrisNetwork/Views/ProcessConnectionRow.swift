@@ -7,6 +7,7 @@ struct ProcessConnectionRow: View {
     let isExpanded: Bool
     let onToggle: () -> Void
     var onViewTraffic: ((NetworkConnection) -> Void)?
+    @EnvironmentObject private var store: SecurityStore
 
     /// Aggregate connections by remote IP for deduplication
     private var aggregatedConnections: [AggregatedConnection] {
@@ -62,15 +63,78 @@ struct ProcessConnectionRow: View {
 
                 // Process name and path
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("\(process.name) (pid: \(process.pid))")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(.white)
+                    HStack(spacing: 6) {
+                        Text(process.name)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(.white)
+
+                        if process.pids.count > 1 {
+                            Text("\(process.pids.count) instances")
+                                .font(.system(size: 10))
+                                .foregroundColor(.gray)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 1)
+                                .background(Color.white.opacity(0.1))
+                                .cornerRadius(3)
+                        }
+
+                        Text("\(process.connectionCount)")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(.cyan)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(Color.cyan.opacity(0.15))
+                            .cornerRadius(3)
+                    }
 
                     Text(process.path)
                         .font(.system(size: 10, design: .monospaced))
                         .foregroundColor(.gray.opacity(0.7))
                         .lineLimit(1)
                         .truncationMode(.middle)
+                }
+
+                // Rule status + quick actions
+                HStack(spacing: 4) {
+                    if let action = store.effectiveAction(for: process.identityKey) {
+                        Image(systemName: action == .allow
+                              ? "checkmark.shield.fill" : "xmark.shield.fill")
+                            .foregroundColor(action == .allow ? .green : .red)
+                            .font(.system(size: 14))
+                            .help(action == .allow ? "Allowed" : "Blocked")
+                    }
+
+                    Button {
+                        Task {
+                            await store.allowProcess(
+                                identityKey: process.identityKey,
+                                path: process.path,
+                                signingId: process.signingId
+                            )
+                        }
+                    } label: {
+                        Image(systemName: "checkmark.circle")
+                            .foregroundColor(.green.opacity(0.7))
+                            .font(.system(size: 12))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Allow all connections")
+
+                    Button {
+                        Task {
+                            await store.blockProcess(
+                                identityKey: process.identityKey,
+                                path: process.path,
+                                signingId: process.signingId
+                            )
+                        }
+                    } label: {
+                        Image(systemName: "xmark.circle")
+                            .foregroundColor(.red.opacity(0.7))
+                            .font(.system(size: 12))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Block all connections")
                 }
 
                 Spacer()

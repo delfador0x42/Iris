@@ -95,6 +95,9 @@ class FilterDataProvider: NEFilterDataProvider {
     override func startFilter(completionHandler: @escaping (Error?) -> Void) {
         logger.info("Starting network filter...")
 
+        // Restore persisted rules before accepting connections
+        loadPersistedRules()
+
         // Start XPC service
         xpcService = XPCService()
         xpcService?.filterProvider = self

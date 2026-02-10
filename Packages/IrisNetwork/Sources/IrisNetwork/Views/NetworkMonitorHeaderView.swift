@@ -71,6 +71,13 @@ struct NetworkMonitorHeaderView: View {
                     color: .white
                 )
 
+                // Rules
+                StatBox(
+                    label: "Rules",
+                    value: "\(store.rules.count)",
+                    color: .orange
+                )
+
                 // Total up
                 StatBox(
                     label: "Total Up",

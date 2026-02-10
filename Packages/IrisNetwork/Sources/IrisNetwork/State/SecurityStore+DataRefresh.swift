@@ -114,7 +114,7 @@ extension SecurityStore {
 
         // Show connections immediately (before enrichment)
         connections = newConnections
-        connectionsByProcess = Dictionary(grouping: newConnections) { $0.processId }
+        connectionsByProcess = Dictionary(grouping: newConnections) { $0.identityKey }
         updateDerivedState()
 
         // Find IPs that still need enrichment
@@ -139,7 +139,7 @@ extension SecurityStore {
             guard let result = results[connection.remoteAddress] else { return connection }
             return Self.applyEnrichment(to: connection, result: result)
         }
-        connectionsByProcess = Dictionary(grouping: connections) { $0.processId }
+        connectionsByProcess = Dictionary(grouping: connections) { $0.identityKey }
         updateDerivedState()
     }
 

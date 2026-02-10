@@ -69,6 +69,7 @@ extension FilterDataProvider {
     func addRule(_ rule: SecurityRule) {
         rulesLock.lock()
         rules.append(rule)
+        RulePersistence.save(rules)
         rulesLock.unlock()
     }
 
@@ -78,9 +79,52 @@ extension FilterDataProvider {
 
         if let index = rules.firstIndex(where: { $0.id == id }) {
             rules.remove(at: index)
+            RulePersistence.save(rules)
             return true
         }
         return false
+    }
+
+    func updateRule(_ updatedRule: SecurityRule) -> Bool {
+        rulesLock.lock()
+        defer { rulesLock.unlock() }
+
+        if let index = rules.firstIndex(where: { $0.id == updatedRule.id }) {
+            rules[index] = updatedRule
+            RulePersistence.save(rules)
+            return true
+        }
+        return false
+    }
+
+    func toggleRule(id: UUID) -> Bool {
+        rulesLock.lock()
+        defer { rulesLock.unlock() }
+
+        if let index = rules.firstIndex(where: { $0.id == id }) {
+            rules[index].isEnabled.toggle()
+            RulePersistence.save(rules)
+            return true
+        }
+        return false
+    }
+
+    func cleanupExpiredRules() -> Int {
+        rulesLock.lock()
+        defer { rulesLock.unlock() }
+
+        let before = rules.count
+        rules.removeAll { $0.isExpired }
+        if rules.count != before {
+            RulePersistence.save(rules)
+        }
+        return before - rules.count
+    }
+
+    func loadPersistedRules() {
+        rulesLock.lock()
+        defer { rulesLock.unlock() }
+        rules = RulePersistence.load()
     }
 
     func getRules() -> [SecurityRule] {

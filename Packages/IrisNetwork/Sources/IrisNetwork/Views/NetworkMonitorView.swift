@@ -19,11 +19,13 @@ extension View {
 public enum NetworkViewMode: String, CaseIterable {
     case list = "List"
     case map = "Map"
+    case rules = "Rules"
 
     var icon: String {
         switch self {
         case .list: return "list.bullet"
         case .map: return "globe"
+        case .rules: return "shield.lefthalf.filled"
         }
     }
 }
@@ -32,7 +34,7 @@ public enum NetworkViewMode: String, CaseIterable {
 public struct NetworkMonitorView: View {
     @StateObject private var store = SecurityStore()
     @StateObject private var extensionManager = ExtensionManager.shared
-    @State private var expandedProcesses: Set<Int32> = []
+    @State private var expandedProcesses: Set<String> = []
     @State private var viewMode: NetworkViewMode = .list
     @State private var conversationConnection: NetworkConnection?
 
@@ -67,12 +69,14 @@ public struct NetworkMonitorView: View {
                 } else if store.connections.isEmpty {
                     emptyView
                 } else {
-                    // Show list or map based on view mode
+                    // Show list, map, or rules based on view mode
                     switch viewMode {
                     case .list:
                         connectionListView
                     case .map:
                         WorldMapView(store: store)
+                    case .rules:
+                        RulesListView()
                     }
                 }
             }
@@ -255,10 +259,10 @@ public struct NetworkMonitorView: View {
                 ForEach(store.processes) { process in
                     ProcessConnectionRow(
                         process: process,
-                        connections: store.connectionsByProcess[process.pid] ?? [],
-                        isExpanded: expandedProcesses.contains(process.pid),
+                        connections: store.connectionsByProcess[process.identityKey] ?? [],
+                        isExpanded: expandedProcesses.contains(process.identityKey),
                         onToggle: {
-                            toggleProcess(process.pid)
+                            toggleProcess(process.identityKey)
                         },
                         onViewTraffic: { connection in
                             conversationConnection = connection
@@ -295,12 +299,12 @@ public struct NetworkMonitorView: View {
         .padding(.vertical, 8)
     }
 
-    private func toggleProcess(_ pid: Int32) {
+    private func toggleProcess(_ identityKey: String) {
         withAnimation(.easeInOut(duration: 0.2)) {
-            if expandedProcesses.contains(pid) {
-                expandedProcesses.remove(pid)
+            if expandedProcesses.contains(identityKey) {
+                expandedProcesses.remove(identityKey)
             } else {
-                expandedProcesses.insert(pid)
+                expandedProcesses.insert(identityKey)
             }
         }
     }

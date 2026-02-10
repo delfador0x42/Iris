@@ -4,6 +4,7 @@ import SwiftUI
 struct ConnectionDetailRow: View {
     let aggregated: AggregatedConnection
     var onViewTraffic: ((NetworkConnection) -> Void)?
+    @EnvironmentObject private var store: SecurityStore
     @State private var isHovering = false
     @State private var showDetailPopover = false
 
@@ -85,6 +86,44 @@ struct ConnectionDetailRow: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+
+            // Per-endpoint allow/block
+            HStack(spacing: 2) {
+                Button {
+                    Task {
+                        await store.allowEndpoint(
+                            processPath: connection.processPath,
+                            signingId: connection.signingId,
+                            remoteAddress: connection.remoteAddress,
+                            remotePort: connection.remotePort
+                        )
+                    }
+                } label: {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green.opacity(0.6))
+                        .font(.system(size: 10))
+                }
+                .buttonStyle(.plain)
+                .help("Allow this endpoint")
+
+                Button {
+                    Task {
+                        await store.blockEndpoint(
+                            processPath: connection.processPath,
+                            signingId: connection.signingId,
+                            remoteAddress: connection.remoteAddress,
+                            remotePort: connection.remotePort
+                        )
+                    }
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(.red.opacity(0.6))
+                        .font(.system(size: 10))
+                }
+                .buttonStyle(.plain)
+                .help("Block this endpoint")
+            }
+            .frame(width: 40)
 
             // Protocol
             Text(connection.protocol.rawValue)

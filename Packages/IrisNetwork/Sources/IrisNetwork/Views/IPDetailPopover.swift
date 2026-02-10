@@ -5,6 +5,7 @@ import AppKit
 struct IPDetailPopover: View {
     let aggregated: AggregatedConnection
     var onViewTraffic: ((NetworkConnection) -> Void)?
+    @EnvironmentObject private var store: SecurityStore
     @Environment(\.dismiss) private var dismiss
     @State var showHTTPRawDetail = false
 
@@ -37,6 +38,49 @@ struct IPDetailPopover: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(.cyan.opacity(0.8))
+                }
+
+                // Firewall actions
+                HStack(spacing: 8) {
+                    Button {
+                        dismiss()
+                        Task {
+                            await store.allowEndpoint(
+                                processPath: connection.processPath,
+                                signingId: connection.signingId,
+                                remoteAddress: connection.remoteAddress,
+                                remotePort: connection.remotePort
+                            )
+                        }
+                    } label: {
+                        HStack {
+                            Image(systemName: "checkmark.shield")
+                            Text("Allow")
+                        }
+                        .font(.system(size: 13, weight: .medium))
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.green.opacity(0.8))
+
+                    Button {
+                        dismiss()
+                        Task {
+                            await store.blockEndpoint(
+                                processPath: connection.processPath,
+                                signingId: connection.signingId,
+                                remoteAddress: connection.remoteAddress,
+                                remotePort: connection.remotePort
+                            )
+                        }
+                    } label: {
+                        HStack {
+                            Image(systemName: "xmark.shield")
+                            Text("Block")
+                        }
+                        .font(.system(size: 13, weight: .medium))
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.red.opacity(0.8))
                 }
 
                 Divider()
