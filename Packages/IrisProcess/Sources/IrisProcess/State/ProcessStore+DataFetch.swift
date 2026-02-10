@@ -19,22 +19,35 @@ extension ProcessStore {
         if let dataSource = dataSource {
             await fetchProcessesViaDataSource(dataSource)
         } else if let connection = xpcConnection {
-            // Try XPC first
             logger.debug("[FETCH] Using XPC connection for process data")
             await fetchProcessesViaXPC(connection)
         } else {
-            // Fallback to local enumeration
             logger.debug("[FETCH] No XPC connection — using local sysctl enumeration")
             await fetchProcessesLocally()
         }
 
+        // PERF: Work on a local copy to avoid triggering @Published didSet 1240+ times.
+        // Each processes[i].resources = x fires didSet → updateDisplayedProcesses() (filter+sort+publish).
+        // Batching into one assignment reduces from ~1240 updates to 1.
+        var snapshot = processes
+
         // Enrich with resource metrics (CPU, memory, threads, FDs)
-        await enrichWithResources()
+        let collector = ProcessResourceCollector.shared
+        let pids = snapshot.map { $0.pid }
+        let resources = await collector.collectBatch(pids: pids)
+        for i in snapshot.indices {
+            if let info = resources[snapshot[i].pid] {
+                snapshot[i].resources = info
+            }
+        }
 
         // Compute suspicion reasons once (not per-render)
-        for i in processes.indices { processes[i].refreshSuspicion() }
+        for i in snapshot.indices { snapshot[i].refreshSuspicion() }
 
-        // Check man pages for processes (in background, don't block refresh)
+        // Single assignment → one didSet → one updateDisplayedProcesses()
+        processes = snapshot
+
+        // Check man pages in background (don't block refresh)
         Task {
             await checkManPagesForProcesses()
         }
@@ -46,21 +59,21 @@ extension ProcessStore {
     /// Check if processes have man pages
     func checkManPagesForProcesses() async {
         let manPageStore = ManPageStore.shared
-
-        // Get unique command names to check
         let commandNames = Set(processes.map { $0.name })
-
-        // Pre-cache man page existence for all commands
         await manPageStore.preCacheManPages(for: Array(commandNames))
 
-        // Update processes with man page status and recompute suspicion
-        for i in processes.indices {
-            let hasManPage = manPageStore.hasManPage(for: processes[i].name)
-            if processes[i].hasManPage != hasManPage {
-                processes[i].hasManPage = hasManPage
-                processes[i].refreshSuspicion()
+        // Batch-update man page status on local copy, assign once
+        var snapshot = processes
+        var changed = false
+        for i in snapshot.indices {
+            let hasManPage = manPageStore.hasManPage(for: snapshot[i].name)
+            if snapshot[i].hasManPage != hasManPage {
+                snapshot[i].hasManPage = hasManPage
+                snapshot[i].refreshSuspicion()
+                changed = true
             }
         }
+        if changed { processes = snapshot }
     }
 
     func fetchProcessesViaDataSource(_ dataSource: any ProcessDataSourceProtocol) async {
@@ -214,23 +227,6 @@ extension ProcessStore {
             codeSigningInfo: codeSigningInfo,
             timestamp: Date()
         )
-    }
-
-    // MARK: - Resource Enrichment
-
-    /// Enrich all processes with CPU, memory, thread, and FD metrics
-    func enrichWithResources() async {
-        let collector = ProcessResourceCollector.shared
-        let pids = processes.map { $0.pid }
-
-        // Single actor call collects all PIDs (avoids 400 sequential actor hops)
-        let resources = await collector.collectBatch(pids: pids)
-
-        for i in processes.indices {
-            if let info = resources[processes[i].pid] {
-                processes[i].resources = info
-            }
-        }
     }
 
     // MARK: - Process Arguments

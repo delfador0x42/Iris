@@ -16,6 +16,10 @@ public actor ProcessResourceCollector {
     /// Previous CPU time samples for delta computation
     private var previousSamples: [pid_t: CPUSample] = [:]
 
+    /// Cached FD counts — refreshed every 5th batch call (~10s at 2s interval)
+    private var fdCache: [pid_t: Int32] = [:]
+    private var batchCounter: Int = 0
+
     /// Mach timebase for converting Mach time units to nanoseconds
     private let timebaseNumer: UInt64
     private let timebaseDenom: UInt64
@@ -34,7 +38,7 @@ public actor ProcessResourceCollector {
     }
 
     /// Collect resource metrics for a single process
-    public func collect(pid: pid_t) -> ProcessResourceInfo? {
+    private func collect(pid: pid_t, skipFDs: Bool) -> ProcessResourceInfo? {
         var taskInfo = proc_taskinfo()
         let size = MemoryLayout<proc_taskinfo>.stride
 
@@ -58,7 +62,13 @@ public actor ProcessResourceCollector {
 
         previousSamples[pid] = CPUSample(totalTimeNs: cpuTimeNs, wallClockNs: nowNs)
 
-        let fdCount = getOpenFileCount(pid: pid)
+        let fdCount: Int32
+        if skipFDs {
+            fdCount = fdCache[pid] ?? 0
+        } else {
+            fdCount = getOpenFileCount(pid: pid)
+            fdCache[pid] = fdCount
+        }
 
         return ProcessResourceInfo(
             cpuUsagePercent: cpuPercent,
@@ -78,15 +88,20 @@ public actor ProcessResourceCollector {
 
     /// Collect resource metrics for all PIDs in a single actor call.
     /// Avoids N sequential actor hops for N processes.
+    /// FD counts are refreshed every 5th call (~10s) to halve syscall count.
     public func collectBatch(pids: [pid_t]) -> [pid_t: ProcessResourceInfo] {
+        batchCounter += 1
+        let skipFDs = (batchCounter % 5) != 0
+
         // Prune stale entries
         let activeSet = Set(pids)
         previousSamples = previousSamples.filter { activeSet.contains($0.key) }
+        if !skipFDs { fdCache = fdCache.filter { activeSet.contains($0.key) } }
 
         var results: [pid_t: ProcessResourceInfo] = [:]
         results.reserveCapacity(pids.count)
         for pid in pids {
-            if let info = collect(pid: pid) {
+            if let info = collect(pid: pid, skipFDs: skipFDs) {
                 results[pid] = info
             }
         }

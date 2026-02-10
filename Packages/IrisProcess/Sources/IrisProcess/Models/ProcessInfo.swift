@@ -181,6 +181,20 @@ public struct ProcessInfo: Identifiable, Sendable, Codable, Equatable {
         suspicionReasons.map(\.severity).max()
     }
 
+    /// Cache for file existence checks. Binaries don't disappear often —
+    /// checking 620 paths via stat() every 2s is wasteful. TTL: 10 seconds.
+    private static var fileExistsCache: [String: (exists: Bool, checkedAt: Date)] = [:]
+
+    private static func cachedFileExists(atPath path: String) -> Bool {
+        if let cached = fileExistsCache[path],
+           Date().timeIntervalSince(cached.checkedAt) < 10 {
+            return cached.exists
+        }
+        let exists = FileManager.default.fileExists(atPath: path)
+        fileExistsCache[path] = (exists, Date())
+        return exists
+    }
+
     /// Recompute suspicion reasons. Call once when data changes, not on every view render.
     public mutating func refreshSuspicion() {
         var reasons: [SuspicionReason] = []
@@ -197,11 +211,10 @@ public struct ProcessInfo: Identifiable, Sendable, Codable, Equatable {
         }
         if isFromSuspiciousLocation { reasons.append(.suspiciousLocation) }
         if isHiddenProcess { reasons.append(.hiddenProcess) }
-        // Only flag noManPage for non-Apple binaries — most Apple daemons lack man pages
         let isApple = codeSigningInfo?.isAppleSigned == true || codeSigningInfo?.isPlatformBinary == true
         if hasManPage == false && !isApple { reasons.append(.noManPage) }
         if let res = resources, res.cpuUsagePercent > 80 { reasons.append(.highCPU) }
-        if !FileManager.default.fileExists(atPath: path) { reasons.append(.deletedBinary) }
+        if !Self.cachedFileExists(atPath: path) { reasons.append(.deletedBinary) }
         if Date().timeIntervalSince(timestamp) < 10 { reasons.append(.recentlySpawned) }
         suspicionReasons = reasons
     }

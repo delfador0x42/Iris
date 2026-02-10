@@ -204,11 +204,19 @@ extension ProcessStore {
 // MARK: - Username Resolution
 
 extension ProcessStore {
-    /// Get username for a user ID using the system password database
+    /// Cache: macOS has ~10 unique UIDs. Eliminates 620 getpwuid() syscalls per render.
+    private static var usernameCache: [UInt32: String] = [:]
+
+    /// Get username for a user ID, cached after first lookup.
     public static func username(forUID uid: UInt32) -> String {
+        if let cached = usernameCache[uid] { return cached }
+        let name: String
         if let pw = getpwuid(uid) {
-            return String(cString: pw.pointee.pw_name)
+            name = String(cString: pw.pointee.pw_name)
+        } else {
+            name = "\(uid)"
         }
-        return "\(uid)"
+        usernameCache[uid] = name
+        return name
     }
 }
