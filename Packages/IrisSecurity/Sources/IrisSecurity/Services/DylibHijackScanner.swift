@@ -11,12 +11,12 @@ public actor DylibHijackScanner {
     private let sipProtected = ["/System/", "/usr/lib/", "/usr/bin/", "/usr/sbin/"]
 
     /// Scan all running processes for dylib hijack vulnerabilities
-    public func scanRunningProcesses() async -> [DylibHijack] {
+    public func scanRunningProcesses(snapshot: ProcessSnapshot? = nil) async -> [DylibHijack] {
+        let snap = snapshot ?? ProcessSnapshot.capture()
         var results: [DylibHijack] = []
-        let pids = ProcessEnumeration.getRunningPIDs()
 
-        for pid in pids {
-            let path = ProcessEnumeration.getProcessPath(pid)
+        for pid in snap.pids {
+            let path = snap.path(for: pid)
             guard !path.isEmpty, !isProtectedPath(path) else { continue }
             guard let info = MachOParser.parse(path) else { continue }
             // Only scan executables

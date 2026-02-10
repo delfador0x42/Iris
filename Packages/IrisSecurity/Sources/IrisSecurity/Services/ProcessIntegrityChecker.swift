@@ -12,13 +12,13 @@ public actor ProcessIntegrityChecker {
     private let logger = Logger(subsystem: "com.wudan.iris", category: "ProcessIntegrity")
 
     /// Check all running processes for integrity violations
-    public func scan() async -> [ProcessAnomaly] {
+    public func scan(snapshot: ProcessSnapshot? = nil) async -> [ProcessAnomaly] {
+        let snap = snapshot ?? ProcessSnapshot.capture()
         var anomalies: [ProcessAnomaly] = []
-        let pids = ProcessEnumeration.getRunningPIDs()
 
-        for pid in pids {
+        for pid in snap.pids {
             guard pid > 0 else { continue }
-            let path = ProcessEnumeration.getProcessPath(pid)
+            let path = snap.path(for: pid)
             guard !path.isEmpty else { continue }
 
             // 1. Check for injected dylibs (dylibs loaded that weren't in the binary)
@@ -152,32 +152,41 @@ public actor ProcessIntegrityChecker {
         return nil
     }
 
-    /// Get list of loaded dylib images for a process
+    /// Get list of loaded dylib/framework images for a process.
+    /// Uses PROC_PIDREGIONPATHINFO to walk VM regions by actual size (not page stepping).
+    /// Catches non-shared-cache dylibs (injected dylibs are never in the cache).
     private func getLoadedImages(pid: pid_t) -> [String] {
-        // Use vmmap-like approach: read process memory regions
-        // For now, use proc_regionfilename to enumerate mapped files
-        var images: [String] = []
+        var images = Set<String>()
         var address: UInt64 = 0
 
-        // Iterate through memory regions
-        for _ in 0..<10000 { // Safety limit
-            let buf = UnsafeMutablePointer<UInt8>.allocate(capacity: Int(MAXPATHLEN))
-            defer { buf.deallocate() }
+        // Walk all VM regions using their actual sizes
+        for _ in 0..<50000 { // safety limit (typical process: 500-2000 regions)
+            var rwpi = proc_regionwithpathinfo()
+            let size = proc_pidinfo(
+                pid, PROC_PIDREGIONPATHINFO, address,
+                &rwpi, Int32(MemoryLayout<proc_regionwithpathinfo>.size)
+            )
+            guard size > 0 else { break }
 
-            let len = proc_regionfilename(pid, address, buf, UInt32(MAXPATHLEN))
-            if len <= 0 { break }
-
-            let path = String(cString: buf)
-            if !path.isEmpty && !images.contains(path) && path.hasSuffix(".dylib") {
-                images.append(path)
+            // Extract the file path from vnode info
+            let path = withUnsafePointer(to: rwpi.prp_vip.vip_path) { ptr in
+                ptr.withMemoryRebound(to: CChar.self, capacity: Int(MAXPATHLEN)) {
+                    String(cString: $0)
+                }
             }
 
-            // Move to next region (advance by page size)
-            address += 0x1000
-            if address > 0x7FFFFFFFFFFF { break } // User space limit
+            // Collect dylibs and frameworks (skip data files)
+            if !path.isEmpty && (path.hasSuffix(".dylib") || path.contains(".framework/")) {
+                images.insert(path)
+            }
+
+            // Advance past this region
+            let regionEnd = rwpi.prp_prinfo.pri_address + rwpi.prp_prinfo.pri_size
+            guard regionEnd > address else { break } // prevent infinite loop
+            address = regionEnd
         }
 
-        return images
+        return Array(images)
     }
 
     private func resolveDylibPath(_ path: String) -> String {

@@ -25,11 +25,12 @@ public actor DyldEnvDetector {
         ("DYLD_PRINT_ENV", "Dyld debugging — may indicate analysis/evasion", .low),
     ]
 
-    public func scan() async -> [ProcessAnomaly] {
+    public func scan(snapshot: ProcessSnapshot? = nil) async -> [ProcessAnomaly] {
+        let snap = snapshot ?? ProcessSnapshot.capture()
         var anomalies: [ProcessAnomaly] = []
 
         // 1. Check all running processes for DYLD environment variables
-        let envAnomalies = scanProcessEnvironments()
+        let envAnomalies = scanProcessEnvironments(snapshot: snap)
         anomalies.append(contentsOf: envAnomalies)
 
         // 2. Check launchd plists for DYLD injection
@@ -48,17 +49,16 @@ public actor DyldEnvDetector {
     }
 
     /// Parse KERN_PROCARGS2 past argc to extract environment variables
-    private func scanProcessEnvironments() -> [ProcessAnomaly] {
+    private func scanProcessEnvironments(snapshot: ProcessSnapshot) -> [ProcessAnomaly] {
         var anomalies: [ProcessAnomaly] = []
-        let pids = ProcessEnumeration.getRunningPIDs()
 
-        for pid in pids {
+        for pid in snapshot.pids {
             guard pid > 0 else { continue }
             let envVars = getProcessEnvironment(pid)
 
             for (key, value) in envVars {
                 for dangerVar in Self.dangerousVars where key == dangerVar.name {
-                    let path = ProcessEnumeration.getProcessPath(pid)
+                    let path = snapshot.path(for: pid)
                     let name = path.isEmpty ? "PID \(pid)" : URL(fileURLWithPath: path).lastPathComponent
 
                     // Apple processes with DYLD_ are especially suspicious

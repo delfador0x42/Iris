@@ -43,15 +43,16 @@ public actor CredentialAccessDetector {
         ("sysadminctl", "-resetPasswordFor", "Resetting user password"),
     ]
 
-    public func scan() async -> [ProcessAnomaly] {
+    public func scan(snapshot: ProcessSnapshot? = nil) async -> [ProcessAnomaly] {
+        let snap = snapshot ?? ProcessSnapshot.capture()
         var anomalies: [ProcessAnomaly] = []
 
         // 1. Check for credential-access processes currently running
-        let credProcs = scanRunningCredentialProcesses()
+        let credProcs = scanRunningCredentialProcesses(snapshot: snap)
         anomalies.append(contentsOf: credProcs)
 
         // 2. Check for processes accessing credential files
-        let fileAccess = scanCredentialFileAccess()
+        let fileAccess = scanCredentialFileAccess(snapshot: snap)
         anomalies.append(contentsOf: fileAccess)
 
         // 3. Check for exposed credential files
@@ -59,20 +60,19 @@ public actor CredentialAccessDetector {
         anomalies.append(contentsOf: exposed)
 
         // 4. Check for suspicious browser credential access
-        let browserCreds = await scanBrowserCredentialTheft()
+        let browserCreds = await scanBrowserCredentialTheft(snapshot: snap)
         anomalies.append(contentsOf: browserCreds)
 
         return anomalies
     }
 
     /// Detect processes using credential access tools with suspicious arguments
-    private func scanRunningCredentialProcesses() -> [ProcessAnomaly] {
+    private func scanRunningCredentialProcesses(snapshot: ProcessSnapshot) -> [ProcessAnomaly] {
         var anomalies: [ProcessAnomaly] = []
-        let pids = ProcessEnumeration.getRunningPIDs()
 
-        for pid in pids {
+        for pid in snapshot.pids {
             guard pid > 0 else { continue }
-            let path = ProcessEnumeration.getProcessPath(pid)
+            let path = snapshot.path(for: pid)
             guard !path.isEmpty else { continue }
             let name = URL(fileURLWithPath: path).lastPathComponent
 
@@ -86,8 +86,8 @@ public actor CredentialAccessDetector {
             // Check for suspicious argument patterns
             for pattern in Self.suspiciousArgs where pattern.binary == name {
                 if argsJoined.contains(pattern.pattern.lowercased()) {
-                    let ppid = ProcessEnumeration.getParentPID(pid)
-                    let parentName = ppid > 0 ? URL(fileURLWithPath: ProcessEnumeration.getProcessPath(ppid)).lastPathComponent : "unknown"
+                    let ppid = snapshot.parent(of: pid)
+                    let parentName = ppid > 0 ? snapshot.name(for: ppid) : "unknown"
 
                     anomalies.append(ProcessAnomaly(
                         pid: pid, processName: name, processPath: path,
@@ -104,7 +104,7 @@ public actor CredentialAccessDetector {
     }
 
     /// Check for open file descriptors pointing at credential stores
-    private func scanCredentialFileAccess() -> [ProcessAnomaly] {
+    private func scanCredentialFileAccess(snapshot: ProcessSnapshot) -> [ProcessAnomaly] {
         var anomalies: [ProcessAnomaly] = []
         let home = FileManager.default.homeDirectoryForCurrentUser.path
 
@@ -125,9 +125,7 @@ public actor CredentialAccessDetector {
             "\(home)/.gnupg/secring.gpg",
         ]
 
-        // Use lsof to find processes with credential files open
-        let pids = ProcessEnumeration.getRunningPIDs()
-        for pid in pids {
+        for pid in snapshot.pids {
             guard pid > 0 else { continue }
 
             // Get open file descriptors for this process
@@ -142,7 +140,7 @@ public actor CredentialAccessDetector {
             guard actual > 0 else { continue }
 
             let fdInfoCount = Int(actual) / MemoryLayout<proc_fdinfo>.size
-            let path = ProcessEnumeration.getProcessPath(pid)
+            let path = snapshot.path(for: pid)
             let name = URL(fileURLWithPath: path).lastPathComponent
 
             // Skip system processes and ourselves
@@ -260,7 +258,7 @@ public actor CredentialAccessDetector {
     }
 
     /// Check for browser credential database access by non-browser processes
-    private func scanBrowserCredentialTheft() async -> [ProcessAnomaly] {
+    private func scanBrowserCredentialTheft(snapshot: ProcessSnapshot) async -> [ProcessAnomaly] {
         var anomalies: [ProcessAnomaly] = []
         let home = FileManager.default.homeDirectoryForCurrentUser.path
 
@@ -287,10 +285,9 @@ public actor CredentialAccessDetector {
         }
 
         // Check for known credential-stealing tool patterns
-        let pids = ProcessEnumeration.getRunningPIDs()
-        for pid in pids {
+        for pid in snapshot.pids {
             guard pid > 0 else { continue }
-            let path = ProcessEnumeration.getProcessPath(pid)
+            let path = snapshot.path(for: pid)
             guard !path.isEmpty else { continue }
             let name = URL(fileURLWithPath: path).lastPathComponent
 

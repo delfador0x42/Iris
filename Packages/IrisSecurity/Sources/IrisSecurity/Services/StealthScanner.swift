@@ -11,14 +11,15 @@ public actor StealthScanner {
     private let logger = Logger(subsystem: "com.wudan.iris", category: "StealthScanner")
 
     /// Run all stealth scans
-    public func scanAll() async -> [ProcessAnomaly] {
+    public func scanAll(snapshot: ProcessSnapshot? = nil) async -> [ProcessAnomaly] {
+        let snap = snapshot ?? ProcessSnapshot.capture()
         async let hidden = scanHiddenLaunchAgents()
         async let emond = scanEmondRules()
         async let pam = scanPAMModules()
         async let sudoers = scanSudoersModifications()
         async let ssh = scanSSHKeys()
         async let atJobs = scanAtJobs()
-        async let envVars = scanDYLDEnvironment()
+        async let envVars = scanDYLDEnvironment(snapshot: snap)
         async let quarantine = scanMissingQuarantine()
         async let suidBinaries = scanSUIDBinaries()
 
@@ -215,11 +216,10 @@ public actor StealthScanner {
     }
 
     /// Scan running processes for DYLD_INSERT_LIBRARIES environment variables
-    private func scanDYLDEnvironment() async -> [ProcessAnomaly] {
+    private func scanDYLDEnvironment(snapshot: ProcessSnapshot) async -> [ProcessAnomaly] {
         var anomalies: [ProcessAnomaly] = []
-        let pids = ProcessEnumeration.getRunningPIDs()
 
-        for pid in pids {
+        for pid in snapshot.pids {
             let env = getProcessEnvironment(pid)
             for (key, value) in env {
                 let lowerKey = key.lowercased()
@@ -227,8 +227,8 @@ public actor StealthScanner {
                    lowerKey == "__xpc_dyld_insert_libraries" ||
                    lowerKey == "dyld_framework_path" ||
                    lowerKey == "dyld_library_path" {
-                    let path = ProcessEnumeration.getProcessPath(pid)
-                    let name = URL(fileURLWithPath: path).lastPathComponent
+                    let path = snapshot.path(for: pid)
+                    let name = path.isEmpty ? "unknown" : URL(fileURLWithPath: path).lastPathComponent
                     anomalies.append(ProcessAnomaly(
                         pid: pid, processName: name, processPath: path,
                         parentPID: 0, parentName: "",

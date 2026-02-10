@@ -25,6 +25,9 @@ clamped [0,1]. Weights only go UP — nothing reduces suspicion. IPSW baseline
 ```
 SecurityHubView → 11 module cards → dedicated views
   ThreatScanView → 15 scanner engines (ProcessAnomaly output)
+    1. ProcessSnapshot.capture() — single pass, shared across 6 PID-based scanners
+    2. LOLBin, Stealth, Integrity, Credential, DYLD, DylibHijack use snapshot
+    3. XPC, Network, Kext, Auth, Persistence, EventTap, TCC, SupplyChain, FS run independently
   PersistenceView → PersistenceScanner (13 locations, Evidence model)
   EventTapView → EventTapScanner (CGGetEventTapList)
   DylibHijackView → DylibHijackScanner + MachOParser
@@ -43,21 +46,25 @@ PersistenceScanner flow:
 - **Per-scanner evidence weights** — each scanner defines domain-specific evidence factors
 - **MITRE ATT&CK IDs** on every ProcessAnomaly finding
 
-## Key Files — Evidence Model
+## Key Files — Infrastructure
+- Services/ProcessSnapshot.swift — one-shot PID/path/parent capture, eliminates ~4000 redundant syscalls
+- Services/ProcessEnumeration.swift — shared PID/path/parent helpers (deduplicated from 8 scanners)
 - Models/Evidence.swift — EvidenceCategory enum, Evidence struct, score/severity helpers
 - Models/PersistenceItem.swift — evidence array, isBaselineItem, computed score/severity
 - Services/BaselineService.swift — loads baseline-25C56.json (418 daemons, 460 agents, 674 kexts)
-- Resources/baseline-25C56.json — IPSW-extracted stock macOS 26.2 inventory
 
 ## Key Files — Scanners (31 files)
 - Services/PersistenceScanner.swift + 5 extensions — 13 persistence locations with evidence
-- Services/LOLBinDetector.swift — 44 LOLBins, recursive ancestry (8 levels)
-- Services/DyldEnvDetector.swift — DYLD_ in processes, plists, shells
+- Services/LOLBinDetector.swift — 44 LOLBins, recursive ancestry (8 levels), accepts ProcessSnapshot
+- Services/DyldEnvDetector.swift — DYLD_ in processes, plists, shells, accepts ProcessSnapshot
+- Services/ProcessIntegrityChecker.swift — injected dylib + CS flag detection, accepts ProcessSnapshot
+- Services/CredentialAccessDetector.swift — keychain/SSH/browser cred access, accepts ProcessSnapshot
+- Services/DylibHijackScanner.swift — @rpath/weak hijack detection, accepts ProcessSnapshot
+- Services/StealthScanner.swift — 9 stealth techniques, accepts ProcessSnapshot
 - Services/EventTapScanner.swift — CGGetEventTapList, 30+ known-benign
 - Services/SigningVerifier.swift — SecStaticCode + Team ID + hardened runtime
-- Services/ProcessEnumeration.swift — shared PID/path/parent helpers (deduplicated)
 
 ## Key Files — Views (13 files)
 - Views/SecurityHubView.swift — 11-module command center
-- Views/ThreatScanView.swift — 15-engine full sweep
+- Views/ThreatScanView.swift — 15-engine full sweep, creates ProcessSnapshot at scan start
 - Views/PersistenceView.swift — persistence enumeration with evidence scores

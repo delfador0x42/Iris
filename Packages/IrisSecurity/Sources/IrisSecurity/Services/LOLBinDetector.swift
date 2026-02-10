@@ -106,42 +106,40 @@ public actor LOLBinDetector {
     private static let maxAncestryDepth = 8
 
     /// Walk process ancestry up to maxAncestryDepth, return (names, pids) from child to root
-    private func getAncestry(_ pid: pid_t) -> [(name: String, pid: pid_t)] {
+    private func getAncestry(_ pid: pid_t, snapshot: ProcessSnapshot) -> [(name: String, pid: pid_t)] {
         var chain: [(name: String, pid: pid_t)] = []
         var current = pid
         var seen = Set<pid_t>()
         for _ in 0..<Self.maxAncestryDepth {
-            let ppid = ProcessEnumeration.getParentPID(current)
+            let ppid = snapshot.parent(of: current)
             guard ppid > 0, ppid != current, !seen.contains(ppid) else { break }
             seen.insert(ppid)
-            let path = ProcessEnumeration.getProcessPath(ppid)
-            let name = path.isEmpty ? "unknown" : URL(fileURLWithPath: path).lastPathComponent
-            chain.append((name: name, pid: ppid))
+            chain.append((name: snapshot.name(for: ppid), pid: ppid))
             current = ppid
         }
         return chain
     }
 
     /// Analyze all running processes for LOLBin abuse
-    public func scan() async -> [ProcessAnomaly] {
+    public func scan(snapshot: ProcessSnapshot? = nil) async -> [ProcessAnomaly] {
+        let snap = snapshot ?? ProcessSnapshot.capture()
         var anomalies: [ProcessAnomaly] = []
-        let pids = ProcessEnumeration.getRunningPIDs()
 
-        for pid in pids {
-            let path = ProcessEnumeration.getProcessPath(pid)
+        for pid in snap.pids {
+            let path = snap.path(for: pid)
             guard !path.isEmpty else { continue }
             let name = URL(fileURLWithPath: path).lastPathComponent
 
             // Get parent info
-            let ppid = ProcessEnumeration.getParentPID(pid)
-            let parentPath = ppid > 0 ? ProcessEnumeration.getProcessPath(ppid) : ""
+            let ppid = snap.parent(of: pid)
+            let parentPath = snap.path(for: ppid)
             let parentName = parentPath.isEmpty ? "unknown" :
                 URL(fileURLWithPath: parentPath).lastPathComponent
 
             // Check 1: Is this a LOLBin?
             if let mitreID = Self.lolBins[name] {
                 // Walk ancestry to find suspicious lineage at any depth
-                let ancestry = getAncestry(pid)
+                let ancestry = getAncestry(pid, snapshot: snap)
                 for ancestor in ancestry {
                     if let suspChildren = Self.suspiciousLineages[ancestor.name],
                        suspChildren.contains(name) {

@@ -152,13 +152,16 @@ public struct ThreatScanView: View {
         var all: [ProcessAnomaly] = []
         let totalPhases: Double = 15
 
+        // Single process snapshot shared across all scanners
+        let snapshot = ProcessSnapshot.capture()
+
         scanPhase = "LOLBin activity"
         scanProgress = 1 / totalPhases
-        all.append(contentsOf: await LOLBinDetector.shared.scan())
+        all.append(contentsOf: await LOLBinDetector.shared.scan(snapshot: snapshot))
 
         scanPhase = "Stealth persistence"
         scanProgress = 2 / totalPhases
-        all.append(contentsOf: await StealthScanner.shared.scanAll())
+        all.append(contentsOf: await StealthScanner.shared.scanAll(snapshot: snapshot))
 
         scanPhase = "XPC services"
         scanProgress = 3 / totalPhases
@@ -180,11 +183,11 @@ public struct ThreatScanView: View {
 
         scanPhase = "Process integrity"
         scanProgress = 5 / totalPhases
-        all.append(contentsOf: await ProcessIntegrityChecker.shared.scan())
+        all.append(contentsOf: await ProcessIntegrityChecker.shared.scan(snapshot: snapshot))
 
         scanPhase = "Credential access"
         scanProgress = 6 / totalPhases
-        all.append(contentsOf: await CredentialAccessDetector.shared.scan())
+        all.append(contentsOf: await CredentialAccessDetector.shared.scan(snapshot: snapshot))
 
         scanPhase = "Kernel extensions"
         scanProgress = 7 / totalPhases
@@ -196,7 +199,7 @@ public struct ThreatScanView: View {
 
         scanPhase = "DYLD injection"
         scanProgress = 9 / totalPhases
-        all.append(contentsOf: await DyldEnvDetector.shared.scan())
+        all.append(contentsOf: await DyldEnvDetector.shared.scan(snapshot: snapshot))
 
         scanPhase = "Persistence locations"
         scanProgress = 10 / totalPhases
@@ -229,7 +232,7 @@ public struct ThreatScanView: View {
 
         scanPhase = "Dylib hijacking"
         scanProgress = 12 / totalPhases
-        let hijacks = await DylibHijackScanner.shared.scanRunningProcesses()
+        let hijacks = await DylibHijackScanner.shared.scanRunningProcesses(snapshot: snapshot)
         all.append(contentsOf: hijacks.filter(\.isActiveHijack).map { h in
             ProcessAnomaly(
                 pid: 0, processName: h.binaryName, processPath: h.binaryPath,
