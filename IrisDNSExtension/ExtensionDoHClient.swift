@@ -81,13 +81,17 @@ final class ExtensionDoHClient: @unchecked Sendable {
 
     // MARK: - Query
 
+    /// Returns current server URLs (synchronous, avoids NSLock in async context).
+    private func getServerURLs() -> (primary: URL, fallback: URL?) {
+        configLock.lock()
+        defer { configLock.unlock() }
+        return (serverURL, fallbackURL)
+    }
+
     /// Sends a DNS wire format query via DoH and returns the wire format response.
     /// Falls back to direct DNS (UDP port 53) if all DoH servers are unreachable.
     func query(_ queryData: Data) async throws -> Data {
-        configLock.lock()
-        let primary = serverURL
-        let fallback = fallbackURL
-        configLock.unlock()
+        let (primary, fallback) = getServerURLs()
 
         var request = URLRequest(url: primary)
         request.httpMethod = "POST"
@@ -164,8 +168,7 @@ final class ExtensionDoHClient: @unchecked Sendable {
     private func directDNSFallback(_ queryData: Data) async throws -> Data {
         logger.warning("DoH unreachable, falling back to direct DNS")
         return try await withCheckedThrowingContinuation { continuation in
-            let lock = NSLock()
-            var hasResumed = false
+            let resumed = AtomicFlag()
 
             let connection = NWConnection(
                 host: NWEndpoint.Host("8.8.8.8"),
@@ -174,26 +177,18 @@ final class ExtensionDoHClient: @unchecked Sendable {
             )
 
             connection.stateUpdateHandler = { state in
-                lock.lock()
-                guard !hasResumed else { lock.unlock(); return }
                 switch state {
                 case .ready:
-                    lock.unlock()
+                    guard !resumed.isSet else { return }
                     connection.send(content: queryData, completion: .contentProcessed { error in
                         if let error = error {
-                            lock.lock()
-                            guard !hasResumed else { lock.unlock(); return }
-                            hasResumed = true
-                            lock.unlock()
+                            guard resumed.trySet() else { return }
                             connection.cancel()
                             continuation.resume(throwing: error)
                             return
                         }
                         connection.receiveMessage { data, _, _, error in
-                            lock.lock()
-                            guard !hasResumed else { lock.unlock(); return }
-                            hasResumed = true
-                            lock.unlock()
+                            guard resumed.trySet() else { return }
                             connection.cancel()
                             if let data = data, !data.isEmpty {
                                 continuation.resume(returning: data)
@@ -203,25 +198,20 @@ final class ExtensionDoHClient: @unchecked Sendable {
                         }
                     })
                 case .failed(let error):
-                    hasResumed = true
-                    lock.unlock()
+                    guard resumed.trySet() else { return }
                     continuation.resume(throwing: error)
                 case .cancelled:
-                    hasResumed = true
-                    lock.unlock()
+                    guard resumed.trySet() else { return }
                     continuation.resume(throwing: DoHClientError.fallbackFailed)
                 default:
-                    lock.unlock()
+                    break
                 }
             }
             connection.start(queue: .global(qos: .userInitiated))
 
             // Timeout after 3 seconds
             DispatchQueue.global().asyncAfter(deadline: .now() + 3) {
-                lock.lock()
-                guard !hasResumed else { lock.unlock(); return }
-                hasResumed = true
-                lock.unlock()
+                guard resumed.trySet() else { return }
                 connection.cancel()
                 continuation.resume(throwing: DoHClientError.fallbackFailed)
             }

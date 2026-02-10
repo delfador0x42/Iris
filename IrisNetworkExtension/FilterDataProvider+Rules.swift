@@ -59,7 +59,9 @@ extension FilterDataProvider {
                 httpStatusReason: tracker.httpResponse?.reason,
                 httpResponseContentType: tracker.httpResponse?.contentType,
                 httpRawRequest: tracker.httpRequest?.rawHeaders,
-                httpRawResponse: tracker.httpResponse?.rawHeaders
+                httpRawResponse: tracker.httpResponse?.rawHeaders,
+                capturedOutboundBytes: tracker.rawOutbound.count,
+                capturedInboundBytes: tracker.rawInbound.count
             )
         }
     }

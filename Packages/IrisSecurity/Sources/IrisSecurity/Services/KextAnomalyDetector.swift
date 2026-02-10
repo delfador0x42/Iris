@@ -93,9 +93,8 @@ public actor KextAnomalyDetector {
                 description = "Third-party kernel extension loaded: \(bundleID). Non-Apple kexts can intercept system calls, hide processes, and bypass security."
             }
 
-            anomalies.append(ProcessAnomaly(
-                pid: 0, processName: bundleID, processPath: "",
-                parentPID: 0, parentName: "",
+            anomalies.append(.filesystem(
+                name: bundleID, path: "",
                 technique: "Loaded Kernel Extension",
                 description: description,
                 severity: severity, mitreID: "T1547.006"
@@ -125,17 +124,15 @@ public actor KextAnomalyDetector {
                 let (status, teamID, isApple) = await SigningVerifier.shared.verify(kextPath)
 
                 if status == .unsigned {
-                    anomalies.append(ProcessAnomaly(
-                        pid: 0, processName: item, processPath: kextPath,
-                        parentPID: 0, parentName: "",
+                    anomalies.append(.filesystem(
+                        name: item, path: kextPath,
                         technique: "Unsigned Kernel Extension",
                         description: "Unsigned kext found at \(kextPath). Unsigned kernel extensions are extremely dangerous — they execute with full kernel privileges.",
                         severity: .critical, mitreID: "T1547.006"
                     ))
                 } else if status == .invalid {
-                    anomalies.append(ProcessAnomaly(
-                        pid: 0, processName: item, processPath: kextPath,
-                        parentPID: 0, parentName: "",
+                    anomalies.append(.filesystem(
+                        name: item, path: kextPath,
                         technique: "Invalid Kext Signature",
                         description: "Kernel extension at \(kextPath) has an INVALID signature. This kext may have been tampered with.",
                         severity: .critical, mitreID: "T1553.002"
@@ -160,9 +157,8 @@ public actor KextAnomalyDetector {
                             ]
 
                             for suspicious in suspiciousClasses where ioClass.contains(suspicious) {
-                                anomalies.append(ProcessAnomaly(
-                                    pid: 0, processName: item, processPath: kextPath,
-                                    parentPID: 0, parentName: "",
+                                anomalies.append(.filesystem(
+                                    name: item, path: kextPath,
                                     technique: "Kext Hooks \(suspicious)",
                                     description: "Kext \(item) personality '\(name)' hooks IOKit class \(ioClass). This enables deep system interception.",
                                     severity: .high, mitreID: "T1014"
@@ -200,9 +196,8 @@ public actor KextAnomalyDetector {
                 // Verify the containing app still exists
                 if let containingPath = ext["containingPath"] as? String {
                     if !FileManager.default.fileExists(atPath: containingPath) {
-                        anomalies.append(ProcessAnomaly(
-                            pid: 0, processName: bundleID, processPath: containingPath,
-                            parentPID: 0, parentName: "",
+                        anomalies.append(.filesystem(
+                            name: bundleID, path: containingPath,
                             technique: "Orphaned System Extension",
                             description: "System extension \(bundleID) is active but its containing app at \(containingPath) no longer exists. Orphaned extensions may be remnants of removed malware.",
                             severity: .high, mitreID: "T1547.006"
@@ -241,10 +236,8 @@ public actor KextAnomalyDetector {
 
                 for (flag, desc) in suspiciousBootArgs {
                     if bootArgs.contains(flag) {
-                        anomalies.append(ProcessAnomaly(
-                            pid: 0, processName: "kernel",
-                            processPath: "/System/Library/Kernels/kernel",
-                            parentPID: 0, parentName: "",
+                        anomalies.append(.filesystem(
+                            name: "kernel", path: "/System/Library/Kernels/kernel",
                             technique: "Suspicious Boot Argument",
                             description: "Boot argument '\(flag)' detected: \(desc). This weakens system security and may indicate tampering.",
                             severity: .critical, mitreID: "T1562.001"

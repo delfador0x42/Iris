@@ -146,27 +146,19 @@ actor FlowHandler {
         return await withTaskGroup(of: Bool.self) { group in
             group.addTask {
                 await withCheckedContinuation { continuation in
-                    let resumed = NSLock()
-                    var hasResumed = false
+                    let resumed = AtomicFlag()
                     connection.stateUpdateHandler = { state in
-                        resumed.lock()
-                        guard !hasResumed else {
-                            resumed.unlock()
-                            return
-                        }
                         switch state {
                         case .ready:
-                            hasResumed = true
-                            resumed.unlock()
+                            guard resumed.trySet() else { return }
                             connection.stateUpdateHandler = nil
                             continuation.resume(returning: true)
                         case .failed, .cancelled:
-                            hasResumed = true
-                            resumed.unlock()
+                            guard resumed.trySet() else { return }
                             connection.stateUpdateHandler = nil
                             continuation.resume(returning: false)
                         default:
-                            resumed.unlock()
+                            break
                         }
                     }
                     connection.start(queue: .global(qos: .userInitiated))

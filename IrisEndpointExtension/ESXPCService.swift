@@ -34,14 +34,14 @@ class ESXPCService: NSObject {
     }
 
     func start() {
-        logger.info("Starting XPC service...")
+        logger.info("[XPC] Starting XPC listener on \(Self.serviceName)...")
 
         // Create listener for the Mach service
         listener = NSXPCListener(machServiceName: Self.serviceName)
         listener?.delegate = self
         listener?.resume()
 
-        logger.info("XPC service started on \(Self.serviceName)")
+        logger.info("[XPC] XPC listener RESUMED — ready to accept connections")
     }
 
     func stop() {
@@ -67,8 +67,10 @@ extension ESXPCService: NSXPCListenerDelegate {
                   shouldAcceptNewConnection newConnection: NSXPCConnection) -> Bool {
 
         let pid = newConnection.processIdentifier
+        logger.info("[XPC] New connection request from PID \(pid)")
+
         guard verifyCodeSignature(pid: pid) else {
-            logger.error("XPC: rejected connection from PID \(pid) — failed code signing check")
+            logger.error("[XPC] REJECTED connection from PID \(pid) — code signing verification FAILED")
             return false
         }
 
@@ -81,10 +83,11 @@ extension ESXPCService: NSXPCListenerDelegate {
 
         connectionsLock.lock()
         activeConnections.append(newConnection)
+        let count = activeConnections.count
         connectionsLock.unlock()
 
         newConnection.resume()
-        logger.info("XPC connection accepted from PID \(pid)")
+        logger.info("[XPC] ACCEPTED connection from PID \(pid) (total active: \(count))")
 
         return true
     }
@@ -92,21 +95,33 @@ extension ESXPCService: NSXPCListenerDelegate {
     private func verifyCodeSignature(pid: pid_t) -> Bool {
         var code: SecCode?
         let attrs = [kSecGuestAttributePid: pid] as NSDictionary
-        guard SecCodeCopyGuestWithAttributes(nil, attrs, SecCSFlags(), &code) == errSecSuccess,
-              let guestCode = code else { return false }
+        let copyResult = SecCodeCopyGuestWithAttributes(nil, attrs, SecCSFlags(), &code)
+        guard copyResult == errSecSuccess, let guestCode = code else {
+            logger.error("[XPC] SecCodeCopyGuestWithAttributes FAILED for PID \(pid): \(copyResult)")
+            return false
+        }
         var requirement: SecRequirement?
         let reqStr = "anchor apple generic and certificate leaf[subject.OU] = \"99HGW2AR62\"" as CFString
         guard SecRequirementCreateWithString(reqStr, SecCSFlags(), &requirement) == errSecSuccess,
-              let req = requirement else { return false }
-        return SecCodeCheckValidity(guestCode, SecCSFlags(), req) == errSecSuccess
+              let req = requirement else {
+            logger.error("[XPC] SecRequirementCreateWithString FAILED")
+            return false
+        }
+        let checkResult = SecCodeCheckValidity(guestCode, SecCSFlags(), req)
+        if checkResult != errSecSuccess {
+            logger.error("[XPC] SecCodeCheckValidity FAILED for PID \(pid): \(checkResult)")
+        }
+        return checkResult == errSecSuccess
     }
 
     private func connectionInvalidated(_ connection: NSXPCConnection) {
+        let pid = connection.processIdentifier
         connectionsLock.lock()
         activeConnections.removeAll { $0 === connection }
+        let count = activeConnections.count
         connectionsLock.unlock()
 
-        logger.info("XPC connection invalidated")
+        logger.info("[XPC] Connection from PID \(pid) invalidated (remaining: \(count))")
     }
 }
 
@@ -115,9 +130,8 @@ extension ESXPCService: NSXPCListenerDelegate {
 extension ESXPCService: EndpointXPCProtocol {
 
     func getProcesses(reply: @escaping ([Data]) -> Void) {
-        logger.debug("XPC: getProcesses")
-
         guard let client = esClient else {
+            logger.warning("[XPC] getProcesses — no esClient available")
             reply([])
             return
         }
@@ -127,14 +141,14 @@ extension ESXPCService: EndpointXPCProtocol {
         encoder.dateEncodingStrategy = .iso8601
 
         let data = processes.compactMap { try? encoder.encode($0) }
+        logger.info("[XPC] getProcesses → \(processes.count) tracked, \(data.count) encoded")
         reply(data)
     }
 
     func getProcess(pid: Int32, reply: @escaping (Data?) -> Void) {
-        logger.debug("XPC: getProcess(\(pid))")
-
         guard let client = esClient,
               let process = client.getProcess(pid: pid) else {
+            logger.debug("[XPC] getProcess(\(pid)) → not found")
             reply(nil)
             return
         }
@@ -145,22 +159,25 @@ extension ESXPCService: EndpointXPCProtocol {
     }
 
     func getRecentEvents(limit: Int, reply: @escaping ([Data]) -> Void) {
-        logger.debug("XPC: getRecentEvents(\(limit))")
-        // TODO: Implement event history
+        logger.debug("[XPC] getRecentEvents(\(limit)) — not implemented")
         reply([])
     }
 
     func getStatus(reply: @escaping ([String: Any]) -> Void) {
-        logger.debug("XPC: getStatus")
+        let isRunning = esClient?.isRunning ?? false
+        let processCount = esClient?.getTrackedProcesses().count ?? 0
+        let startupError = esClient?.startupError
+
+        logger.info("[XPC] getStatus → esEnabled=\(isRunning) processCount=\(processCount) error=\(startupError ?? "none")")
 
         var status: [String: Any] = [
             "version": "1.0.0",
-            "esEnabled": esClient?.isRunning ?? false,
-            "processCount": esClient?.getTrackedProcesses().count ?? 0,
-            "mode": esClient?.isRunning == true ? "active" : "inactive"
+            "esEnabled": isRunning,
+            "processCount": processCount,
+            "mode": isRunning ? "active" : "inactive"
         ]
 
-        if let error = esClient?.startupError {
+        if let error = startupError {
             status["esError"] = error
         }
 
@@ -168,7 +185,8 @@ extension ESXPCService: EndpointXPCProtocol {
     }
 
     func isEndpointSecurityAvailable(reply: @escaping (Bool) -> Void) {
-        logger.debug("XPC: isEndpointSecurityAvailable")
-        reply(esClient?.isRunning ?? false)
+        let available = esClient?.isRunning ?? false
+        logger.debug("[XPC] isEndpointSecurityAvailable → \(available)")
+        reply(available)
     }
 }

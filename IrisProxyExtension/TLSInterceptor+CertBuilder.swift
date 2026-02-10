@@ -102,8 +102,9 @@ extension TLSInterceptor {
         SecItemDelete(addKeyQuery as CFDictionary)
         SecItemDelete(addCertQuery as CFDictionary)
 
-        if status == errSecSuccess, let identity = identityRef {
-            return (identity as! SecIdentity)
+        if status == errSecSuccess, let ref = identityRef,
+           CFGetTypeID(ref) == SecIdentityGetTypeID() {
+            return (ref as! SecIdentity)
         }
         return nil
     }

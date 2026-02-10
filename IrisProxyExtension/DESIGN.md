@@ -42,11 +42,12 @@ App makes HTTPS request
 
 ## Key Files
 - `AppProxyProvider.swift` — NEAppProxyProvider subclass, flow entry point
-- `FlowHandler.swift` — Routes flows to HTTP or MITM relay
-- `FlowHandler+MITMRelay.swift` — TLS MITM: decrypt, parse, relay
+- `FlowHandler.swift` — Routes flows to HTTP, MITM, or passthrough relay
+- `FlowHandler+MITMRelay.swift` — TLS MITM: decrypt, parse, relay via NWConnection
 - `FlowHandler+HTTPRelay.swift` — Plain HTTP: parse and relay
-- `FlowHandler+ServerConnection.swift` — NWConnection to upstream server
+- `FlowHandler+Passthrough.swift` — Non-HTTP TCP: blind bidirectional relay
+- `TLSInterceptor.swift` — CA loading, per-host cert generation, cert cache
 - `TLSSession.swift` — SSLCreateContext wrapper with ring buffer + semaphore
-- `HTTPParser.swift` — Lightweight HTTP/1.1 request/response parser
 - `RelayState.swift` — Thread-safe shared state for relay task groups
 - `ProxyXPCService.swift` — Mach XPC listener, flow storage
+- HTTPParser lives in `Shared/` (compiled into all targets)

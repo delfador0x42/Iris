@@ -1,78 +1,3 @@
-# Instructions for Claude
-
-## Core Principle
-Understanding first. Code is the artifact of understanding, not the goal.
-Before you write a line of code, understand the problem at the deepest level
-you can reach. When you understand deeply enough, the code writes itself.
-When you don't understand deeply enough, no amount of coding skill saves you.
-
-## How to Go Deep
-1. Read the RFC/spec, not a blog post ABOUT the spec
-2. Read source code and headers, not just API documentation
-3. Disassemble binaries when source isn't available
-4. Write throwaway experiments to test your understanding
-5. Map the complete data flow end-to-end before designing
-6. Ask: "what would I build if this API didn't exist?"
-   That answer IS your understanding of the problem.
-7. Ask: "what's actually happening at the byte/syscall level?"
-   If you can't answer, you don't understand yet. Research more.
-
-## Research Depth Levels
-- Level 1: "Does this API exist?" ← bare minimum, where you usually stop
-- Level 2: "How does this API work internally? Failure modes? Edge cases?"
-- Level 3: "What would I build if this API didn't exist?"
-- Level 4: "What does the RFC say? What does the kernel do? What bytes move where?"
-For core functionality: always reach Level 3-4.
-For glue code: Level 1-2 is fine.
-
-## Engineering Standards
-- Build from first principles when the problem warrants it.
-  Don't reach for a library until you understand what the library does.
-- Minimal dependencies. Understand everything you import.
-- Simple code > clever code. If it needs a comment to explain, simplify it.
-- Measure performance, don't guess. Prototype before committing.
-- Think like an attacker: every input untrusted, every boundary a surface.
-- ≤100 lines per file. One file, one job. Max 300.
-
-## Your Workflow
-1. Understand: research the problem to depth Level 3-4
-2. Map: draw the data flow end-to-end (in your head or in notes)
-3. Design: identify the minimal set of components, one job each
-4. Prototype: write throwaway code to test your riskiest assumption
-5. Build: small files, clear names, build after every significant change
-6. Verify: test it, measure it, attack it
-7. Record: update notes for your future self (who remembers nothing)
-
-## When You're Stuck
-1. You probably don't understand deeply enough. Research more.
-2. Re-read the error — really read it, don't skim
-3. Web search the exact error or API signature
-4. Try a completely different approach (not a variation — DIFFERENT)
-5. Read the actual source code of the thing that's failing
-6. Ask the user — they want to help
-
-## Relationship
-- Close collaborator. Be honest, disagree freely, push back.
-- Never say impossible. Say "here's what it would take."
-- The user wants ambitious implementations and honest feedback.
-
-## Documentation
-Every module and extension gets a DESIGN.md at its root.
-These are for the human — explain WHY, not HOW. The code shows HOW.
-
-Structure (keep under 50 lines):
-1. What This Does — one paragraph, plain English
-2. Why This Design — the decisions, not the implementation
-3. Data Flow — end-to-end, from input to output
-4. Decisions Made — what was chosen, what was rejected, why
-5. Key Files — one line each
-
-Update DESIGN.md when architecture changes.
-Write it as you build, not after — decisions are freshest in the moment.
-
-
-
-
 # Iris - AI Development Guide
 
 ## Quick Start
@@ -119,13 +44,14 @@ The app requires System Extension approval in System Settings > Privacy & Securi
 | IrisWiFi | WiFi monitoring via CoreWLAN | `WiFiStore.swift`, `WiFiMonitorView.swift` |
 | IrisProxy | Proxy data models (shared types) | `ProxyStore.swift`, `ProxyMonitorView.swift` |
 | IrisDNS | DNS monitoring, DoH client, DNS models | `DNSStore.swift`, `DNSMonitorView.swift`, `DoHClient.swift` |
+| IrisSecurity | APT detection scanners, evidence model, security views | `SecurityAssessor.swift`, `ProcessAnomaly.swift` |
 | IrisApp | Main UI, home screen, settings | `HomeView.swift`, `SettingsView.swift` |
 
 ## Key Entry Points
 
 | Feature | Start Here |
 |---------|------------|
-| Extension installation | `ExtensionManager.swift` (manages .network, .endpoint, .dns) |
+| Extension installation | `ExtensionManager.swift` (manages .network, .endpoint, .proxy, .dns) |
 | Process list | `ProcessStore.swift` → `ProcessListView.swift` |
 | Network connections | `SecurityStore.swift` → `NetworkMonitorView.swift` |
 | HTTP inspection | `IPDetailPopover.swift` → `HTTPRawDetailView` |
@@ -135,7 +61,8 @@ The app requires System Extension approval in System Settings > Privacy & Securi
 | DNS monitoring | `DNSStore.swift` → `DNSMonitorView.swift` |
 | TLS interception | `TLSInterceptor.swift` (in IrisProxyExtension) |
 | Proxy flow handling | `AppProxyProvider.swift` → `FlowHandler` actor |
-| Main navigation | `HomeView.swift` (circular stone menu, 8 sections) |
+| Security scans | `SecurityHubView.swift` → `ThreatScanView.swift` |
+| Main navigation | `HomeView.swift` (circular stone menu, 9 sections) |
 
 ## System Extensions
 
@@ -153,7 +80,7 @@ autoreleasepool { NEProvider.startSystemExtensionMode() }
 dispatchMain()
 ```
 
-**ExtensionManager** manages `.network`, `.endpoint`, and `.dns` extension types. Each has Published state + install/uninstall/polling.
+**ExtensionManager** manages `.network`, `.endpoint`, `.proxy`, and `.dns` extension types. Each has Published state + install/uninstall/polling.
 
 ## Patterns to Follow
 
@@ -191,11 +118,11 @@ All models: `Identifiable, Sendable, Codable, Equatable`
 ## Entitlements
 
 All entitlements files already include these NE provider types:
-- `dns-proxy` - For NEDNSProxyProvider (IrisDNSExtension - code exists, not yet in Xcode project)
+- `dns-proxy` - For NEDNSProxyProvider (IrisDNSExtension - working)
 - `dns-settings` - For NEDNSSettingsManager
 - `app-proxy-provider` - For NEAppProxyProvider (IrisProxyExtension - working)
 - `content-filter-provider` - For NEFilterDataProvider (IrisNetworkExtension - working)
-- `packet-tunnel-provider` - For NEPacketTunnelProvider (Phase 3 - not yet implemented)
+- `packet-tunnel-provider` - For NEPacketTunnelProvider (not used — kept for future)
 
 ## Known Issues / Gotchas
 
@@ -207,7 +134,7 @@ All entitlements files already include these NE provider types:
 6. **SSLCreateContext is DEPRECATED**: TLS 1.2 max. Currently used for client-facing MITM (acceptable for local). Plan to migrate to SwiftNIO + swift-nio-ssl.
 7. **NEAppProxyTCPFlow gives raw bytes**: Can't use NWConnection TLS for client-facing side. TLSSession.swift bridges this via SSLSetIOFuncs callbacks.
 8. **No Package.swift files**: Packages are Xcode-managed local packages, not standalone SPM. Configure via Xcode project.
-9. **IrisDNS not yet in Xcode project**: Files created but need to add to Xcode target dependencies.
+9. **All packages compile into one module**: Cross-package `import IrisShared` fails — all packages compile into module `Iris`. Just use the types directly.
 10. **NEDNSProxyManager required**: After DNS extension activates, MUST configure NEDNSProxyManager or DNS traffic won't route to extension. DNSProxyHelper handles this.
 11. **DNS XPC app group**: Main app entitlements MUST include `$(TeamIdentifierPrefix)com.wudan.iris.dns.xpc` for DNS XPC to work.
 12. **DNS over TCP**: Uses 2-byte big-endian length prefix (RFC 1035 Section 4.2.2). Don't assume DNS is UDP-only.
@@ -239,22 +166,23 @@ All entitlements files already include these NE provider types:
 
 ```
 iris/
+├── Shared/                     # XPC protocols, HTTPParser, DEREncoder (compiled into all 6 targets)
 ├── IrisApp/                    # App entry point (IrisMainApp.swift)
 ├── IrisNetworkExtension/       # Network filter extension (NEFilterDataProvider)
 ├── IrisEndpointExtension/      # Endpoint security extension (ESClient)
 ├── IrisProxyExtension/         # App proxy extension (NEAppProxyProvider)
 │   ├── AppProxyProvider.swift  # Flow interception + FlowHandler actor
-│   ├── TLSInterceptor.swift    # Per-host cert generation, CA from Keychain, ASN.1 DER encoding
-│   ├── HTTPParser.swift        # HTTP/1.1 request/response parser + streaming + CONNECT detection
+│   ├── TLSInterceptor.swift    # Per-host cert generation, CA from Keychain
+│   ├── TLSSession.swift        # SSLCreateContext wrapper for client-facing TLS
 │   ├── ProxyXPCService.swift   # XPC + CapturedFlow/CapturedRequest/CapturedResponse
 │   └── main.swift
-├── IrisDNSExtension/           # DNS proxy extension (NEDNSProxyProvider) [NEW - not yet in Xcode]
+├── IrisDNSExtension/           # DNS proxy extension (NEDNSProxyProvider)
 │   ├── DNSProxyProvider.swift  # Intercepts DNS, forwards via DoH, records queries
 │   ├── ExtensionDoHClient.swift # Lightweight DoH client using IP addresses directly
 │   ├── DNSExtensionXPCService.swift # XPC service for app communication
 │   └── main.swift
 ├── Packages/
-│   ├── IrisShared/             # ExtensionManager, ExtensionTypes (.network/.endpoint/.dns), XPC protocols
+│   ├── IrisShared/             # ExtensionManager, ExtensionTypes, XPC protocols, errors
 │   ├── IrisProcess/            # Process monitoring
 │   ├── IrisNetwork/            # Network monitor (SecurityStore, IPDetailPopover)
 │   ├── IrisDisk/               # Disk usage
@@ -262,7 +190,8 @@ iris/
 │   ├── IrisCertificates/       # CA + leaf cert generation
 │   ├── IrisWiFi/               # WiFi monitoring (CoreWLAN + system_profiler)
 │   ├── IrisProxy/              # Proxy UI (ProxyStore, ProxyMonitorView, HTTPFlowDetailView)
-│   ├── IrisDNS/                # DNS monitoring [NEW]
+│   ├── IrisSecurity/            # APT detection (20+ scanners, evidence model, views)
+│   ├── IrisDNS/                # DNS monitoring
 │   │   ├── Models/             # DNSMessage.swift, DNSQuery.swift
 │   │   ├── Services/           # DoHClient.swift, DNSMessageParser.swift
 │   │   ├── State/              # DNSStore.swift
@@ -280,13 +209,13 @@ iris/
 
 ## Current Development State (2026-02-09)
 
-All 5 targets build. 10 packages, 4 system extensions, ~294 Swift files / ~38K lines.
+All 5 targets build. 11 packages, 4 system extensions, ~303 Swift files / ~37K lines.
 
-**Working:** Network filter, proxy MITM, WiFi, disk, satellite, process monitoring, certificates, DNS (code only — not yet in Xcode project).
+**All features working:** Network filter, proxy MITM, WiFi, disk, satellite, process monitoring, certificates, DNS, security scanning. All packages and extensions in Xcode project.
 
-**Pending Xcode config:** IrisDNSExtension target, IrisDNS package dependency, IrisSecurity package dependency (blocks SecurityHubView in HomeView).
+**IrisSecurity (61 files, ~8.8K lines):** 20+ scanners, evidence-based scoring (PersistenceScanner), IPSW baseline structure (baseline-25C56.json — empty, needs data). ProcessEnumeration shared helper. SigningVerifier with Team ID + hardened runtime. ProcessAnomaly factories (.filesystem(), .forProcess()). All scanners wired to views.
 
-**IrisSecurity (57 files, ~8.8K lines):** 20 scanners, evidence-based scoring model (PersistenceScanner), IPSW baseline (baseline-25C56.json). ProcessEnumeration shared helper. SigningVerifier with Team ID + hardened runtime. All scanners wired to views. 3 broken scanners need rewrite: TCCMonitor (needs FDA+SQLite), NetworkAnomalyDetector (needs lsof), PersistenceMonitor (needs ES events).
+**Still broken (architectural):** TCCMonitor (SIP blocks TCC.db), NetworkAnomalyDetector (netstat has no PIDs on macOS), HTTP pipeline (only first request per connection captured).
 
 **Architecture is optimal:** NEFilterDataProvider + NEAppProxyProvider + NEDNSProxyProvider. NEPacketTunnelProvider was researched and rejected (see DESIGN_DECISIONS.md).
 

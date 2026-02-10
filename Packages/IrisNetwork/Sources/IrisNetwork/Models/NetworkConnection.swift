@@ -59,6 +59,10 @@ public struct NetworkConnection: Identifiable, Sendable, Codable, Equatable {
     public var httpRawRequest: String?
     public var httpRawResponse: String?
 
+    // Capture stats (how many raw bytes are buffered in the extension)
+    public var capturedOutboundBytes: Int?
+    public var capturedInboundBytes: Int?
+
     public init(
         id: UUID = UUID(),
         processId: Int32,
@@ -103,7 +107,9 @@ public struct NetworkConnection: Identifiable, Sendable, Codable, Equatable {
         httpStatusReason: String? = nil,
         httpResponseContentType: String? = nil,
         httpRawRequest: String? = nil,
-        httpRawResponse: String? = nil
+        httpRawResponse: String? = nil,
+        capturedOutboundBytes: Int? = nil,
+        capturedInboundBytes: Int? = nil
     ) {
         self.id = id
         self.processId = processId
@@ -149,6 +155,8 @@ public struct NetworkConnection: Identifiable, Sendable, Codable, Equatable {
         self.httpResponseContentType = httpResponseContentType
         self.httpRawRequest = httpRawRequest
         self.httpRawResponse = httpRawResponse
+        self.capturedOutboundBytes = capturedOutboundBytes
+        self.capturedInboundBytes = capturedInboundBytes
     }
 
     /// Network protocol type
@@ -242,6 +250,11 @@ public struct NetworkConnection: Identifiable, Sendable, Codable, Equatable {
     /// Whether this connection has any HTTP data
     public var hasHTTPData: Bool {
         hasHTTPRequest || hasHTTPResponse
+    }
+
+    /// Whether this connection has captured raw data buffered in the extension
+    public var hasCapturedData: Bool {
+        (capturedOutboundBytes ?? 0) + (capturedInboundBytes ?? 0) > 0
     }
 
     /// Full HTTP URL if available

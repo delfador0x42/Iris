@@ -71,9 +71,8 @@ public actor AuthorizationDBMonitor {
             if let rule = plist["rule"] as? [String] {
                 // If it's set to "allow" — instant escalation without auth
                 if rule.contains("allow") {
-                    anomalies.append(ProcessAnomaly(
-                        pid: 0, processName: right, processPath: "/var/db/auth.db",
-                        parentPID: 0, parentName: "",
+                    anomalies.append(.filesystem(
+                        name: right, path: "/var/db/auth.db",
                         technique: "AuthDB Right Set to Allow",
                         description: "Authorization right '\(right)' (\(desc)) is set to 'allow' — no authentication required. This enables silent privilege escalation.",
                         severity: .critical, mitreID: "T1548.004"
@@ -81,9 +80,8 @@ public actor AuthorizationDBMonitor {
                 }
             } else if let ruleStr = plist["rule"] as? String {
                 if ruleStr == "allow" {
-                    anomalies.append(ProcessAnomaly(
-                        pid: 0, processName: right, processPath: "/var/db/auth.db",
-                        parentPID: 0, parentName: "",
+                    anomalies.append(.filesystem(
+                        name: right, path: "/var/db/auth.db",
                         technique: "AuthDB Right Set to Allow",
                         description: "Authorization right '\(right)' (\(desc)) is set to 'allow'. No authentication required for this privileged action.",
                         severity: .critical, mitreID: "T1548.004"
@@ -111,9 +109,8 @@ public actor AuthorizationDBMonitor {
 
             // Check timeout — very long timeout means auth is rarely re-requested
             if let timeout = plist["timeout"] as? Int, timeout > 3600 {
-                anomalies.append(ProcessAnomaly(
-                    pid: 0, processName: right, processPath: "/var/db/auth.db",
-                    parentPID: 0, parentName: "",
+                anomalies.append(.filesystem(
+                    name: right, path: "/var/db/auth.db",
                     technique: "Extended Auth Timeout",
                     description: "Authorization right '\(right)' has timeout of \(timeout)s (\(timeout/3600)h). Extended timeouts reduce re-authentication frequency.",
                     severity: .low, mitreID: "T1548.004"
@@ -141,9 +138,8 @@ public actor AuthorizationDBMonitor {
             if !isApple {
                 let severity: AnomalySeverity = status == .unsigned ? .critical : .high
 
-                anomalies.append(ProcessAnomaly(
-                    pid: 0, processName: item, processPath: bundlePath,
-                    parentPID: 0, parentName: "",
+                anomalies.append(.filesystem(
+                    name: item, path: bundlePath,
                     technique: "Non-Apple Auth Plugin",
                     description: "Authorization plugin \(item) at \(bundlePath) is not Apple-signed (status: \(status.rawValue)). Auth plugins execute during login and can capture credentials or grant unauthorized access.",
                     severity: severity, mitreID: "T1556"
@@ -168,10 +164,8 @@ public actor AuthorizationDBMonitor {
         // auth.db should only change during OS updates
         let daysSinceModified = Date().timeIntervalSince(modDate) / 86400
         if daysSinceModified < 7 {
-            anomalies.append(ProcessAnomaly(
-                pid: 0, processName: "auth.db",
-                processPath: authDBPath,
-                parentPID: 0, parentName: "",
+            anomalies.append(.filesystem(
+                name: "auth.db", path: authDBPath,
                 technique: "Recently Modified AuthDB",
                 description: "Authorization database was modified \(String(format: "%.1f", daysSinceModified)) days ago. Outside of OS updates, changes to auth.db are suspicious.",
                 severity: .medium, mitreID: "T1548.004"

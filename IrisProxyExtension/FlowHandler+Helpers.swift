@@ -58,7 +58,8 @@ extension FlowHandler {
         if let contentLength = request.contentLength, contentLength > 0,
            request.headerEndIndex < buffer.count {
             let bodyStart = buffer.index(buffer.startIndex, offsetBy: request.headerEndIndex)
-            return Data(buffer[bodyStart...])
+            let bodyEnd = buffer.index(bodyStart, offsetBy: min(contentLength, buffer.count - request.headerEndIndex))
+            return Data(buffer[bodyStart..<bodyEnd])
         }
         return nil
     }
@@ -68,7 +69,8 @@ extension FlowHandler {
         if let contentLength = response.contentLength, contentLength > 0,
            response.headerEndIndex < buffer.count {
             let bodyStart = buffer.index(buffer.startIndex, offsetBy: response.headerEndIndex)
-            return Data(buffer[bodyStart...])
+            let bodyEnd = buffer.index(bodyStart, offsetBy: min(contentLength, buffer.count - response.headerEndIndex))
+            return Data(buffer[bodyStart..<bodyEnd])
         }
         return nil
     }

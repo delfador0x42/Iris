@@ -36,6 +36,14 @@ class FilterDataProvider: NEFilterDataProvider {
     /// A browser with 50 connections would otherwise verify the same binary 50 times.
     var signingIdCache: [pid_t: String?] = [:]
 
+    // MARK: - Capture Budget
+
+    /// Total bytes used by raw capture buffers across all connections
+    var totalCaptureBytes: Int = 0
+
+    /// Maximum capture memory budget in bytes (default 30GB, user adjustable via XPC)
+    var captureMemoryBudget: Int = 30 * 1024 * 1024 * 1024
+
     // MARK: - Connection Tracking
 
     struct ConnectionTracker {
@@ -53,6 +61,10 @@ class FilterDataProvider: NEFilterDataProvider {
         var requestParser: HTTPParser.StreamingRequestParser?
         var responseParser: HTTPParser.StreamingResponseParser?
         var isHTTPParsed: Bool = false
+
+        // Raw capture buffers (full network tap)
+        var rawOutbound: Data = Data()
+        var rawInbound: Data = Data()
     }
 
     // MARK: - HTTP Data Structures (for XPC)
@@ -130,6 +142,9 @@ class FilterDataProvider: NEFilterDataProvider {
         // Remove stale connections and their flow mappings atomically
         let staleIdSet = Set(staleIds)
         for id in staleIds {
+            if let tracker = connections[id] {
+                totalCaptureBytes -= tracker.rawOutbound.count + tracker.rawInbound.count
+            }
             connections.removeValue(forKey: id)
         }
         // Only remove flow entries pointing to stale IDs (avoids rebuilding entire dict)

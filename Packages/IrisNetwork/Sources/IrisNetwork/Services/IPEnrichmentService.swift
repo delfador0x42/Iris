@@ -235,13 +235,14 @@ public actor IPEnrichmentService {
 
     /// Enrich geolocation with fallback chain
     private func enrichGeolocation(_ ip: String) async -> GeoIPService.GeoIPResult? {
-        // Try ip-api first (fast, high rate limit)
-        if let result = await GeoIPService.shared.lookup(ip) {
+        // Try ipinfo.io first (HTTPS, 50K/month free)
+        // ip-api.com (GeoIPService) is HTTP-only on free tier — blocked by ATS
+        if let result = await IPInfoService.shared.lookup(ip) {
             return result
         }
 
-        // Fallback to ipinfo.io
-        if let result = await IPInfoService.shared.lookup(ip) {
+        // Fallback to ip-api (only works with ATS exception or paid HTTPS plan)
+        if let result = await GeoIPService.shared.lookup(ip) {
             return result
         }
 

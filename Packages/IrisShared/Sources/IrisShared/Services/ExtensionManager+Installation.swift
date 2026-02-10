@@ -10,7 +10,7 @@ extension ExtensionManager {
 
     /// Install a specific extension
     public func installExtension(_ type: ExtensionType) {
-        logger.info("Requesting \(type.displayName) extension installation...")
+        logger.info("[INSTALL] Requesting \(type.displayName) extension installation (bundle: \(type.bundleIdentifier))")
         pendingInstallationType = type
 
         switch type {
@@ -30,12 +30,14 @@ extension ExtensionManager {
             queue: .main
         )
         request.delegate = self
+        logger.info("[INSTALL] Submitting OSSystemExtensionRequest for \(type.displayName)")
         OSSystemExtensionManager.shared.submitRequest(request)
+        logger.info("[INSTALL] Request submitted for \(type.displayName) — waiting for delegate callback")
     }
 
     /// Uninstall a specific extension
     public func uninstallExtension(_ type: ExtensionType) {
-        logger.info("Requesting \(type.displayName) extension uninstallation...")
+        logger.info("[UNINSTALL] Requesting \(type.displayName) extension uninstallation (bundle: \(type.bundleIdentifier))")
         pendingInstallationType = type
 
         let request = OSSystemExtensionRequest.deactivationRequest(
@@ -44,6 +46,7 @@ extension ExtensionManager {
         )
         request.delegate = self
         OSSystemExtensionManager.shared.submitRequest(request)
+        logger.info("[UNINSTALL] Request submitted for \(type.displayName)")
     }
 
     /// Install all extensions

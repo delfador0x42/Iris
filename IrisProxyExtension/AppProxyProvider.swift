@@ -48,24 +48,27 @@ class AppProxyProvider: NEAppProxyProvider {
     override func stopProxy(with reason: NEProviderStopReason) async {
         logger.info("Stopping proxy extension with reason: \(String(describing: reason))")
         isActive = false
+        closeAndRemoveAllFlows()
+        xpcService.stop()
+        flowHandler = nil
+        logger.info("Proxy extension stopped")
+    }
 
+    /// Closes all active flows under lock. Extracted from async stopProxy
+    /// to avoid NSLock.lock() in async context (Swift 6 breaking).
+    private func closeAndRemoveAllFlows() {
         flowsLock.lock()
         for (_, flow) in activeFlows {
             flow.closeReadWithError(nil)
             flow.closeWriteWithError(nil)
         }
         activeFlows.removeAll()
-        // Close UDP flows too
         for (_, flow) in activeUDPFlows {
             flow.closeReadWithError(nil)
             flow.closeWriteWithError(nil)
         }
         activeUDPFlows.removeAll()
         flowsLock.unlock()
-
-        xpcService.stop()
-        flowHandler = nil
-        logger.info("Proxy extension stopped")
     }
 
     // MARK: - Flow Handling
@@ -140,25 +143,19 @@ class AppProxyProvider: NEAppProxyProvider {
     }
 
     private func relayUDPFlow(_ flow: NEAppProxyUDPFlow, flowId: UUID) {
-        let closedLock = NSLock()
-        var closed = false
+        let closedFlag = AtomicFlag()
 
         // Schedule cleanup after timeout
         Task {
             try? await Task.sleep(nanoseconds: Self.udpRelayTimeout)
-            closedLock.lock()
-            closed = true
-            closedLock.unlock()
+            _ = closedFlag.trySet()
             flow.closeReadWithError(nil)
             flow.closeWriteWithError(nil)
             removeUDPFlow(flowId)
         }
 
         func readLoop() {
-            closedLock.lock()
-            let done = closed
-            closedLock.unlock()
-            if done { return }
+            if closedFlag.isSet { return }
 
             flow.readDatagrams { [weak self] datagrams, endpoints, error in
                 if error != nil {

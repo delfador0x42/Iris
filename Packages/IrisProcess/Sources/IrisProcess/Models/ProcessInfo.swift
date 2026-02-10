@@ -162,6 +162,14 @@ public struct ProcessInfo: Identifiable, Sendable, Codable, Equatable {
         name.hasPrefix(".")
     }
 
+    // MARK: - CodingKeys
+
+    /// Exclude ephemeral properties from Codable — they're computed app-side
+    enum CodingKeys: String, CodingKey {
+        case id, pid, ppid, path, name, arguments, userId, groupId
+        case codeSigningInfo, timestamp
+    }
+
     /// Cached suspicion reasons (call `refreshSuspicion()` to update).
     public var suspicionReasons: [SuspicionReason] = []
 
@@ -189,7 +197,9 @@ public struct ProcessInfo: Identifiable, Sendable, Codable, Equatable {
         }
         if isFromSuspiciousLocation { reasons.append(.suspiciousLocation) }
         if isHiddenProcess { reasons.append(.hiddenProcess) }
-        if hasManPage == false { reasons.append(.noManPage) }
+        // Only flag noManPage for non-Apple binaries — most Apple daemons lack man pages
+        let isApple = codeSigningInfo?.isAppleSigned == true || codeSigningInfo?.isPlatformBinary == true
+        if hasManPage == false && !isApple { reasons.append(.noManPage) }
         if let res = resources, res.cpuUsagePercent > 80 { reasons.append(.highCPU) }
         if !FileManager.default.fileExists(atPath: path) { reasons.append(.deletedBinary) }
         if Date().timeIntervalSince(timestamp) < 10 { reasons.append(.recentlySpawned) }

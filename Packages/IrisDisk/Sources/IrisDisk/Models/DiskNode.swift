@@ -11,7 +11,7 @@ public struct DiskNode: Identifiable, Sendable, Equatable, Codable {
     public let depth: Int
     public let permissionDenied: Bool
 
-    public init(
+    public nonisolated init(
         id: UUID = UUID(),
         name: String,
         path: URL,

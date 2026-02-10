@@ -19,6 +19,12 @@ class ESClient {
     /// Serial queue for processing ES events off the callback thread
     private let processingQueue = DispatchQueue(label: "com.wudan.iris.endpoint.processing")
 
+    /// Event counters for periodic summary logging
+    private var execCount: Int = 0
+    private var forkCount: Int = 0
+    private var exitCount: Int = 0
+    private var lastSummaryTime = Date()
+
     /// XPC service for communication with main app
     private(set) var xpcService: ESXPCService?
 
@@ -40,16 +46,19 @@ class ESClient {
 
     func start() throws {
         guard !isRunning else {
-            logger.warning("ESClient already running")
+            logger.warning("[ES] ESClient already running, skipping start()")
             return
         }
 
-        logger.info("Starting Endpoint Security client...")
+        logger.info("[ES] Starting Endpoint Security client (PID \(getpid()), UID \(getuid()))...")
 
+        logger.info("[ES] Creating XPC service...")
         xpcService = ESXPCService()
         xpcService?.esClient = self
         xpcService?.start()
+        logger.info("[ES] XPC service started")
 
+        logger.info("[ES] Calling es_new_client()...")
         var newClient: OpaquePointer?
         let result = es_new_client(&newClient) { [weak self] _, message in
             self?.handleMessage(message)
@@ -57,15 +66,17 @@ class ESClient {
 
         guard result == ES_NEW_CLIENT_RESULT_SUCCESS, let esClient = newClient else {
             let reason = esClientErrorDescription(result)
-            logger.error("es_new_client failed: \(reason)")
+            logger.error("[ES] es_new_client FAILED: result=\(result.rawValue) reason=\(reason)")
+            startupError = reason
             throw ESClientError.clientCreationFailed(reason)
         }
 
         self.client = esClient
+        logger.info("[ES] es_new_client SUCCESS — client created")
 
         var selfToken = auditTokenForSelf()
-        es_mute_process(esClient, &selfToken)
-        logger.info("Muted own process (PID \(getpid()))")
+        let muteResult = es_mute_process(esClient, &selfToken)
+        logger.info("[ES] es_mute_process(self PID \(getpid())): \(muteResult == ES_RETURN_SUCCESS ? "OK" : "FAILED")")
 
         let events: [es_event_type_t] = [
             ES_EVENT_TYPE_NOTIFY_EXEC,
@@ -73,17 +84,21 @@ class ESClient {
             ES_EVENT_TYPE_NOTIFY_EXIT,
         ]
 
+        logger.info("[ES] Subscribing to \(events.count) event types (EXEC, FORK, EXIT)...")
         let subResult = es_subscribe(esClient, events, UInt32(events.count))
         guard subResult == ES_RETURN_SUCCESS else {
+            logger.error("[ES] es_subscribe FAILED — deleting client")
             es_delete_client(esClient)
             self.client = nil
             throw ESClientError.subscriptionFailed
         }
+        logger.info("[ES] es_subscribe SUCCESS — listening for events")
 
         seedProcessTable()
 
         isRunning = true
-        logger.info("Endpoint Security client started — monitoring EXEC/FORK/EXIT")
+        startupError = nil
+        logger.info("[ES] Endpoint Security client fully started — isRunning=true, processTable has \(self.processTable.count) entries")
     }
 
     func stop() {
@@ -107,18 +122,15 @@ class ESClient {
     // MARK: - ES Event Handling
 
     private func handleMessage(_ message: UnsafePointer<es_message_t>) {
-        guard let copy = es_copy_message(message) else {
-            logger.error("es_copy_message failed")
-            return
-        }
+        es_retain_message(message)
 
         processingQueue.async { [weak self] in
-            self?.processEvent(copy)
-            es_free_message(copy)
+            self?.processEvent(message)
+            es_release_message(message)
         }
     }
 
-    private func processEvent(_ message: UnsafeMutablePointer<es_message_t>) {
+    private func processEvent(_ message: UnsafePointer<es_message_t>) {
         switch message.pointee.event_type {
 
         case ES_EVENT_TYPE_NOTIFY_EXEC:
@@ -130,7 +142,8 @@ class ESClient {
             processTable[pid] = info
             processLock.unlock()
 
-            logger.debug("EXEC: \(info.name) (PID \(pid))")
+            execCount += 1
+            logger.debug("[ES] EXEC: \(info.name) (PID \(pid))")
 
         case ES_EVENT_TYPE_NOTIFY_FORK:
             let child = message.pointee.event.fork.child.pointee
@@ -152,7 +165,8 @@ class ESClient {
             processTable[childPid] = stub
             processLock.unlock()
 
-            logger.debug("FORK: child PID \(childPid) from parent PID \(parentPid)")
+            forkCount += 1
+            logger.debug("[ES] FORK: child PID \(childPid) from parent PID \(parentPid)")
 
         case ES_EVENT_TYPE_NOTIFY_EXIT:
             let proc = message.pointee.process.pointee
@@ -162,10 +176,21 @@ class ESClient {
             processTable.removeValue(forKey: pid)
             processLock.unlock()
 
-            logger.debug("EXIT: PID \(pid)")
+            exitCount += 1
+            logger.debug("[ES] EXIT: PID \(pid)")
 
         default:
             break
+        }
+
+        // Log summary every 30 seconds
+        let now = Date()
+        if now.timeIntervalSince(lastSummaryTime) > 30 {
+            processLock.lock()
+            let tableSize = processTable.count
+            processLock.unlock()
+            logger.info("[ES] Event summary: exec=\(self.execCount) fork=\(self.forkCount) exit=\(self.exitCount) tableSize=\(tableSize)")
+            self.lastSummaryTime = now
         }
     }
 

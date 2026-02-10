@@ -39,7 +39,8 @@ Any app → DNS lookup (A/AAAA/CNAME/...)
 
 ## Key Files
 - `DNSProxyProvider.swift` — NEDNSProxyProvider subclass, flow entry point
-- `DNSProxyProvider+FlowHandling.swift` — UDP/TCP flow read/write
-- `DNSProxyProvider+StatusTracking.swift` — Query counting, server config
+- `DNSProxyProvider+FlowHandlers.swift` — UDP/TCP flow read/write
+- `DNSProxyProvider+Parsing.swift` — DNS wire format parsing helpers
+- `ExtensionDoHClient.swift` — Lightweight DoH client (IP-based, no DNS needed)
 - `DNSExtensionXPCService.swift` — Mach XPC listener, DNSXPCProtocol
-- `DNSProxyHelper.swift` — NEDNSProxyManager configuration (enable/disable)
+- DNSProxyHelper lives in `Packages/IrisShared/` (configures NEDNSProxyManager)

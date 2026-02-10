@@ -76,8 +76,20 @@ public actor ProcessResourceCollector {
         return bufSize / Int32(MemoryLayout<proc_fdinfo>.stride)
     }
 
-    /// Remove stale entries for processes that no longer exist
-    public func pruneStale(activePids: Set<pid_t>) {
-        previousSamples = previousSamples.filter { activePids.contains($0.key) }
+    /// Collect resource metrics for all PIDs in a single actor call.
+    /// Avoids N sequential actor hops for N processes.
+    public func collectBatch(pids: [pid_t]) -> [pid_t: ProcessResourceInfo] {
+        // Prune stale entries
+        let activeSet = Set(pids)
+        previousSamples = previousSamples.filter { activeSet.contains($0.key) }
+
+        var results: [pid_t: ProcessResourceInfo] = [:]
+        results.reserveCapacity(pids.count)
+        for pid in pids {
+            if let info = collect(pid: pid) {
+                results[pid] = info
+            }
+        }
+        return results
     }
 }

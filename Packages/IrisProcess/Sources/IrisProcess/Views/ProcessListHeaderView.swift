@@ -54,6 +54,9 @@ struct ProcessListHeaderView: View {
                 .background(Color.white.opacity(0.05))
                 .cornerRadius(8)
 
+                // ES status indicator
+                esStatusBadge
+
                 Spacer()
 
                 // Last update
@@ -72,5 +75,34 @@ struct ProcessListHeaderView: View {
         .padding(.vertical, 16)
         .padding(.horizontal, 20)
         .background(Color.black.opacity(0.3))
+    }
+
+    private var esStatusBadge: some View {
+        let (color, icon, label): (Color, String, String) = {
+            switch store.esExtensionStatus {
+            case .running:
+                return (.green, "shield.checkered", "ES Active")
+            case .esDisabled:
+                return (.orange, "shield.slash", "ES Disabled")
+            case .notInstalled:
+                return (.red, "shield.slash", "ES Not Installed")
+            case .error:
+                return (.red, "exclamationmark.shield", "ES Error")
+            case .unknown:
+                return (.gray, "shield", "Checking...")
+            }
+        }()
+
+        return HStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.system(size: 10))
+            Text(label)
+                .font(.system(size: 10, weight: .medium))
+        }
+        .foregroundColor(color)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(color.opacity(0.15))
+        .cornerRadius(6)
     }
 }

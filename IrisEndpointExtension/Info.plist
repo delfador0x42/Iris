@@ -18,5 +18,7 @@
 	<string>Copyright 2024. All rights reserved.</string>
 	<key>NSSystemExtensionUsageDescription</key>
 	<string>Iris uses this extension to monitor process execution for security analysis.</string>
+	<key>NSEndpointSecurityMachServiceName</key>
+	<string>99HGW2AR62.com.wudan.iris.endpoint.xpc</string>
 </dict>
 </plist>

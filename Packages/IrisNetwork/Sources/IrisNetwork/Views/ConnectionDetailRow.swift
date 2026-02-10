@@ -49,6 +49,14 @@ struct ConnectionDetailRow: View {
                             HTTPStatusBadge(statusCode: statusCode)
                         }
 
+                        // Capture indicator
+                        if connection.hasCapturedData {
+                            Image(systemName: "waveform")
+                                .foregroundColor(.green.opacity(0.8))
+                                .font(.system(size: 10))
+                                .help("Raw data captured")
+                        }
+
                         // Vulnerability indicator
                         if connection.hasCriticalVulns {
                             Image(systemName: "exclamationmark.shield.fill")

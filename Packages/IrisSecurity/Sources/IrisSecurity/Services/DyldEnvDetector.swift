@@ -54,7 +54,7 @@ public actor DyldEnvDetector {
 
         for pid in snapshot.pids {
             guard pid > 0 else { continue }
-            let envVars = getProcessEnvironment(pid)
+            let envVars = ProcessEnumeration.getProcessEnvironment(pid)
 
             for (key, value) in envVars {
                 for dangerVar in Self.dangerousVars where key == dangerVar.name {
@@ -65,9 +65,8 @@ public actor DyldEnvDetector {
                     let isSystem = path.hasPrefix("/System/") || path.hasPrefix("/usr/")
                     let severity = isSystem ? .critical : dangerVar.severity
 
-                    anomalies.append(ProcessAnomaly(
-                        pid: pid, processName: name, processPath: path,
-                        parentPID: 0, parentName: "",
+                    anomalies.append(.forProcess(
+                        pid: pid, name: name, path: path,
                         technique: "\(key) Injection",
                         description: "Process \(name) (PID \(pid)) has \(key)=\(value.prefix(200)). \(dangerVar.description).",
                         severity: severity, mitreID: "T1574.006"
@@ -98,9 +97,8 @@ public actor DyldEnvDetector {
                 if let envVars = plist["EnvironmentVariables"] as? [String: String] {
                     for (key, value) in envVars {
                         for dangerVar in Self.dangerousVars where key == dangerVar.name {
-                            anomalies.append(ProcessAnomaly(
-                                pid: 0, processName: file, processPath: path,
-                                parentPID: 0, parentName: "",
+                            anomalies.append(.filesystem(
+                                name: file, path: path,
                                 technique: "Plist \(key) Injection",
                                 description: "LaunchAgent/Daemon \(file) sets \(key)=\(value.prefix(200)). Every process launched by this plist will have this dylib injected.",
                                 severity: .critical, mitreID: "T1574.006"
@@ -137,10 +135,8 @@ public actor DyldEnvDetector {
                 for dangerVar in Self.dangerousVars {
                     if trimmed.contains(dangerVar.name) &&
                        (trimmed.contains("export") || trimmed.contains("=")) {
-                        anomalies.append(ProcessAnomaly(
-                            pid: 0, processName: URL(fileURLWithPath: profile).lastPathComponent,
-                            processPath: profile,
-                            parentPID: 0, parentName: "",
+                        anomalies.append(.filesystem(
+                            name: URL(fileURLWithPath: profile).lastPathComponent, path: profile,
                             technique: "Shell Profile \(dangerVar.name)",
                             description: "Shell profile \(profile) line \(lineNum + 1) sets \(dangerVar.name). Every shell session will inherit this injection.",
                             severity: dangerVar.severity, mitreID: "T1574.006"
@@ -173,68 +169,4 @@ public actor DyldEnvDetector {
         return anomalies
     }
 
-    // MARK: - Process Utilities
-
-    /// Parse KERN_PROCARGS2: skip argc, skip args, then parse env vars
-    private func getProcessEnvironment(_ pid: pid_t) -> [(String, String)] {
-        var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, pid]
-        var size: Int = 0
-        guard sysctl(&mib, 3, nil, &size, nil, 0) == 0, size > 0 else { return [] }
-
-        // Allocate with margin to handle size changes between sysctl calls
-        let allocSize = size + 512
-        let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: allocSize)
-        defer { buffer.deallocate() }
-        var actualSize = allocSize
-        guard sysctl(&mib, 3, buffer, &actualSize, nil, 0) == 0 else { return [] }
-        size = actualSize
-        guard size > MemoryLayout<Int32>.size else { return [] }
-
-        let argc = buffer.withMemoryRebound(to: Int32.self, capacity: 1) { $0.pointee }
-
-        // Skip past argc
-        var offset = MemoryLayout<Int32>.size
-        // Skip executable path
-        while offset < size && buffer[offset] != 0 { offset += 1 }
-        // Skip null padding
-        while offset < size && buffer[offset] == 0 { offset += 1 }
-
-        // Skip argc arguments
-        var argsSkipped = 0
-        while offset < size && argsSkipped < Int(argc) {
-            if buffer[offset] == 0 {
-                argsSkipped += 1
-                // Skip additional null padding
-                while offset < size && buffer[offset] == 0 { offset += 1 }
-            } else {
-                offset += 1
-            }
-        }
-
-        // Now we're in the environment variables section
-        var envVars: [(String, String)] = []
-        while offset < size {
-            // Read one null-terminated string
-            var str = ""
-            while offset < size && buffer[offset] != 0 {
-                str.append(Character(UnicodeScalar(buffer[offset])))
-                offset += 1
-            }
-            offset += 1 // skip null
-
-            if str.isEmpty { break } // Two consecutive nulls = end
-
-            // Split on first '='
-            if let eqIdx = str.firstIndex(of: "=") {
-                let key = String(str[str.startIndex..<eqIdx])
-                let value = String(str[str.index(after: eqIdx)...])
-                // Only collect DYLD_ vars (performance: skip the rest)
-                if key.hasPrefix("DYLD_") {
-                    envVars.append((key, value))
-                }
-            }
-        }
-
-        return envVars
-    }
 }

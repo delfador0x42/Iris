@@ -118,16 +118,17 @@ final class TLSSession {
 
     // MARK: - Async Data Signaling
 
+    /// Checks if data is available or session is closed (synchronous, lock-safe).
+    private func hasBufferedDataOrClosed() -> Bool {
+        readBufferLock.lock()
+        defer { readBufferLock.unlock() }
+        return !readBuffer.isEmpty || isClosed
+    }
+
     /// Waits asynchronously for new data in the read buffer.
     /// Does NOT hold sslQueue, allowing writes to proceed.
     func waitForData() async {
-        // Check if data is already available before suspending
-        readBufferLock.lock()
-        if !readBuffer.isEmpty || isClosed {
-            readBufferLock.unlock()
-            return
-        }
-        readBufferLock.unlock()
+        if hasBufferedDataOrClosed() { return }
 
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             waiterLock.lock()

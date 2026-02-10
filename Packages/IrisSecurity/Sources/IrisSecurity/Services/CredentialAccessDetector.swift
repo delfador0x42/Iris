@@ -80,7 +80,7 @@ public actor CredentialAccessDetector {
             guard let credInfo = Self.credentialBinaries[name] else { continue }
 
             // Get process arguments
-            let args = getProcessArguments(pid)
+            let args = ProcessEnumeration.getProcessArguments(pid)
             let argsJoined = args.joined(separator: " ").lowercased()
 
             // Check for suspicious argument patterns
@@ -169,9 +169,8 @@ public actor CredentialAccessDetector {
                 }
 
                 for credPath in credentialPaths where filePath == credPath {
-                    anomalies.append(ProcessAnomaly(
-                        pid: pid, processName: name, processPath: path,
-                        parentPID: 0, parentName: "",
+                    anomalies.append(.forProcess(
+                        pid: pid, name: name, path: path,
                         technique: "Open Handle to Credential File",
                         description: "Process \(name) (PID \(pid)) has open file descriptor to \(credPath). This may indicate credential harvesting.",
                         severity: .high, mitreID: "T1555"
@@ -210,10 +209,8 @@ public actor CredentialAccessDetector {
             let worldWrite = perms & 0o002
 
             if worldRead != 0 || worldWrite != 0 || (maxPerms == 0o600 && (groupRead != 0 || groupWrite != 0)) {
-                anomalies.append(ProcessAnomaly(
-                    pid: 0, processName: URL(fileURLWithPath: path).lastPathComponent,
-                    processPath: path,
-                    parentPID: 0, parentName: "",
+                anomalies.append(.filesystem(
+                    name: URL(fileURLWithPath: path).lastPathComponent, path: path,
                     technique: "Exposed Credential File",
                     description: "Credential file \(path) has overly permissive permissions: \(String(perms, radix: 8)). Expected max: \(String(maxPerms, radix: 8)).",
                     severity: .medium, mitreID: "T1552.004"
@@ -224,10 +221,8 @@ public actor CredentialAccessDetector {
         // Check for .netrc (plaintext credentials)
         let netrc = "\(home)/.netrc"
         if fm.fileExists(atPath: netrc) {
-            anomalies.append(ProcessAnomaly(
-                pid: 0, processName: ".netrc",
-                processPath: netrc,
-                parentPID: 0, parentName: "",
+            anomalies.append(.filesystem(
+                name: ".netrc", path: netrc,
                 technique: "Plaintext Credential File",
                 description: ".netrc file exists with plaintext credentials for FTP/HTTP authentication.",
                 severity: .medium, mitreID: "T1552.001"
@@ -243,10 +238,8 @@ public actor CredentialAccessDetector {
 
         for (path, service) in cloudCreds {
             if fm.fileExists(atPath: path) {
-                anomalies.append(ProcessAnomaly(
-                    pid: 0, processName: URL(fileURLWithPath: path).lastPathComponent,
-                    processPath: path,
-                    parentPID: 0, parentName: "",
+                anomalies.append(.filesystem(
+                    name: URL(fileURLWithPath: path).lastPathComponent, path: path,
                     technique: "\(service) Credentials on Disk",
                     description: "\(service) credential file found at \(path). Cloud credentials on disk are high-value targets for APTs.",
                     severity: .low, mitreID: "T1552.001"
@@ -297,7 +290,7 @@ public actor CredentialAccessDetector {
             ]
             guard scriptInterpreters.contains(name) else { continue }
 
-            let args = getProcessArguments(pid)
+            let args = ProcessEnumeration.getProcessArguments(pid)
             let argsJoined = args.joined(separator: " ").lowercased()
 
             let credKeywords = [
@@ -307,9 +300,8 @@ public actor CredentialAccessDetector {
             ]
 
             for keyword in credKeywords where argsJoined.contains(keyword) {
-                anomalies.append(ProcessAnomaly(
-                    pid: pid, processName: name, processPath: path,
-                    parentPID: 0, parentName: "",
+                anomalies.append(.forProcess(
+                    pid: pid, name: name, path: path,
                     technique: "Script Accessing Browser Credentials",
                     description: "Script interpreter \(name) (PID \(pid)) appears to reference browser credential material: matched '\(keyword)' in args.",
                     severity: .critical, mitreID: "T1539"
@@ -321,48 +313,4 @@ public actor CredentialAccessDetector {
         return anomalies
     }
 
-    // MARK: - Process Utilities
-
-    private func getProcessArguments(_ pid: pid_t) -> [String] {
-        var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, pid]
-        var size: Int = 0
-        guard sysctl(&mib, 3, nil, &size, nil, 0) == 0, size > 0 else { return [] }
-
-        // Allocate with margin to handle size changes between sysctl calls
-        let allocSize = size + 512
-        let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: allocSize)
-        defer { buffer.deallocate() }
-        var actualSize = allocSize
-        guard sysctl(&mib, 3, buffer, &actualSize, nil, 0) == 0 else { return [] }
-        size = actualSize
-
-        // First 4 bytes = argc
-        guard size > MemoryLayout<Int32>.size else { return [] }
-        let argc = buffer.withMemoryRebound(to: Int32.self, capacity: 1) { $0.pointee }
-
-        // Skip past argc and executable path
-        var offset = MemoryLayout<Int32>.size
-        // Skip executable path
-        while offset < size && buffer[offset] != 0 { offset += 1 }
-        // Skip null terminators
-        while offset < size && buffer[offset] == 0 { offset += 1 }
-
-        // Parse arguments
-        var args: [String] = []
-        var current = ""
-        for i in offset..<size {
-            if buffer[i] == 0 {
-                if !current.isEmpty {
-                    args.append(current)
-                    if args.count >= Int(argc) { break }
-                    current = ""
-                }
-            } else {
-                current.append(Character(UnicodeScalar(buffer[i])))
-            }
-        }
-        if !current.isEmpty && args.count < Int(argc) { args.append(current) }
-
-        return args
-    }
 }

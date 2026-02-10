@@ -42,9 +42,8 @@ public actor StealthScanner {
                 continue
             }
             for file in contents where file.hasPrefix(".") && file.hasSuffix(".plist") {
-                anomalies.append(ProcessAnomaly(
-                    pid: 0, processName: file, processPath: "\(dir)/\(file)",
-                    parentPID: 0, parentName: "filesystem",
+                anomalies.append(.filesystem(
+                    name: file, path: "\(dir)/\(file)",
                     technique: "Hidden LaunchAgent/Daemon",
                     description: "Dot-prefixed plist hidden from Finder: \(dir)/\(file). This is a common APT technique.",
                     severity: .critical, mitreID: "T1564.001"
@@ -67,9 +66,8 @@ public actor StealthScanner {
         for file in files where file.hasSuffix(".plist") {
             let path = "\(emondDir)/\(file)"
             // Any emond rule is suspicious — it's almost never used legitimately
-            anomalies.append(ProcessAnomaly(
-                pid: 0, processName: file, processPath: path,
-                parentPID: 0, parentName: "filesystem",
+            anomalies.append(.filesystem(
+                name: file, path: path,
                 technique: "Emond Rule Persistence",
                 description: "Event Monitor daemon rule found. Emond is rarely used legitimately and is a known persistence mechanism.",
                 severity: .high, mitreID: "T1546.014"
@@ -88,9 +86,8 @@ public actor StealthScanner {
         if fm.fileExists(atPath: customPamDir),
            let files = try? fm.contentsOfDirectory(atPath: customPamDir) {
             for file in files {
-                anomalies.append(ProcessAnomaly(
-                    pid: 0, processName: file, processPath: "\(customPamDir)/\(file)",
-                    parentPID: 0, parentName: "filesystem",
+                anomalies.append(.filesystem(
+                    name: file, path: "\(customPamDir)/\(file)",
                     technique: "Custom PAM Module",
                     description: "Non-standard PAM module in \(customPamDir). Could intercept authentication.",
                     severity: .critical, mitreID: "T1556.003"
@@ -111,9 +108,8 @@ public actor StealthScanner {
                     if trimmed.hasPrefix("#") { continue }
                     if trimmed.contains("/usr/local/") || trimmed.contains("/tmp/") ||
                        trimmed.contains("/Users/") {
-                        anomalies.append(ProcessAnomaly(
-                            pid: 0, processName: conf, processPath: path,
-                            parentPID: 0, parentName: "filesystem",
+                        anomalies.append(.filesystem(
+                            name: conf, path: path,
                             technique: "Modified PAM Config",
                             description: "PAM config \(conf) references non-standard path: \(trimmed)",
                             severity: .critical, mitreID: "T1556.003"
@@ -138,9 +134,8 @@ public actor StealthScanner {
                     continue
                 }
                 if content.contains("NOPASSWD") {
-                    anomalies.append(ProcessAnomaly(
-                        pid: 0, processName: file, processPath: path,
-                        parentPID: 0, parentName: "filesystem",
+                    anomalies.append(.filesystem(
+                        name: file, path: path,
                         technique: "Sudoers NOPASSWD",
                         description: "NOPASSWD entry in sudoers.d/\(file). Allows passwordless root execution.",
                         severity: .high, mitreID: "T1548.003"
@@ -168,10 +163,8 @@ public actor StealthScanner {
             .count
 
         if keyCount > 0 {
-            anomalies.append(ProcessAnomaly(
-                pid: 0, processName: "authorized_keys",
-                processPath: authKeysPath,
-                parentPID: 0, parentName: "filesystem",
+            anomalies.append(.filesystem(
+                name: "authorized_keys", path: authKeysPath,
                 technique: "SSH Authorized Keys",
                 description: "\(keyCount) SSH key(s) in authorized_keys. Verify each is expected.",
                 severity: .medium, mitreID: "T1098.004"
@@ -181,10 +174,8 @@ public actor StealthScanner {
         // Also check /var/root/.ssh/
         let rootAuthKeys = "/var/root/.ssh/authorized_keys"
         if fm.fileExists(atPath: rootAuthKeys) {
-            anomalies.append(ProcessAnomaly(
-                pid: 0, processName: "root authorized_keys",
-                processPath: rootAuthKeys,
-                parentPID: 0, parentName: "filesystem",
+            anomalies.append(.filesystem(
+                name: "root authorized_keys", path: rootAuthKeys,
                 technique: "Root SSH Keys",
                 description: "Root account has authorized_keys. High-value target for persistence.",
                 severity: .critical, mitreID: "T1098.004"
@@ -203,9 +194,8 @@ public actor StealthScanner {
         for dir in dirs {
             guard let files = try? fm.contentsOfDirectory(atPath: dir) else { continue }
             for file in files where file.hasPrefix("a") || file.hasPrefix("at.") {
-                anomalies.append(ProcessAnomaly(
-                    pid: 0, processName: file, processPath: "\(dir)/\(file)",
-                    parentPID: 0, parentName: "filesystem",
+                anomalies.append(.filesystem(
+                    name: file, path: "\(dir)/\(file)",
                     technique: "At Job Persistence",
                     description: "Scheduled at job found: \(dir)/\(file). Rarely used legitimately on macOS.",
                     severity: .high, mitreID: "T1053.002"
@@ -220,7 +210,7 @@ public actor StealthScanner {
         var anomalies: [ProcessAnomaly] = []
 
         for pid in snapshot.pids {
-            let env = getProcessEnvironment(pid)
+            let env = ProcessEnumeration.getProcessEnvironment(pid)
             for (key, value) in env {
                 let lowerKey = key.lowercased()
                 if lowerKey == "dyld_insert_libraries" ||
@@ -229,9 +219,8 @@ public actor StealthScanner {
                    lowerKey == "dyld_library_path" {
                     let path = snapshot.path(for: pid)
                     let name = path.isEmpty ? "unknown" : URL(fileURLWithPath: path).lastPathComponent
-                    anomalies.append(ProcessAnomaly(
-                        pid: pid, processName: name, processPath: path,
-                        parentPID: 0, parentName: "",
+                    anomalies.append(.forProcess(
+                        pid: pid, name: name, path: path,
                         technique: "DYLD Environment Injection",
                         description: "Process \(name) (PID \(pid)) has \(key)=\(value). Library injection detected.",
                         severity: .critical, mitreID: "T1574.006"
@@ -258,9 +247,8 @@ public actor StealthScanner {
                 // Check for quarantine xattr
                 let hasQuarantine = hasExtendedAttribute(appPath, name: "com.apple.quarantine")
                 if !hasQuarantine && dir.contains("Downloads") {
-                    anomalies.append(ProcessAnomaly(
-                        pid: 0, processName: app, processPath: appPath,
-                        parentPID: 0, parentName: "filesystem",
+                    anomalies.append(.filesystem(
+                        name: app, path: appPath,
                         technique: "Missing Quarantine Attribute",
                         description: "App in Downloads missing quarantine flag: \(app). May have been de-quarantined to bypass Gatekeeper.",
                         severity: .medium, mitreID: "T1553.001"
@@ -286,9 +274,8 @@ public actor StealthScanner {
                       let perms = attrs[.posixPermissions] as? UInt16 else { continue }
                 // Check SUID (04000) or SGID (02000)
                 if perms & 0o4000 != 0 || perms & 0o2000 != 0 {
-                    anomalies.append(ProcessAnomaly(
-                        pid: 0, processName: file, processPath: path,
-                        parentPID: 0, parentName: "filesystem",
+                    anomalies.append(.filesystem(
+                        name: file, path: path,
                         technique: "SUID/SGID in Suspicious Location",
                         description: "SUID/SGID binary in non-standard location: \(path) (perms: \(String(perms, radix: 8)))",
                         severity: .critical, mitreID: "T1548.001"
@@ -306,46 +293,4 @@ public actor StealthScanner {
         return size >= 0
     }
 
-    private func getProcessEnvironment(_ pid: pid_t) -> [(String, String)] {
-        var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, pid]
-        var size: Int = 0
-        guard sysctl(&mib, 3, nil, &size, nil, 0) == 0, size > 0 else { return [] }
-
-        var buffer = [UInt8](repeating: 0, count: size)
-        guard sysctl(&mib, 3, &buffer, &size, nil, 0) == 0 else { return [] }
-        guard size > MemoryLayout<Int32>.size else { return [] }
-
-        let argc = buffer.withUnsafeBytes { $0.load(as: Int32.self) }
-        var offset = MemoryLayout<Int32>.size
-
-        // Skip exec path
-        while offset < size && buffer[offset] != 0 { offset += 1 }
-        while offset < size && buffer[offset] == 0 { offset += 1 }
-
-        // Skip argc args
-        var argsSkipped = 0
-        while argsSkipped < argc && offset < size {
-            if buffer[offset] == 0 { argsSkipped += 1 }
-            offset += 1
-        }
-
-        // Remaining are environment variables
-        var envVars: [(String, String)] = []
-        var current = ""
-        while offset < size {
-            if buffer[offset] == 0 {
-                if current.isEmpty { break }
-                if let eqIdx = current.firstIndex(of: "=") {
-                    let key = String(current[current.startIndex..<eqIdx])
-                    let val = String(current[current.index(after: eqIdx)...])
-                    envVars.append((key, val))
-                }
-                current = ""
-            } else {
-                current.append(Character(UnicodeScalar(buffer[offset])))
-            }
-            offset += 1
-        }
-        return envVars
-    }
 }

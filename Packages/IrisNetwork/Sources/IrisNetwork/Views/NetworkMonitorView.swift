@@ -76,6 +76,7 @@ public struct NetworkMonitorView: View {
                 }
             }
         }
+        .environmentObject(store)
         .onAppear {
             // Set callback for when extension becomes ready (after user approval)
             extensionManager.onNetworkExtensionReady = { [weak store] in

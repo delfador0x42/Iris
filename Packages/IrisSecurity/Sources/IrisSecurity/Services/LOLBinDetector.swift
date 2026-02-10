@@ -196,7 +196,7 @@ public actor LOLBinDetector {
 
             // Check 4: xattr removing quarantine
             if name == "xattr" {
-                let args = getProcessArgs(pid)
+                let args = ProcessEnumeration.getProcessArguments(pid)
                 if args.contains("-d") && args.contains("com.apple.quarantine") {
                     anomalies.append(ProcessAnomaly(
                         pid: pid, processName: name, processPath: path,
@@ -210,7 +210,7 @@ public actor LOLBinDetector {
 
             // Check 5: sqlite3 accessing sensitive databases
             if name == "sqlite3" {
-                let args = getProcessArgs(pid)
+                let args = ProcessEnumeration.getProcessArguments(pid)
                 let argStr = args.joined(separator: " ")
                 if argStr.contains("TCC.db") {
                     anomalies.append(ProcessAnomaly(
@@ -234,7 +234,7 @@ public actor LOLBinDetector {
 
             // Check 6: security CLI keychain access
             if name == "security" {
-                let args = getProcessArgs(pid)
+                let args = ProcessEnumeration.getProcessArguments(pid)
                 if args.contains("dump-keychain") || args.contains("find-generic-password") ||
                    args.contains("find-internet-password") {
                     anomalies.append(ProcessAnomaly(
@@ -264,36 +264,4 @@ public actor LOLBinDetector {
         }
     }
 
-    private func getProcessArgs(_ pid: pid_t) -> [String] {
-        var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, pid]
-        var size: Int = 0
-        guard sysctl(&mib, 3, nil, &size, nil, 0) == 0, size > 0 else { return [] }
-
-        var buffer = [UInt8](repeating: 0, count: size)
-        guard sysctl(&mib, 3, &buffer, &size, nil, 0) == 0 else { return [] }
-        guard size > MemoryLayout<Int32>.size else { return [] }
-
-        let argc = buffer.withUnsafeBytes { $0.load(as: Int32.self) }
-        var offset = MemoryLayout<Int32>.size
-
-        // Skip exec path
-        while offset < size && buffer[offset] != 0 { offset += 1 }
-        // Skip null padding
-        while offset < size && buffer[offset] == 0 { offset += 1 }
-
-        // Read args
-        var args: [String] = []
-        var current = ""
-        while args.count < argc && offset < size {
-            if buffer[offset] == 0 {
-                if !current.isEmpty { args.append(current) }
-                current = ""
-            } else {
-                current.append(Character(UnicodeScalar(buffer[offset])))
-            }
-            offset += 1
-        }
-        if !current.isEmpty { args.append(current) }
-        return args
-    }
 }

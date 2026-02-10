@@ -40,6 +40,9 @@ public struct SettingsView: View {
 
                     dnsExtensionSection
 
+                    // Network Capture Section
+                    networkCaptureSection
+
                     // Permissions Section
                     permissionsSection
 

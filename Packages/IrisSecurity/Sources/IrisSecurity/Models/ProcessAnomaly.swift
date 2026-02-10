@@ -60,4 +60,32 @@ public struct ProcessAnomaly: Identifiable, Sendable, Codable, Equatable {
         self.mitreID = mitreID
         self.timestamp = timestamp
     }
+
+    /// Factory for filesystem-based findings (no running process).
+    public static func filesystem(
+        name: String, path: String,
+        technique: String, description: String,
+        severity: AnomalySeverity, mitreID: String
+    ) -> ProcessAnomaly {
+        ProcessAnomaly(
+            pid: 0, processName: name, processPath: path,
+            parentPID: 0, parentName: "",
+            technique: technique, description: description,
+            severity: severity, mitreID: mitreID
+        )
+    }
+
+    /// Factory for process-based findings without parent info.
+    public static func forProcess(
+        pid: pid_t, name: String, path: String,
+        technique: String, description: String,
+        severity: AnomalySeverity, mitreID: String
+    ) -> ProcessAnomaly {
+        ProcessAnomaly(
+            pid: pid, processName: name, processPath: path,
+            parentPID: 0, parentName: "",
+            technique: technique, description: description,
+            severity: severity, mitreID: mitreID
+        )
+    }
 }

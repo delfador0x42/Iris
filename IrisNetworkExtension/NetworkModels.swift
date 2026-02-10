@@ -92,6 +92,8 @@ struct NetworkConnection: Codable {
     let httpResponseContentType: String?
     let httpRawRequest: String?
     let httpRawResponse: String?
+    var capturedOutboundBytes: Int? = nil
+    var capturedInboundBytes: Int? = nil
 
     enum NetworkProtocol: String, Codable {
         case tcp = "TCP"

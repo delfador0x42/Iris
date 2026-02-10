@@ -20,9 +20,11 @@ extension ProcessStore {
             await fetchProcessesViaDataSource(dataSource)
         } else if let connection = xpcConnection {
             // Try XPC first
+            logger.debug("[FETCH] Using XPC connection for process data")
             await fetchProcessesViaXPC(connection)
         } else {
             // Fallback to local enumeration
+            logger.debug("[FETCH] No XPC connection — using local sysctl enumeration")
             await fetchProcessesLocally()
         }
 
@@ -74,29 +76,70 @@ extension ProcessStore {
     func fetchProcessesViaXPC(_ connection: NSXPCConnection) async {
         guard let proxy = connection.remoteObjectProxyWithErrorHandler({ [weak self] error in
             Task { @MainActor in
-                self?.logger.error("XPC error: \(error.localizedDescription)")
+                self?.logger.error("[FETCH] XPC proxy error: \(error.localizedDescription)")
                 self?.errorMessage = error.localizedDescription
             }
         }) as? EndpointXPCProtocol else {
+            logger.warning("[FETCH] Failed to get XPC proxy — falling back to local")
             await fetchProcessesLocally()
             return
         }
 
-        await withCheckedContinuation { continuation in
-            proxy.getProcesses { [weak self] dataArray in
-                Task { @MainActor in
-                    self?.processProcessData(dataArray)
-                    continuation.resume()
+        // Timeout prevents infinite hang if extension isn't responding
+        let gotResponse = await withTaskGroup(of: Bool.self) { group in
+            group.addTask { @MainActor in
+                await withCheckedContinuation { continuation in
+                    proxy.getProcesses { [weak self] dataArray in
+                        Task { @MainActor in
+                            self?.logger.info("[FETCH] XPC getProcesses() returned \(dataArray.count) data items")
+                            self?.processProcessData(dataArray)
+                            continuation.resume()
+                        }
+                    }
                 }
+                return true
             }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                return false
+            }
+            let result = await group.next() ?? false
+            group.cancelAll()
+            return result
+        }
+
+        if gotResponse {
+            isUsingEndpointSecurity = true
+            let count = processes.count
+            logger.info("[FETCH] XPC fetch succeeded — \(count) processes decoded")
+        } else {
+            logger.warning("[FETCH] XPC getProcesses() TIMED OUT after 3s — falling back to local")
+            isUsingEndpointSecurity = false
+            await fetchProcessesLocally()
         }
     }
 
     func processProcessData(_ dataArray: [Data]) {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
+        var decoded = 0
+        var failed = 0
         processes = dataArray.compactMap { data -> ProcessInfo? in
-            try? decoder.decode(ProcessInfo.self, from: data)
+            if let p = try? decoder.decode(ProcessInfo.self, from: data) {
+                decoded += 1
+                return p
+            } else {
+                failed += 1
+                if failed <= 3 {
+                    // Log first few failures for debugging decode issues
+                    let preview = String(data: data.prefix(200), encoding: .utf8) ?? "<binary>"
+                    logger.error("[DECODE] Failed to decode ProcessInfo: \(preview)")
+                }
+                return nil
+            }
+        }
+        if failed > 0 {
+            logger.warning("[DECODE] \(decoded) decoded OK, \(failed) FAILED out of \(dataArray.count) total")
         }
     }
 
@@ -178,12 +221,13 @@ extension ProcessStore {
     /// Enrich all processes with CPU, memory, thread, and FD metrics
     func enrichWithResources() async {
         let collector = ProcessResourceCollector.shared
-        let activePids = Set(processes.map { $0.pid })
-        await collector.pruneStale(activePids: activePids)
+        let pids = processes.map { $0.pid }
+
+        // Single actor call collects all PIDs (avoids 400 sequential actor hops)
+        let resources = await collector.collectBatch(pids: pids)
 
         for i in processes.indices {
-            let pid = processes[i].pid
-            if let info = await collector.collect(pid: pid) {
+            if let info = resources[processes[i].pid] {
                 processes[i].resources = info
             }
         }
@@ -233,7 +277,22 @@ extension ProcessStore {
     
     // MARK: - Code Signing
 
+    /// Cache of code signing info by binary path.
+    /// Binary signatures don't change between refreshes, so verifying
+    /// the same path 400 times every 2 seconds is pure waste.
+    private static var signingCache: [String: ProcessInfo.CodeSigningInfo?] = [:]
+
     func getCodeSigningInfo(forPath path: String) -> ProcessInfo.CodeSigningInfo? {
+        if let cached = Self.signingCache[path] {
+            return cached
+        }
+
+        let result = Self.verifyCodeSigning(path: path)
+        Self.signingCache[path] = result
+        return result
+    }
+
+    private static func verifyCodeSigning(path: String) -> ProcessInfo.CodeSigningInfo? {
         var staticCode: SecStaticCode?
         let url = URL(fileURLWithPath: path) as CFURL
 
@@ -252,10 +311,7 @@ extension ProcessStore {
         let signingId = signingInfo["identifier"] as? String
         let flags = (signingInfo["flags"] as? UInt32) ?? 0
 
-        // Check for Apple signature
         let isAppleSigned = teamId == nil && signingId?.hasPrefix("com.apple.") == true
-
-        // Check if platform binary (CS_PLATFORM_BINARY = 0x4000)
         let isPlatformBinary = (flags & 0x4000) != 0
 
         return ProcessInfo.CodeSigningInfo(

@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Main view for process list - displays all running processes with suspicious highlighting
 public struct ProcessListView: View {
-    @StateObject private var store = ProcessStore()
+    @ObservedObject private var store = ProcessStore.shared
     @State private var selectedProcess: ProcessInfo?
     @State private var showingDetail = false
     @Environment(\.dismiss) private var dismiss

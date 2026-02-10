@@ -63,9 +63,8 @@ public actor ProcessIntegrityChecker {
 
             if !isDeclared {
                 // This dylib was NOT in the original binary — injected
-                anomalies.append(ProcessAnomaly(
-                    pid: pid, processName: processName, processPath: binaryPath,
-                    parentPID: 0, parentName: "",
+                anomalies.append(.forProcess(
+                    pid: pid, name: processName, path: binaryPath,
                     technique: "Dylib Injection Detected",
                     description: "Process \(processName) (PID \(pid)) has loaded \(image) which is NOT declared in its Mach-O headers. Possible DYLD_INSERT_LIBRARIES or task_for_pid injection.",
                     severity: .critical, mitreID: "T1055.001"
@@ -89,9 +88,8 @@ public actor ProcessIntegrityChecker {
 
         // CS_DEBUGGED (0x0800) — process has been debugged/injected
         if csFlags & 0x0800 != 0 {
-            anomalies.append(ProcessAnomaly(
-                pid: pid, processName: processName, processPath: path,
-                parentPID: 0, parentName: "",
+            anomalies.append(.forProcess(
+                pid: pid, name: processName, path: path,
                 technique: "Process Has Been Debugged/Injected",
                 description: "Process \(processName) (PID \(pid)) has CS_DEBUGGED flag set. This means task_for_pid was used on it — possible code injection.",
                 severity: .high, mitreID: "T1055"
@@ -102,9 +100,8 @@ public actor ProcessIntegrityChecker {
         // If they're missing on an Apple binary, something stripped them
         if path.hasPrefix("/System/") || path.hasPrefix("/usr/") {
             if csFlags & 0x0100 == 0 && csFlags & 0x0200 == 0 {
-                anomalies.append(ProcessAnomaly(
-                    pid: pid, processName: processName, processPath: path,
-                    parentPID: 0, parentName: "",
+                anomalies.append(.forProcess(
+                    pid: pid, name: processName, path: path,
                     technique: "Missing Hardened Runtime Flags",
                     description: "System binary \(processName) missing CS_HARD|CS_KILL flags. May have been patched or replaced.",
                     severity: .high, mitreID: "T1574"
@@ -139,9 +136,8 @@ public actor ProcessIntegrityChecker {
         if path.hasPrefix("/System/") || path.hasPrefix("/usr/") {
             let daysSinceModified = Date().timeIntervalSince(modDate) / 86400
             if daysSinceModified < 7 {
-                return ProcessAnomaly(
-                    pid: pid, processName: processName, processPath: path,
-                    parentPID: 0, parentName: "",
+                return .forProcess(
+                    pid: pid, name: processName, path: path,
                     technique: "Recently Modified System Binary",
                     description: "System binary \(path) was modified \(String(format: "%.1f", daysSinceModified)) days ago. System binaries should only change during OS updates.",
                     severity: .high, mitreID: "T1554"

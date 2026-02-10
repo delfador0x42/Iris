@@ -52,8 +52,9 @@ final class TLSInterceptor: @unchecked Sendable {
         var keyResult: CFTypeRef?
         let keyStatus = SecItemCopyMatching(keyQuery as CFDictionary, &keyResult)
 
-        if keyStatus == errSecSuccess, let key = keyResult {
-            caPrivateKey = (key as! SecKey)
+        if keyStatus == errSecSuccess, let ref = keyResult,
+           CFGetTypeID(ref) == SecKeyGetTypeID() {
+            caPrivateKey = (ref as! SecKey)
             logger.info("Loaded CA private key from Keychain")
         } else {
             logger.warning("CA private key not found in Keychain (status: \(keyStatus))")
@@ -68,8 +69,9 @@ final class TLSInterceptor: @unchecked Sendable {
         var certResult: CFTypeRef?
         let certStatus = SecItemCopyMatching(certQuery as CFDictionary, &certResult)
 
-        if certStatus == errSecSuccess, let cert = certResult {
-            caCertificate = (cert as! SecCertificate)
+        if certStatus == errSecSuccess, let ref = certResult,
+           CFGetTypeID(ref) == SecCertificateGetTypeID() {
+            caCertificate = (ref as! SecCertificate)
             logger.info("Loaded CA certificate from Keychain")
         } else {
             logger.warning("CA certificate not found in Keychain (status: \(certStatus))")

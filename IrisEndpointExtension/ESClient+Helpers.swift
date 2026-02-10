@@ -9,7 +9,7 @@ extension ESClient {
     /// Extract full process info from an es_process_t (typically the exec target)
     func extractProcessInfo(
         from process: es_process_t,
-        event: UnsafeMutablePointer<es_message_t>
+        event: UnsafePointer<es_message_t>
     ) -> ESProcessInfo {
         let pid = audit_token_to_pid(process.audit_token)
         let ppid = process.ppid
@@ -17,9 +17,10 @@ extension ESClient {
         let name = URL(fileURLWithPath: path).lastPathComponent
 
         var arguments: [String] = []
-        let argCount = es_exec_arg_count(&event.pointee.event.exec)
+        var exec = event.pointee.event.exec
+        let argCount = es_exec_arg_count(&exec)
         for i in 0..<argCount {
-            let arg = es_exec_arg(&event.pointee.event.exec, i)
+            let arg = es_exec_arg(&exec, i)
             arguments.append(esStringToSwift(arg))
         }
 
@@ -52,8 +53,8 @@ extension ESClient {
     /// Convert ES string token to Swift String
     func esStringToSwift(_ token: es_string_token_t) -> String {
         guard token.length > 0, let data = token.data else { return "" }
-        return String(bytesNoCopy: UnsafeMutableRawPointer(mutating: data),
-                      length: token.length, encoding: .utf8, freeWhenDone: false) ?? ""
+        let buf = UnsafeRawBufferPointer(start: data, count: token.length)
+        return String(bytes: buf, encoding: .utf8) ?? ""
     }
 
     // MARK: - Process Path

@@ -173,6 +173,59 @@ extension SecurityStore {
         return enriched
     }
 
+    // MARK: - Raw Capture Data
+
+    /// Fetch raw captured bytes for a specific connection (on-demand, not polled)
+    public func fetchRawData(for connectionId: UUID) async -> (outbound: Data?, inbound: Data?) {
+        guard let proxy = xpcConnection?.remoteObjectProxyWithErrorHandler({ [weak self] error in
+            Task { @MainActor in
+                self?.logger.error("XPC error fetching raw data: \(error.localizedDescription)")
+            }
+        }) as? NetworkXPCProtocol else {
+            return (nil, nil)
+        }
+
+        return await withCheckedContinuation { continuation in
+            proxy.getConnectionRawData(connectionId.uuidString) { outbound, inbound in
+                continuation.resume(returning: (outbound, inbound))
+            }
+        }
+    }
+
+    /// Fetch capture statistics from the extension
+    public func fetchCaptureStats() async -> [String: Any] {
+        guard let proxy = xpcConnection?.remoteObjectProxyWithErrorHandler({ [weak self] error in
+            Task { @MainActor in
+                self?.logger.error("XPC error fetching capture stats: \(error.localizedDescription)")
+            }
+        }) as? NetworkXPCProtocol else {
+            return [:]
+        }
+
+        return await withCheckedContinuation { continuation in
+            proxy.getCaptureStats { stats in
+                continuation.resume(returning: stats)
+            }
+        }
+    }
+
+    /// Set the capture memory budget in the extension
+    public func setCaptureMemoryBudget(_ bytes: Int) async -> Bool {
+        guard let proxy = xpcConnection?.remoteObjectProxyWithErrorHandler({ [weak self] error in
+            Task { @MainActor in
+                self?.logger.error("XPC error setting capture budget: \(error.localizedDescription)")
+            }
+        }) as? NetworkXPCProtocol else {
+            return false
+        }
+
+        return await withCheckedContinuation { continuation in
+            proxy.setCaptureMemoryBudget(bytes) { success in
+                continuation.resume(returning: success)
+            }
+        }
+    }
+
     // MARK: - Rules Fetching
 
     func fetchRulesViaDataSource(_ dataSource: any NetworkDataSourceProtocol) async {

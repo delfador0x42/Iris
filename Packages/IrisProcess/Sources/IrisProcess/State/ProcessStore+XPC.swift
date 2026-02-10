@@ -9,14 +9,15 @@ extension ProcessStore {
     /// Connect to the security extension via XPC
     public func connect() {
         guard xpcConnection == nil else {
-            logger.info("Already connected to extension")
+            logger.info("[XPC] Already connected to endpoint extension")
             return
         }
 
-        logger.info("Connecting to endpoint security extension for process monitoring...")
+        let serviceName = EndpointXPCService.extensionServiceName
+        logger.info("[XPC] Connecting to endpoint extension: \(serviceName)")
 
         let connection = NSXPCConnection(
-            machServiceName: EndpointXPCService.extensionServiceName,
+            machServiceName: serviceName,
             options: []
         )
 
@@ -40,31 +41,132 @@ extension ProcessStore {
         xpcConnection = connection
         errorMessage = nil
 
-        logger.info("Connected to endpoint security extension")
+        logger.info("[XPC] Connection resumed to \(serviceName)")
     }
 
     /// Disconnect from the extension
     public func disconnect() {
+        stopAutoRefresh()
         xpcConnection?.invalidate()
         xpcConnection = nil
-        logger.info("Disconnected from endpoint security extension")
+        logger.info("[XPC] Disconnected from endpoint security extension")
     }
 
     func handleConnectionInvalidated() {
-        logger.warning("XPC connection invalidated")
+        logger.warning("[XPC] Connection INVALIDATED — extension may have crashed or been unloaded")
         xpcConnection = nil
+        isUsingEndpointSecurity = false
+        esExtensionStatus = .notInstalled
+
+        // Auto-reconnect after delay if monitoring was active
+        guard isMonitoringActive else {
+            logger.info("[XPC] Not monitoring — skipping reconnection")
+            return
+        }
+        let monitoring = isMonitoringActive
+        Task {
+            logger.info("[XPC] Will attempt reconnection in 3s...")
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            let stillMonitoring = self.isMonitoringActive
+            let hasConnection = self.xpcConnection != nil
+            guard stillMonitoring, !hasConnection else {
+                logger.info("[XPC] Reconnection skipped (monitoring=\(stillMonitoring), hasConnection=\(hasConnection))")
+                return
+            }
+            logger.info("[XPC] Reconnecting now...")
+            self.connect()
+            await self.checkESStatus()
+        }
     }
 
     func handleConnectionInterrupted() {
-        logger.warning("XPC connection interrupted")
-        errorMessage = "Connection to extension interrupted"
+        logger.warning("[XPC] Connection INTERRUPTED — extension still running but connection lost")
+        errorMessage = "Connection to extension interrupted, reconnecting..."
+
+        // Reconnect: invalidate stale connection and create fresh one
+        Task {
+            logger.info("[XPC] Will reconnect in 1s...")
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            self.disconnect()
+            self.connect()
+            await self.checkESStatus()
+            await self.refreshProcesses()
+            let status = self.esExtensionStatus.rawValue
+            logger.info("[XPC] Reconnection complete — ES status: \(status)")
+        }
+    }
+
+    // MARK: - ES Status Checking
+
+    /// Check if the ES extension is running and ES client is active
+    public func checkESStatus() async {
+        logger.info("[XPC] Checking ES extension status...")
+
+        guard let proxy = xpcConnection?.remoteObjectProxyWithErrorHandler({ [weak self] error in
+            Task { @MainActor in
+                self?.logger.error("[XPC] ES status proxy error: \(error.localizedDescription)")
+            }
+        }) as? EndpointXPCProtocol else {
+            logger.warning("[XPC] No XPC connection or proxy — marking ES as not installed")
+            esExtensionStatus = .notInstalled
+            isUsingEndpointSecurity = false
+            return
+        }
+
+        let status = await withTaskGroup(of: [String: Any]?.self) { group in
+            group.addTask { @MainActor in
+                await withCheckedContinuation { continuation in
+                    proxy.getStatus { status in
+                        continuation.resume(returning: status)
+                    }
+                }
+            }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                return nil
+            }
+            let result = await group.next() ?? nil
+            group.cancelAll()
+            return result
+        }
+
+        if let status = status {
+            let esEnabled = status["esEnabled"] as? Bool ?? false
+            let mode = status["mode"] as? String ?? "unknown"
+            let processCount = status["processCount"] as? Int ?? -1
+            let esError = status["esError"] as? String
+
+            logger.info("[XPC] ES getStatus() response: esEnabled=\(esEnabled) mode=\(mode) processCount=\(processCount) esError=\(esError ?? "none")")
+
+            isUsingEndpointSecurity = esEnabled
+            if esEnabled {
+                esExtensionStatus = .running
+                errorMessage = nil
+            } else {
+                esExtensionStatus = .esDisabled
+                let errMsg = esError ?? "ES client not running"
+                errorMessage = errMsg
+                logger.warning("[XPC] ES client not active: \(errMsg)")
+            }
+        } else {
+            logger.warning("[XPC] ES getStatus() TIMED OUT after 3s — extension not responding")
+            esExtensionStatus = .notInstalled
+            isUsingEndpointSecurity = false
+        }
     }
 
     // MARK: - Auto Refresh
 
     /// Start periodic refresh and connect to XPC. Call from view's .onAppear.
     public func startAutoRefresh() {
-        stopAutoRefresh()
+        isMonitoringActive = true
+        guard refreshTimer == nil else {
+            logger.info("[XPC] Auto-refresh already running (timer exists)")
+            return
+        }
+
+        let interval = refreshInterval
+        logger.info("[XPC] Starting auto-refresh (interval=\(interval)s)")
 
         // Connect XPC if not already connected
         connect()
@@ -75,9 +177,13 @@ extension ProcessStore {
             }
         }
 
-        // Initial fetch
+        // Initial fetch + status check
         Task {
-            await refreshProcesses()
+            await self.checkESStatus()
+            await self.refreshProcesses()
+            let count = self.processes.count
+            let status = self.esExtensionStatus.rawValue
+            logger.info("[XPC] Initial fetch complete — \(count) processes, ES status: \(status)")
         }
     }
 
@@ -88,6 +194,8 @@ extension ProcessStore {
     public func stopMonitoring() { stopAutoRefresh() }
 
     public func stopAutoRefresh() {
+        logger.info("[XPC] Stopping auto-refresh")
+        isMonitoringActive = false
         refreshTimer?.invalidate()
         refreshTimer = nil
     }

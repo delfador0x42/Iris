@@ -22,6 +22,12 @@ import Foundation
 
     func getStatus(reply: @escaping ([String: Any]) -> Void)
     func setFilteringEnabled(_ enabled: Bool, reply: @escaping (Bool) -> Void)
+
+    // MARK: - Raw Data Capture
+
+    func getConnectionRawData(_ connectionId: String, reply: @escaping (Data?, Data?) -> Void)
+    func setCaptureMemoryBudget(_ bytes: Int, reply: @escaping (Bool) -> Void)
+    func getCaptureStats(reply: @escaping ([String: Any]) -> Void)
 }
 
 // MARK: - Service Names

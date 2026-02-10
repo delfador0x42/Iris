@@ -235,4 +235,34 @@ extension XPCService: NetworkXPCProtocol {
         // TODO: Implement filter enable/disable
         reply(true)
     }
+
+    // MARK: - Raw Data Capture
+
+    func getConnectionRawData(_ connectionId: String, reply: @escaping (Data?, Data?) -> Void) {
+        guard let provider = filterProvider,
+              let uuid = UUID(uuidString: connectionId) else {
+            reply(nil, nil)
+            return
+        }
+        let (outbound, inbound) = provider.getRawData(for: uuid)
+        reply(outbound, inbound)
+    }
+
+    func setCaptureMemoryBudget(_ bytes: Int, reply: @escaping (Bool) -> Void) {
+        logger.info("XPC: setCaptureMemoryBudget(\(bytes))")
+        guard let provider = filterProvider, bytes > 0 else {
+            reply(false)
+            return
+        }
+        provider.captureMemoryBudget = bytes
+        reply(true)
+    }
+
+    func getCaptureStats(reply: @escaping ([String: Any]) -> Void) {
+        guard let provider = filterProvider else {
+            reply([:])
+            return
+        }
+        reply(provider.getCaptureStats())
+    }
 }

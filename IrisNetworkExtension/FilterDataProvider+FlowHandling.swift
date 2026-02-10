@@ -108,8 +108,8 @@ extension FilterDataProvider {
                                     readBytesStartOffset: Int,
                                     readBytes: Data) -> NEFilterDataVerdict {
         updateBytes(flow: flow, bytesDown: UInt64(readBytes.count))
+        appendCaptureData(flow: flow, inbound: readBytes)
 
-        // Try to parse HTTP response (only on first data chunk)
         if readBytesStartOffset == 0 {
             parseHTTPResponse(flow: flow, data: readBytes)
         }
@@ -121,8 +121,8 @@ extension FilterDataProvider {
                                      readBytesStartOffset: Int,
                                      readBytes: Data) -> NEFilterDataVerdict {
         updateBytes(flow: flow, bytesUp: UInt64(readBytes.count))
+        appendCaptureData(flow: flow, outbound: readBytes)
 
-        // Try to parse HTTP request (only on first data chunk)
         if readBytesStartOffset == 0 {
             parseHTTPRequest(flow: flow, data: readBytes)
         }

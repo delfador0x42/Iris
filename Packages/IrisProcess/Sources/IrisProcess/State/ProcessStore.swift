@@ -6,6 +6,10 @@ import os.log
 @MainActor
 public final class ProcessStore: ObservableObject {
 
+    // MARK: - Singleton
+
+    public static let shared = ProcessStore()
+
     // MARK: - Published State
 
     @Published public internal(set) var processes: [ProcessInfo] = [] { didSet { updateDisplayedProcesses() } }
@@ -16,6 +20,20 @@ public final class ProcessStore: ObservableObject {
     @Published public var showOnlySuspicious: Bool = false { didSet { updateDisplayedProcesses() } }
     @Published public var sortOrder: SortOrder = .name { didSet { updateDisplayedProcesses() } }
     @Published public var viewMode: ViewMode = .list
+
+    /// Whether process data comes from ES extension (true) or sysctl polling (false)
+    @Published public internal(set) var isUsingEndpointSecurity = false
+
+    /// Whether the ES extension is actively running
+    @Published public internal(set) var esExtensionStatus: ESExtensionStatus = .unknown
+
+    public enum ESExtensionStatus: String {
+        case unknown = "Unknown"
+        case running = "Running"
+        case notInstalled = "Not Installed"
+        case esDisabled = "ES Disabled"
+        case error = "Error"
+    }
 
     // MARK: - Types
 
@@ -39,6 +57,9 @@ public final class ProcessStore: ObservableObject {
     let logger = Logger(subsystem: "com.wudan.iris", category: "ProcessStore")
     var xpcConnection: NSXPCConnection?
     var refreshTimer: Timer?
+
+    /// Tracks whether monitoring was active (survives timer stop during reconnection)
+    var isMonitoringActive = false
 
     /// Optional data source for dependency injection (used in tests)
     let dataSource: (any ProcessDataSourceProtocol)?
@@ -75,7 +96,7 @@ public final class ProcessStore: ObservableObject {
         }
         switch sortOrder {
         case .name:
-            result.sort { $0.name.lowercased() < $1.name.lowercased() }
+            result.sort { $0.name.caseInsensitiveCompare($1.name) == .orderedAscending }
         case .pid:
             result.sort { $0.pid < $1.pid }
         case .user:
@@ -87,7 +108,7 @@ public final class ProcessStore: ObservableObject {
         case .suspicious:
             result.sort { lhs, rhs in
                 if lhs.isSuspicious != rhs.isSuspicious { return lhs.isSuspicious }
-                return lhs.name.lowercased() < rhs.name.lowercased()
+                return lhs.name.caseInsensitiveCompare(rhs.name) == .orderedAscending
             }
         }
         displayedProcesses = result

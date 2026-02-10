@@ -102,10 +102,8 @@ public actor XPCServiceAuditor {
                            let sockPath = config["SockPathName"] as? String {
                             if sockPath.hasPrefix("/tmp/") || sockPath.hasPrefix("/var/tmp/") ||
                                sockPath.contains("/.") {
-                                anomalies.append(ProcessAnomaly(
-                                    pid: 0, processName: file,
-                                    processPath: path,
-                                    parentPID: 0, parentName: "",
+                                anomalies.append(.filesystem(
+                                    name: file, path: path,
                                     technique: "Suspicious Unix Socket",
                                     description: "LaunchAgent/Daemon uses Unix socket in suspicious location: \(sockPath)",
                                     severity: .high, mitreID: "T1071"

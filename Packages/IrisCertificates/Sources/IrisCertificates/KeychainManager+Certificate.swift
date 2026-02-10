@@ -58,11 +58,12 @@ extension KeychainManager {
             throw KeychainError.loadFailed(status)
         }
 
-        guard let certificate = result as! SecCertificate? else {
+        guard let ref = result, CFGetTypeID(ref) == SecCertificateGetTypeID() else {
             logger.error("Invalid certificate data format")
             throw KeychainError.invalidDataFormat
         }
 
+        let certificate = ref as! SecCertificate
         logger.debug("CA certificate loaded successfully")
         return certificate
     }

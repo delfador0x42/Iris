@@ -7,7 +7,7 @@ public struct ScanProgress: Equatable, Sendable {
     public let totalSizeScanned: UInt64
     public let startTime: Date
 
-    public init(
+    public nonisolated init(
         currentPath: String,
         filesScanned: Int,
         totalSizeScanned: UInt64,
