@@ -59,7 +59,7 @@ public actor GeoIPService {
     /// Look up geolocation for a single IP address
     public func lookup(_ ipAddress: String) async -> GeoIPResult? {
         // Skip private/local IPs
-        guard !isPrivateIP(ipAddress) else { return nil }
+        guard !EnrichmentHelpers.isPrivateIP(ipAddress) else { return nil }
 
         // Check cache
         if let cached = cache.get(ipAddress) {
@@ -91,7 +91,7 @@ public actor GeoIPService {
     /// Returns dictionary mapping IP -> GeoIPResult
     public func batchLookup(_ ipAddresses: [String]) async -> [String: GeoIPResult] {
         // Filter out private IPs and already-cached
-        let publicIPs = ipAddresses.filter { !isPrivateIP($0) }
+        let publicIPs = EnrichmentHelpers.filterPublic(ipAddresses)
         let uncachedIPs = publicIPs.filter { cache.get($0) == nil }
 
         // Start with cached results
@@ -200,37 +200,6 @@ public actor GeoIPService {
         }
     }
 
-    /// Check if an IP address is private/local (not routable on the internet)
-    private func isPrivateIP(_ ip: String) -> Bool {
-        // IPv4 private ranges
-        if ip.hasPrefix("10.") ||
-           ip.hasPrefix("192.168.") ||
-           ip.hasPrefix("127.") ||
-           ip.hasPrefix("0.") ||
-           ip == "localhost" {
-            return true
-        }
-
-        // 172.16.0.0 - 172.31.255.255
-        if ip.hasPrefix("172.") {
-            let parts = ip.split(separator: ".")
-            if parts.count >= 2, let second = Int(parts[1]) {
-                if second >= 16 && second <= 31 {
-                    return true
-                }
-            }
-        }
-
-        // IPv6 private/local
-        if ip == "::1" ||
-           ip.lowercased().hasPrefix("fe80:") ||
-           ip.lowercased().hasPrefix("fc") ||
-           ip.lowercased().hasPrefix("fd") {
-            return true
-        }
-
-        return false
-    }
 }
 
 // MARK: - Array Extension for Chunking

@@ -28,7 +28,7 @@ extension PersistenceScanner {
                 guard let resolvedPath = resolveBookmark(bookmark) else { continue }
                 let name = URL(fileURLWithPath: resolvedPath).lastPathComponent
 
-                let (signing, identifier, apple) = await verifyBinary(resolvedPath)
+                let (signing, identifier, apple) = verifyBinary(resolvedPath)
 
                 var ev: [Evidence] = []
                 if !apple {
@@ -65,7 +65,7 @@ extension PersistenceScanner {
                 for item in loginItems where item.hasSuffix(".app") {
                     let itemPath = "\(loginItemsDir)/\(item)"
                     let name = item.replacingOccurrences(of: ".app", with: "")
-                    let (signing, identifier, apple) = await verifyBinary(itemPath)
+                    let (signing, identifier, apple) = verifyBinary(itemPath)
 
                     items.append(PersistenceItem(
                         type: .loginItem,

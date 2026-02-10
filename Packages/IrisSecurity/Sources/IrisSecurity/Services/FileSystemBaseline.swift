@@ -74,7 +74,7 @@ public actor FileSystemBaseline {
                     let dirEntries = await hashDirectory(path)
                     entries.merge(dirEntries) { _, new in new }
                 } else {
-                    if let entry = hashFile(path) {
+                    if let entry = Self.hashFile(path) {
                         entries[path] = entry
                     }
                 }
@@ -110,7 +110,7 @@ public actor FileSystemBaseline {
                 continue
             }
 
-            guard let currentEntry = hashFile(path) else { continue }
+            guard let currentEntry = Self.hashFile(path) else { continue }
 
             if currentEntry.hash != baseEntry.hash {
                 // Content changed
@@ -163,36 +163,49 @@ public actor FileSystemBaseline {
         return changes.sorted { $0.severity > $1.severity }
     }
 
-    /// Hash all files in a directory (non-recursive for top-level, recursive for subdirs)
+    /// Hash all files in a directory — collects paths first, then hashes in parallel
     private func hashDirectory(_ dirPath: String) async -> [String: FileEntry] {
-        var entries: [String: FileEntry] = [:]
         let fm = FileManager.default
+        guard let enumerator = fm.enumerator(atPath: dirPath) else { return [:] }
 
-        guard let enumerator = fm.enumerator(atPath: dirPath) else { return entries }
-
+        // 1. Collect all file paths (fast, sequential)
+        var paths: [String] = []
         while let file = enumerator.nextObject() as? String {
             let fullPath = "\(dirPath)/\(file)"
             var isDir: ObjCBool = false
-
             guard fm.fileExists(atPath: fullPath, isDirectory: &isDir),
                   !isDir.boolValue else { continue }
-
-            // Skip very large files (>50MB) to keep scan fast
             if let attrs = try? fm.attributesOfItem(atPath: fullPath),
-               let size = attrs[.size] as? UInt64, size > 50_000_000 {
-                continue
-            }
+               let size = attrs[.size] as? UInt64, size > 50_000_000 { continue }
+            paths.append(fullPath)
+        }
 
-            if let entry = hashFile(fullPath) {
-                entries[fullPath] = entry
+        // 2. Hash in parallel (8 concurrent tasks)
+        var entries: [String: FileEntry] = [:]
+        entries.reserveCapacity(paths.count)
+
+        await withTaskGroup(of: (String, FileEntry?).self) { group in
+            var inflight = 0
+            for path in paths {
+                if inflight >= 8 {
+                    if let (p, entry) = await group.next() {
+                        if let e = entry { entries[p] = e }
+                        inflight -= 1
+                    }
+                }
+                group.addTask { (path, Self.hashFile(path)) }
+                inflight += 1
+            }
+            for await (p, entry) in group {
+                if let e = entry { entries[p] = e }
             }
         }
 
         return entries
     }
 
-    /// Hash a single file
-    private func hashFile(_ path: String) -> FileEntry? {
+    /// Hash a single file — static so it can run off-actor in TaskGroup
+    private static func hashFile(_ path: String) -> FileEntry? {
         let fm = FileManager.default
         guard let attrs = try? fm.attributesOfItem(atPath: path) else { return nil }
         guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)) else { return nil }

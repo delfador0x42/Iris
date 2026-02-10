@@ -98,9 +98,12 @@ public struct TCCMonitorView: View {
     private func loadEntries() async {
         isLoading = true
         errorMessage = nil
+        let hasFDA = TCCMonitor.shared.hasFullDiskAccess()
         let result = await TCCMonitor.shared.scan()
         if result.isEmpty {
-            errorMessage = "SIP blocks system TCC.db on modern macOS. User-level TCC.db may also require Full Disk Access."
+            errorMessage = hasFDA
+                ? "No TCC entries found in accessible databases."
+                : "Full Disk Access required. Grant FDA to Iris in System Settings > Privacy & Security > Full Disk Access."
         }
         entries = result
         isLoading = false

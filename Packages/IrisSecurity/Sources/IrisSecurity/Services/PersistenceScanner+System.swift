@@ -108,7 +108,7 @@ extension PersistenceScanner {
                 let path = "\(dir)/\(file)"
                 let name = file.replacingOccurrences(of: ".kext", with: "")
                 let isSystem = dir.hasPrefix("/System")
-                let (signing, identifier, apple) = await verifyBinary(path)
+                let (signing, identifier, apple) = verifyBinary(path)
                 let isBaseline = baseline.isBaselineKext(identifier ?? name)
 
                 var ev: [Evidence] = []
@@ -151,7 +151,7 @@ extension PersistenceScanner {
                       let originPath = ext["originPath"] as? String else { continue }
 
                 let name = URL(fileURLWithPath: originPath).lastPathComponent
-                let (signing, identifier, apple) = await verifyBinary(originPath)
+                let (signing, identifier, apple) = verifyBinary(originPath)
 
                 var ev: [Evidence] = []
                 if !apple {
@@ -188,7 +188,7 @@ extension PersistenceScanner {
             for file in contents {
                 let path = "\(dir)/\(file)"
                 guard ws.isFilePackage(atPath: path) else { continue }
-                let (signing, identifier, apple) = await verifyBinary(path)
+                let (signing, identifier, apple) = verifyBinary(path)
                 let isSystem = dir.hasPrefix("/System")
                 let isBaseline = baseline.isBaselineAuthPlugin(file)
 

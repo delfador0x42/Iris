@@ -28,7 +28,7 @@ public actor ReverseDNSService {
         }
 
         // Skip private IPs - they won't have public DNS records
-        guard !isPrivateIP(ip) else {
+        guard !EnrichmentHelpers.isPrivateIP(ip) else {
             return nil
         }
 
@@ -53,7 +53,7 @@ public actor ReverseDNSService {
     /// - Returns: Dictionary mapping IP addresses to their hostnames
     public func batchLookup(_ ips: [String]) async -> [String: String] {
         // Filter out private IPs and already-cached
-        let publicIPs = ips.filter { !isPrivateIP($0) }
+        let publicIPs = EnrichmentHelpers.filterPublic(ips)
         var uncachedIPs: [String] = []
         var results: [String: String] = [:]
 
@@ -144,35 +144,4 @@ public actor ReverseDNSService {
         return hostnameString
     }
 
-    /// Check if an IP address is private/local (not routable on the internet)
-    private nonisolated func isPrivateIP(_ ip: String) -> Bool {
-        // IPv4 private ranges
-        if ip.hasPrefix("10.") ||
-           ip.hasPrefix("192.168.") ||
-           ip.hasPrefix("127.") ||
-           ip.hasPrefix("0.") ||
-           ip == "localhost" {
-            return true
-        }
-
-        // 172.16.0.0 - 172.31.255.255
-        if ip.hasPrefix("172.") {
-            let parts = ip.split(separator: ".")
-            if parts.count >= 2, let second = Int(parts[1]) {
-                if second >= 16 && second <= 31 {
-                    return true
-                }
-            }
-        }
-
-        // IPv6 private/local
-        if ip == "::1" ||
-           ip.lowercased().hasPrefix("fe80:") ||
-           ip.lowercased().hasPrefix("fc") ||
-           ip.lowercased().hasPrefix("fd") {
-            return true
-        }
-
-        return false
-    }
 }

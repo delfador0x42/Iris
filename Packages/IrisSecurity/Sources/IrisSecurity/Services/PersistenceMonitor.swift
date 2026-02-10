@@ -1,9 +1,11 @@
 import Foundation
 import os.log
+import CryptoKit
 
 /// Monitors persistence locations for changes (BlockBlock-inspired).
 /// In ES mode: receives file events and matches against persistence paths.
 /// In polling mode: snapshots persistence state and diffs for changes.
+/// Uses SHA256 hashes to detect actual content changes (not just mtime bumps).
 public actor PersistenceMonitor {
     public static let shared = PersistenceMonitor()
     private let logger = Logger(subsystem: "com.wudan.iris", category: "PersistenceMonitor")
@@ -31,9 +33,16 @@ public actor PersistenceMonitor {
     ]
 
     private var compiledPatterns: [(regex: NSRegularExpression, type: PersistenceType)] = []
-    private var previousSnapshot: [String: Date] = [:]
+    private var previousSnapshot: [String: FileSnapshot] = [:]
     private var changeLog: [PersistenceChange] = []
     private let maxChanges = 500
+
+    /// File state captured during snapshot
+    struct FileSnapshot {
+        let modDate: Date
+        let hash: String?  // SHA256, nil if unreadable
+        let size: UInt64
+    }
 
     init() {
         compiledPatterns = Self.persistencePatterns.compactMap { entry in
@@ -82,22 +91,26 @@ public actor PersistenceMonitor {
         changeLog
     }
 
-    /// Snapshot current persistence file timestamps for later diffing
+    /// Snapshot current persistence file timestamps and hashes for later diffing.
+    /// SHA256 hashes detect actual content changes (mtime alone is spoofable).
     public func takeSnapshot() async {
         let scanner = PersistenceScanner.shared
         let items = await scanner.scanAll()
+        let fm = FileManager.default
         previousSnapshot = Dictionary(
             uniqueKeysWithValues: items.compactMap { item in
-                let fm = FileManager.default
                 guard let attrs = try? fm.attributesOfItem(atPath: item.path),
                       let modDate = attrs[.modificationDate] as? Date else { return nil }
-                return (item.path, modDate)
+                let size = (attrs[.size] as? UInt64) ?? 0
+                let hash = hashFile(item.path)
+                return (item.path, FileSnapshot(modDate: modDate, hash: hash, size: size))
             }
         )
         logger.info("Persistence snapshot captured: \(self.previousSnapshot.count) items")
     }
 
-    /// Diff current state against last snapshot
+    /// Diff current state against last snapshot.
+    /// Uses SHA256 to verify actual content changes (not just mtime bumps).
     public func diffAgainstSnapshot() async -> [PersistenceChange] {
         var changes: [PersistenceChange] = []
         let scanner = PersistenceScanner.shared
@@ -108,8 +121,12 @@ public actor PersistenceMonitor {
             guard let attrs = try? fm.attributesOfItem(atPath: item.path),
                   let modDate = attrs[.modificationDate] as? Date else { continue }
 
-            if let prevDate = previousSnapshot[item.path] {
-                if modDate > prevDate {
+            if let prev = previousSnapshot[item.path] {
+                // Only flag if content actually changed (hash mismatch), not just mtime
+                let currentHash = hashFile(item.path)
+                let contentChanged = (currentHash != nil && prev.hash != nil && currentHash != prev.hash)
+                    || (modDate > prev.modDate && prev.hash == nil)  // can't verify, trust mtime
+                if contentChanged {
                     changes.append(PersistenceChange(
                         path: item.path,
                         persistenceType: item.type,
@@ -147,6 +164,13 @@ public actor PersistenceMonitor {
         }
 
         return changes
+    }
+
+    /// SHA256 hash a file for integrity comparison. Returns nil if unreadable.
+    private nonisolated func hashFile(_ path: String) -> String? {
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)) else { return nil }
+        let digest = SHA256.hash(data: data)
+        return digest.map { String(format: "%02x", $0) }.joined()
     }
 }
 

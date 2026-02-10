@@ -70,7 +70,7 @@ public actor EventTapScanner {
             let processName = URL(fileURLWithPath: processPath).lastPathComponent
 
             // Verify signing
-            let (signing, identifier, apple) = await verifier.verify(processPath)
+            let (signing, identifier, apple) = verifier.verify(processPath)
 
             // Determine suspicion
             var reasons: [String] = []

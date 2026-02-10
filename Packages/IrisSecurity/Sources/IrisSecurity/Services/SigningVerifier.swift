@@ -8,13 +8,13 @@ public actor SigningVerifier {
     private let logger = Logger(subsystem: "com.wudan.iris", category: "SigningVerifier")
 
     /// Verify the signing status of a binary at the given path
-    public func verify(_ path: String) -> (status: SigningStatus, identifier: String?, isApple: Bool) {
+    public nonisolated func verify(_ path: String) -> (status: SigningStatus, identifier: String?, isApple: Bool) {
         let result = verifyFull(path)
         return (result.status, result.identifier, result.isApple)
     }
 
     /// Full verification including Team ID and hardened runtime check
-    public func verifyFull(_ path: String) -> VerificationResult {
+    public nonisolated func verifyFull(_ path: String) -> VerificationResult {
         let url = URL(fileURLWithPath: path) as CFURL
         var staticCode: SecStaticCode?
 
@@ -90,7 +90,7 @@ public actor SigningVerifier {
         var isHardenedRuntime: Bool = false
     }
 
-    private func extractSigningInfo(_ code: SecStaticCode) -> SigningInfo {
+    private nonisolated func extractSigningInfo(_ code: SecStaticCode) -> SigningInfo {
         var info: CFDictionary?
         guard SecCodeCopySigningInformation(code, SecCSFlags(rawValue: kSecCSSigningInformation), &info) == errSecSuccess,
               let dict = info as? [String: Any] else {

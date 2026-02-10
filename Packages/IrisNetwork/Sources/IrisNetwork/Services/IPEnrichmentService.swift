@@ -99,7 +99,7 @@ public actor IPEnrichmentService {
         }
 
         // Skip private IPs entirely
-        guard !isPrivateIP(ip) else {
+        guard !EnrichmentHelpers.isPrivateIP(ip) else {
             return EnrichmentResult(sources: [])
         }
 
@@ -177,7 +177,7 @@ public actor IPEnrichmentService {
     /// - Returns: Dictionary mapping IP addresses to their enrichment results
     public func batchEnrich(_ ips: [String]) async -> [String: EnrichmentResult] {
         // Filter out private IPs
-        let publicIPs = ips.filter { !isPrivateIP($0) }
+        let publicIPs = EnrichmentHelpers.filterPublic(ips)
 
         guard !publicIPs.isEmpty else { return [:] }
 
@@ -264,32 +264,4 @@ public actor IPEnrichmentService {
         return await AbuseIPDBService.shared.lookup(ip)
     }
 
-    /// Check if an IP address is private/local
-    private func isPrivateIP(_ ip: String) -> Bool {
-        if ip.hasPrefix("10.") ||
-           ip.hasPrefix("192.168.") ||
-           ip.hasPrefix("127.") ||
-           ip.hasPrefix("0.") ||
-           ip == "localhost" {
-            return true
-        }
-
-        if ip.hasPrefix("172.") {
-            let parts = ip.split(separator: ".")
-            if parts.count >= 2, let second = Int(parts[1]) {
-                if second >= 16 && second <= 31 {
-                    return true
-                }
-            }
-        }
-
-        if ip == "::1" ||
-           ip.lowercased().hasPrefix("fe80:") ||
-           ip.lowercased().hasPrefix("fc") ||
-           ip.lowercased().hasPrefix("fd") {
-            return true
-        }
-
-        return false
-    }
 }

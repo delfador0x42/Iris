@@ -25,8 +25,8 @@ public actor XPCServiceAuditor {
                     // Check if the XPC service is signed differently than its parent app
                     let parentApp = findParentApp(fullPath)
                     if let parent = parentApp {
-                        let (parentSigning, parentId, parentApple) = await verifier.verify(parent)
-                        let (xpcSigning, xpcId, xpcApple) = await verifier.verify(fullPath)
+                        let (parentSigning, parentId, parentApple) = verifier.verify(parent)
+                        let (xpcSigning, xpcId, xpcApple) = verifier.verify(fullPath)
 
                         // Mismatched signing = suspicious
                         if parentApple && !xpcApple {

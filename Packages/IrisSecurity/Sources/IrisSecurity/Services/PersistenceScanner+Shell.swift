@@ -88,7 +88,7 @@ extension PersistenceScanner {
 
             for key in ["LoginHook", "LogoutHook"] {
                 guard let hookPath = plist[key] as? String else { continue }
-                let (signing, identifier, apple) = await verifyBinary(hookPath)
+                let (signing, identifier, apple) = verifyBinary(hookPath)
 
                 var ev: [Evidence] = []
                 ev.append(Evidence(factor: "Login/logout hooks are deprecated", weight: 0.5, category: .context))

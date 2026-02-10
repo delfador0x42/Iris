@@ -5,6 +5,7 @@ import CryptoKit
 /// Monitors TCC.db for unauthorized permission grants.
 /// APTs modify TCC.db to silently grant themselves Full Disk Access,
 /// Screen Recording, Accessibility, etc. This monitor detects those changes.
+/// REQUIRES: Full Disk Access for the system-level TCC.db.
 public actor TCCMonitor {
     public static let shared = TCCMonitor()
     private let logger = Logger(subsystem: "com.wudan.iris", category: "TCCMonitor")
@@ -32,17 +33,26 @@ public actor TCCMonitor {
         "kTCCServiceAppleEvents",            // Automation (script injection)
     ]
 
+    /// Check if Full Disk Access is available (TCC.db readable).
+    /// FileManager.fileExists returns false for SIP-protected paths even with FDA.
+    /// try? Data(contentsOf:) is the correct check.
+    public nonisolated func hasFullDiskAccess() -> Bool {
+        let systemPath = "/Library/Application Support/com.apple.TCC/TCC.db"
+        return (try? Data(contentsOf: URL(fileURLWithPath: systemPath), options: .mappedIfSafe)) != nil
+    }
+
     /// Take a baseline snapshot of all TCC databases
     public func takeBaseline() async {
+        if !hasFullDiskAccess() {
+            logger.error("TCCMonitor: Full Disk Access required. Grant FDA in System Settings > Privacy & Security.")
+        }
         for path in tccPaths {
-            guard FileManager.default.fileExists(atPath: path) else { continue }
             let hash = hashFile(path)
-            if let hash {
-                baselineHashes[path] = hash
-            }
+            guard hash != nil else { continue }
+            baselineHashes[path] = hash
             let entries = await readTCCEntries(path: path)
             baselineEntries[path] = entries
-            logger.info("TCC baseline: \(path) — \(entries.count) entries, hash: \(hash ?? "n/a")")
+            logger.info("TCC baseline: \(path) — \(entries.count) entries")
         }
     }
 
@@ -51,11 +61,10 @@ public actor TCCMonitor {
         var changes: [TCCChange] = []
 
         for path in tccPaths {
-            guard FileManager.default.fileExists(atPath: path) else { continue }
             let currentHash = hashFile(path)
+            guard let current = currentHash else { continue }
 
-            if let baseline = baselineHashes[path], let current = currentHash,
-               baseline != current {
+            if let baseline = baselineHashes[path], baseline != current {
                 // Database changed — diff entries
                 let currentEntries = await readTCCEntries(path: path)
                 let previousEntries = baselineEntries[path] ?? []
@@ -80,15 +89,17 @@ public actor TCCMonitor {
         return changes
     }
 
-    /// Read all TCC entries and flag suspicious ones
+    /// Read all TCC entries and flag suspicious ones.
+    /// Returns empty if Full Disk Access is not granted.
     public func scan() async -> [TCCEntry] {
         var allEntries: [TCCEntry] = []
-
         for path in tccPaths {
             let entries = await readTCCEntries(path: path)
             allEntries.append(contentsOf: entries)
         }
-
+        if allEntries.isEmpty {
+            logger.warning("TCCMonitor: No entries read. Ensure Full Disk Access is granted.")
+        }
         return allEntries
     }
 

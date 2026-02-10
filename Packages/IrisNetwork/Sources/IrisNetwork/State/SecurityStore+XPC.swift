@@ -71,7 +71,12 @@ extension SecurityStore {
     }
 
     func handleConnectionInterrupted() {
-        logger.warning("XPC connection interrupted")
-        errorMessage = "Connection to extension interrupted"
+        logger.warning("XPC connection interrupted, retrying...")
+        errorMessage = "Connection interrupted, retrying..."
+
+        Task {
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            await refreshData()
+        }
     }
 }

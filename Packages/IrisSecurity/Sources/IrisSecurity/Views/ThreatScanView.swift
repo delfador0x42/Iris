@@ -149,62 +149,67 @@ public struct ThreatScanView: View {
 
     private func runFullScan() async {
         isLoading = true
-        var all: [ProcessAnomaly] = []
         let totalPhases: Double = 15
 
-        // Single process snapshot shared across all scanners
+        // Single process snapshot shared across all PID-based scanners
+        scanPhase = "Capturing process state"
+        scanProgress = 0
         let snapshot = ProcessSnapshot.capture()
 
-        scanPhase = "LOLBin activity"
-        scanProgress = 1 / totalPhases
-        all.append(contentsOf: await LOLBinDetector.shared.scan(snapshot: snapshot))
+        // Fire ALL scanners concurrently
+        scanPhase = "Running 15 scanners"
+        scanProgress = 0.05
 
-        scanPhase = "Stealth persistence"
-        scanProgress = 2 / totalPhases
-        all.append(contentsOf: await StealthScanner.shared.scanAll(snapshot: snapshot))
+        async let r1 = LOLBinDetector.shared.scan(snapshot: snapshot)
+        async let r2 = StealthScanner.shared.scanAll(snapshot: snapshot)
+        async let r3a = XPCServiceAuditor.shared.scanXPCServices()
+        async let r3b = XPCServiceAuditor.shared.scanMachServices()
+        async let r4 = NetworkAnomalyDetector.shared.scanCurrentConnections()
+        async let r5 = ProcessIntegrityChecker.shared.scan(snapshot: snapshot)
+        async let r6 = CredentialAccessDetector.shared.scan(snapshot: snapshot)
+        async let r7 = KextAnomalyDetector.shared.scan()
+        async let r8 = AuthorizationDBMonitor.shared.scan()
+        async let r9 = DyldEnvDetector.shared.scan(snapshot: snapshot)
+        async let r10 = PersistenceScanner.shared.scanAll()
+        async let r11 = EventTapScanner.shared.scan()
+        async let r12 = DylibHijackScanner.shared.scanRunningProcesses(snapshot: snapshot)
+        async let r13 = TCCMonitor.shared.scan()
+        async let r14 = SupplyChainAuditor.shared.auditAll()
+        async let r15 = FileSystemBaseline.shared.diff()
 
-        scanPhase = "XPC services"
-        scanProgress = 3 / totalPhases
-        all.append(contentsOf: await XPCServiceAuditor.shared.scanXPCServices())
-        all.append(contentsOf: await XPCServiceAuditor.shared.scanMachServices())
+        // Collect results — each await resolves when that scanner finishes
+        var all: [ProcessAnomaly] = []
+        var phase: Double = 0
+        func tick(_ label: String) { phase += 1; scanPhase = label; scanProgress = phase / totalPhases }
 
-        scanPhase = "Network anomalies"
-        scanProgress = 4 / totalPhases
-        let netAnomalies = await NetworkAnomalyDetector.shared.scanCurrentConnections()
-        all.append(contentsOf: netAnomalies.map { na in
+        tick("LOLBin activity")
+        all.append(contentsOf: await r1)
+        tick("Stealth persistence")
+        all.append(contentsOf: await r2)
+        tick("XPC services")
+        all.append(contentsOf: await r3a)
+        all.append(contentsOf: await r3b)
+        tick("Network anomalies")
+        all.append(contentsOf: (await r4).map { na in
             ProcessAnomaly(
                 pid: 0, processName: na.processName, processPath: "",
                 parentPID: 0, parentName: "",
                 technique: na.type.rawValue,
-                description: na.description,
-                severity: na.severity
+                description: na.description, severity: na.severity
             )
         })
-
-        scanPhase = "Process integrity"
-        scanProgress = 5 / totalPhases
-        all.append(contentsOf: await ProcessIntegrityChecker.shared.scan(snapshot: snapshot))
-
-        scanPhase = "Credential access"
-        scanProgress = 6 / totalPhases
-        all.append(contentsOf: await CredentialAccessDetector.shared.scan(snapshot: snapshot))
-
-        scanPhase = "Kernel extensions"
-        scanProgress = 7 / totalPhases
-        all.append(contentsOf: await KextAnomalyDetector.shared.scan())
-
-        scanPhase = "Authorization database"
-        scanProgress = 8 / totalPhases
-        all.append(contentsOf: await AuthorizationDBMonitor.shared.scan())
-
-        scanPhase = "DYLD injection"
-        scanProgress = 9 / totalPhases
-        all.append(contentsOf: await DyldEnvDetector.shared.scan(snapshot: snapshot))
-
-        scanPhase = "Persistence locations"
-        scanProgress = 10 / totalPhases
-        let persistenceItems = await PersistenceScanner.shared.scanAll()
-        all.append(contentsOf: persistenceItems.filter(\.isSuspicious).map { item in
+        tick("Process integrity")
+        all.append(contentsOf: await r5)
+        tick("Credential access")
+        all.append(contentsOf: await r6)
+        tick("Kernel extensions")
+        all.append(contentsOf: await r7)
+        tick("Authorization database")
+        all.append(contentsOf: await r8)
+        tick("DYLD injection")
+        all.append(contentsOf: await r9)
+        tick("Persistence locations")
+        all.append(contentsOf: (await r10).filter(\.isSuspicious).map { item in
             ProcessAnomaly(
                 pid: 0, processName: item.name, processPath: item.path,
                 parentPID: 0, parentName: "",
@@ -214,11 +219,8 @@ public struct ThreatScanView: View {
                 mitreID: "T1547"
             )
         })
-
-        scanPhase = "Event taps"
-        scanProgress = 11 / totalPhases
-        let taps = await EventTapScanner.shared.scan()
-        all.append(contentsOf: taps.filter(\.isSuspicious).map { tap in
+        tick("Event taps")
+        all.append(contentsOf: (await r11).filter(\.isSuspicious).map { tap in
             ProcessAnomaly(
                 pid: tap.tappingPID, processName: tap.tappingProcessName,
                 processPath: tap.tappingProcessPath,
@@ -229,24 +231,17 @@ public struct ThreatScanView: View {
                 mitreID: "T1056.001"
             )
         })
-
-        scanPhase = "Dylib hijacking"
-        scanProgress = 12 / totalPhases
-        let hijacks = await DylibHijackScanner.shared.scanRunningProcesses(snapshot: snapshot)
-        all.append(contentsOf: hijacks.filter(\.isActiveHijack).map { h in
+        tick("Dylib hijacking")
+        all.append(contentsOf: (await r12).filter(\.isActiveHijack).map { h in
             ProcessAnomaly(
                 pid: 0, processName: h.binaryName, processPath: h.binaryPath,
                 parentPID: 0, parentName: "",
                 technique: h.type.rawValue,
-                description: h.details,
-                severity: .high, mitreID: "T1574.004"
+                description: h.details, severity: .high, mitreID: "T1574.004"
             )
         })
-
-        scanPhase = "TCC permissions"
-        scanProgress = 13 / totalPhases
-        let tccEntries = await TCCMonitor.shared.scan()
-        all.append(contentsOf: tccEntries.filter(\.isSuspicious).map { entry in
+        tick("TCC permissions")
+        all.append(contentsOf: (await r13).filter(\.isSuspicious).map { entry in
             ProcessAnomaly(
                 pid: 0, processName: entry.client, processPath: "",
                 parentPID: 0, parentName: "",
@@ -255,14 +250,10 @@ public struct ThreatScanView: View {
                 severity: .high, mitreID: "T1005"
             )
         })
-
-        scanPhase = "Supply chain"
-        scanProgress = 14 / totalPhases
-        let scFindings = await SupplyChainAuditor.shared.auditAll()
-
-        scanPhase = "Filesystem integrity"
-        scanProgress = 15 / totalPhases
-        let fsResult = await FileSystemBaseline.shared.diff()
+        tick("Supply chain")
+        let scFindings = await r14
+        tick("Filesystem integrity")
+        let fsResult = await r15
 
         anomalies = all.sorted { $0.severity > $1.severity }
         supplyChainFindings = scFindings
@@ -271,196 +262,3 @@ public struct ThreatScanView: View {
     }
 }
 
-// MARK: - Anomaly Row
-
-struct AnomalyRow: View {
-    let anomaly: ProcessAnomaly
-    @State private var isExpanded = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 10) {
-                SeverityBadge(severity: anomaly.severity)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(anomaly.technique)
-                        .font(.system(size: 12, weight: .medium)).foregroundColor(.white)
-                    Text(anomaly.processName)
-                        .font(.system(size: 10, design: .monospaced)).foregroundColor(.gray)
-                }
-                Spacer()
-                if let mitre = anomaly.mitreID {
-                    MITREBadge(id: mitre)
-                }
-                ExpandChevron(isExpanded: isExpanded)
-            }
-            .padding(.horizontal, 20).padding(.vertical, 8)
-            .contentShape(Rectangle())
-            .onTapGesture { withAnimation { isExpanded.toggle() } }
-
-            if isExpanded {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(anomaly.description)
-                        .font(.system(size: 11)).foregroundColor(.white.opacity(0.8))
-                    if !anomaly.processPath.isEmpty {
-                        Text("Path: \(anomaly.processPath)")
-                            .font(.system(size: 10, design: .monospaced)).foregroundColor(.gray)
-                    }
-                    if anomaly.pid > 0 {
-                        Text("PID: \(anomaly.pid) | Parent: \(anomaly.parentName) (\(anomaly.parentPID))")
-                            .font(.system(size: 10, design: .monospaced)).foregroundColor(.gray)
-                    }
-                }
-                .padding(.horizontal, 50).padding(.bottom, 8)
-            }
-        }
-        .background(backgroundFor(anomaly.severity))
-    }
-}
-
-// MARK: - Filesystem Change Row
-
-struct FSChangeRow: View {
-    let change: FileSystemChange
-    @State private var isExpanded = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 10) {
-                SeverityBadge(severity: change.severity)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(change.changeType.rawValue)
-                        .font(.system(size: 12, weight: .medium)).foregroundColor(.white)
-                    Text(URL(fileURLWithPath: change.path).lastPathComponent)
-                        .font(.system(size: 10, design: .monospaced)).foregroundColor(.gray)
-                }
-                Spacer()
-                changeIcon
-                ExpandChevron(isExpanded: isExpanded)
-            }
-            .padding(.horizontal, 20).padding(.vertical, 8)
-            .contentShape(Rectangle())
-            .onTapGesture { withAnimation { isExpanded.toggle() } }
-
-            if isExpanded {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(change.details)
-                        .font(.system(size: 11)).foregroundColor(.white.opacity(0.8))
-                    Text(change.path)
-                        .font(.system(size: 10, design: .monospaced)).foregroundColor(.gray)
-                }
-                .padding(.horizontal, 50).padding(.bottom, 8)
-            }
-        }
-        .background(backgroundFor(change.severity))
-    }
-
-    private var changeIcon: some View {
-        Image(systemName: iconForType)
-            .font(.system(size: 10))
-            .foregroundColor(colorForType)
-    }
-
-    private var iconForType: String {
-        switch change.changeType {
-        case .created: return "plus.circle"
-        case .modified: return "pencil.circle"
-        case .deleted: return "trash.circle"
-        case .permissionsChanged: return "lock.circle"
-        }
-    }
-
-    private var colorForType: Color {
-        switch change.changeType {
-        case .created: return .green
-        case .modified: return .orange
-        case .deleted: return .red
-        case .permissionsChanged: return .yellow
-        }
-    }
-}
-
-// MARK: - Supply Chain Row
-
-struct SupplyChainRow: View {
-    let finding: SupplyChainFinding
-    @State private var isExpanded = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 10) {
-                SeverityBadge(severity: finding.severity)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(finding.finding)
-                        .font(.system(size: 12, weight: .medium)).foregroundColor(.white)
-                    Text("\(finding.source.rawValue): \(finding.packageName)")
-                        .font(.system(size: 10, design: .monospaced)).foregroundColor(.gray)
-                }
-                Spacer()
-                ExpandChevron(isExpanded: isExpanded)
-            }
-            .padding(.horizontal, 20).padding(.vertical, 8)
-            .contentShape(Rectangle())
-            .onTapGesture { withAnimation { isExpanded.toggle() } }
-
-            if isExpanded {
-                Text(finding.details)
-                    .font(.system(size: 11)).foregroundColor(.white.opacity(0.8))
-                    .padding(.horizontal, 50).padding(.bottom, 8)
-            }
-        }
-        .background(backgroundFor(finding.severity))
-    }
-}
-
-// MARK: - Shared Components
-
-struct SeverityBadge: View {
-    let severity: AnomalySeverity
-
-    var body: some View {
-        Text(severity.label)
-            .font(.system(size: 9, weight: .bold))
-            .foregroundColor(color)
-            .padding(.horizontal, 6).padding(.vertical, 3)
-            .background(color.opacity(0.15))
-            .cornerRadius(4)
-            .frame(width: 60)
-    }
-
-    private var color: Color {
-        switch severity {
-        case .critical: return .red
-        case .high: return .orange
-        case .medium: return .yellow
-        case .low: return .gray
-        }
-    }
-}
-
-struct MITREBadge: View {
-    let id: String
-    var body: some View {
-        Text(id)
-            .font(.system(size: 9, design: .monospaced))
-            .foregroundColor(.cyan)
-            .padding(.horizontal, 6).padding(.vertical, 2)
-            .background(Color.cyan.opacity(0.1))
-            .cornerRadius(4)
-    }
-}
-
-struct ExpandChevron: View {
-    let isExpanded: Bool
-    var body: some View {
-        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-            .foregroundColor(.gray).font(.system(size: 10))
-    }
-}
-
-private func backgroundFor(_ severity: AnomalySeverity) -> Color {
-    switch severity {
-    case .critical: return Color.red.opacity(0.05)
-    case .high: return Color.orange.opacity(0.03)
-    default: return Color.white.opacity(0.02)
-    }
-}

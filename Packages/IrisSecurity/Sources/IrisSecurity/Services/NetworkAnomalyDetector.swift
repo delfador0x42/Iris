@@ -90,67 +90,88 @@ public actor NetworkAnomalyDetector {
         return anomalies
     }
 
-    /// Scan current network connections for anomalies (using netstat-like approach)
+    /// Known C2/backdoor ports
+    private let c2Ports: Set<UInt16> = [
+        4444, 5555, 8888, 9999, 1337, 31337,
+        6666, 6667, 7777, 12345, 54321
+    ]
+
+    /// Scan current network connections using lsof (macOS netstat has no PIDs).
+    /// Uses -F pcn for machine-parseable output: p=pid, c=command, n=name.
     public func scanCurrentConnections() async -> [NetworkAnomaly] {
         var anomalies: [NetworkAnomaly] = []
-        let output = await runCommand("/usr/sbin/netstat", args: ["-anp", "tcp"])
+        let output = await runCommand("/usr/sbin/lsof", args: ["-i", "-P", "-n", "-F", "pcn"])
+
+        var currentPid: pid_t = 0
+        var currentProcess = ""
 
         for line in output.split(separator: "\n") {
-            let parts = line.split(separator: " ", omittingEmptySubsequences: true)
-            guard parts.count >= 5 else { continue }
+            guard let prefix = line.first else { continue }
+            let value = String(line.dropFirst())
 
-            let foreignAddr = String(parts[4])
+            switch prefix {
+            case "p":
+                currentPid = pid_t(value) ?? 0
+            case "c":
+                currentProcess = value
+            case "n":
+                guard let (ip, port) = parseLsofName(value) else { continue }
+                guard !isPrivateIP(ip), !ip.isEmpty, ip != "*" else { continue }
 
-            // Check for connections to raw IPs (no DNS resolution = suspicious)
-            if let (ip, port) = parseAddress(foreignAddr) {
-                // High-numbered ports to raw IPs
-                if port > 1024 && !isPrivateIP(ip) && !ip.isEmpty && ip != "*" {
-                    // Check if this is a raw IP connection (no hostname)
-                    if isRawIP(ip) {
-                        anomalies.append(NetworkAnomaly(
-                            type: .rawIPConnection,
-                            processName: "unknown",
-                            remoteAddress: "\(ip):\(port)",
-                            description: "Connection to raw IP \(ip):\(port) (no DNS). Legitimate services use domains.",
-                            severity: .medium,
-                            connectionCount: 1,
-                            averageInterval: 0
-                        ))
-                    }
+                // Feed into beaconing tracker
+                recordConnection(processName: currentProcess, pid: currentPid,
+                                 remoteAddress: ip, remotePort: port, protocol: "tcp")
+
+                // Raw IP connection (no DNS involved)
+                if port > 1024 && isRawIP(ip) {
+                    anomalies.append(NetworkAnomaly(
+                        type: .rawIPConnection,
+                        processName: currentProcess,
+                        remoteAddress: "\(ip):\(port)",
+                        description: "\(currentProcess) [\(currentPid)] connected to raw IP \(ip):\(port).",
+                        severity: .medium,
+                        connectionCount: 1,
+                        averageInterval: 0
+                    ))
                 }
 
                 // Known C2 ports
-                let c2Ports: Set<UInt16> = [4444, 5555, 8888, 9999, 1337, 31337,
-                                             6666, 6667, 7777, 12345, 54321]
                 if c2Ports.contains(port) {
                     anomalies.append(NetworkAnomaly(
                         type: .suspiciousPort,
-                        processName: "unknown",
+                        processName: currentProcess,
                         remoteAddress: "\(ip):\(port)",
-                        description: "Connection on known C2/backdoor port \(port).",
+                        description: "\(currentProcess) [\(currentPid)] on known C2 port \(port).",
                         severity: .high,
                         connectionCount: 1,
                         averageInterval: 0
                     ))
                 }
+            default:
+                break
             }
         }
 
+        // Run beaconing detection on accumulated connection history
+        anomalies.append(contentsOf: detectBeaconing())
         return anomalies
     }
 
     // MARK: - Helpers
 
-    private func parseAddress(_ addr: String) -> (String, UInt16)? {
-        // Format: "ip.ip.ip.ip.port" or "ip:port" or "*.port"
-        if let lastDot = addr.lastIndex(of: ".") {
-            let ip = String(addr[addr.startIndex..<lastDot])
-            let portStr = String(addr[addr.index(after: lastDot)...])
-            if let port = UInt16(portStr) {
-                return (ip, port)
-            }
-        }
-        return nil
+    /// Parse lsof -F n value: "local:port->remote:port" or "host:port"
+    private func parseLsofName(_ name: String) -> (String, UInt16)? {
+        // Only care about established connections (have ->)
+        guard let arrowRange = name.range(of: "->") else { return nil }
+        let remote = String(name[arrowRange.upperBound...])
+        // Remote is "ip:port" — find last colon (IPv6 has multiple colons)
+        guard let colonIdx = remote.lastIndex(of: ":") else { return nil }
+        let ip = String(remote[remote.startIndex..<colonIdx])
+        guard let port = UInt16(remote[remote.index(after: colonIdx)...]) else { return nil }
+        // Strip brackets from IPv6 addresses: [::1] -> ::1
+        let cleanIP = ip.hasPrefix("[") && ip.hasSuffix("]")
+            ? String(ip.dropFirst().dropLast()) : ip
+        return (cleanIP, port)
     }
 
     private func isPrivateIP(_ ip: String) -> Bool {
@@ -158,13 +179,17 @@ public actor NetworkAnomalyDetector {
         ip.hasPrefix("172.16.") || ip.hasPrefix("172.17.") ||
         ip.hasPrefix("172.18.") || ip.hasPrefix("172.19.") ||
         ip.hasPrefix("172.2") || ip.hasPrefix("172.3") ||
-        ip.hasPrefix("127.") || ip == "0.0.0.0" || ip == "localhost"
+        ip.hasPrefix("127.") || ip == "0.0.0.0" || ip == "localhost" ||
+        ip.hasPrefix("::1") || ip.hasPrefix("fe80:") || ip.hasPrefix("fd")
     }
 
     private func isRawIP(_ addr: String) -> Bool {
-        // Simple check: if all parts are numbers and dots, it's a raw IP
+        // IPv4: all digits and dots
         let cleaned = addr.replacingOccurrences(of: ".", with: "")
-        return cleaned.allSatisfy(\.isNumber)
+        if cleaned.allSatisfy(\.isNumber) { return true }
+        // IPv6: contains colons
+        if addr.contains(":") { return true }
+        return false
     }
 
     private func runCommand(_ path: String, args: [String]) async -> String {

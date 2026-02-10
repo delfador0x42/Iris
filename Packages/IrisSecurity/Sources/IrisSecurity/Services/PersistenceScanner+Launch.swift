@@ -34,7 +34,7 @@ extension PersistenceScanner {
 
                 let binaryPath = extractBinaryPath(from: plist)
                 let autoRun = isAutoRun(plist)
-                let (signing, identifier, apple) = await verifyBinary(binaryPath)
+                let (signing, identifier, apple) = verifyBinary(binaryPath)
                 let label = file.replacingOccurrences(of: ".plist", with: "")
                 let isBaseline = baseline.isBaselineLaunchItem(
                     (plist["Label"] as? String) ?? label
@@ -101,10 +101,10 @@ extension PersistenceScanner {
         return false
     }
 
-    func verifyBinary(_ path: String?) async -> (SigningStatus, String?, Bool) {
+    nonisolated func verifyBinary(_ path: String?) -> (SigningStatus, String?, Bool) {
         guard let path, FileManager.default.fileExists(atPath: path) else {
             return (.unknown, nil, false)
         }
-        return await verifier.verify(path)
+        return verifier.verify(path)
     }
 }

@@ -37,7 +37,7 @@ public actor InternetDBService {
     /// Look up security data for a single IP address
     public func lookup(_ ip: String) async -> InternetDBResult? {
         // Skip private IPs - InternetDB only has data for public IPs
-        guard !isPrivateIP(ip) else { return nil }
+        guard !EnrichmentHelpers.isPrivateIP(ip) else { return nil }
 
         // Check cache first
         if let cached = cache.get(ip) {
@@ -77,7 +77,7 @@ public actor InternetDBService {
     /// Returns dictionary mapping IP -> InternetDBResult
     public func batchLookup(_ ipAddresses: [String]) async -> [String: InternetDBResult] {
         // Filter out private IPs
-        let publicIPs = ipAddresses.filter { !isPrivateIP($0) }
+        let publicIPs = EnrichmentHelpers.filterPublic(ipAddresses)
 
         guard !publicIPs.isEmpty else { return [:] }
 
@@ -127,37 +127,4 @@ public actor InternetDBService {
         logger.info("InternetDB cache cleared")
     }
 
-    // MARK: - Private Methods
-
-    /// Check if an IP address is private/local (not routable on the internet)
-    private func isPrivateIP(_ ip: String) -> Bool {
-        // IPv4 private ranges
-        if ip.hasPrefix("10.") ||
-           ip.hasPrefix("192.168.") ||
-           ip.hasPrefix("127.") ||
-           ip.hasPrefix("0.") ||
-           ip == "localhost" {
-            return true
-        }
-
-        // 172.16.0.0 - 172.31.255.255
-        if ip.hasPrefix("172.") {
-            let parts = ip.split(separator: ".")
-            if parts.count >= 2, let second = Int(parts[1]) {
-                if second >= 16 && second <= 31 {
-                    return true
-                }
-            }
-        }
-
-        // IPv6 private/local
-        if ip == "::1" ||
-           ip.lowercased().hasPrefix("fe80:") ||
-           ip.lowercased().hasPrefix("fc") ||
-           ip.lowercased().hasPrefix("fd") {
-            return true
-        }
-
-        return false
-    }
 }
