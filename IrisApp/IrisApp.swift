@@ -12,7 +12,7 @@ struct IrisMainApp: App {
                 ExtensionSetupView()
             }
         }
-        .windowStyle(.hiddenTitleBar)
+        .windowToolbarStyle(.unified(showsTitle: false))
         .defaultSize(width: 1200, height: 800)
     }
 }

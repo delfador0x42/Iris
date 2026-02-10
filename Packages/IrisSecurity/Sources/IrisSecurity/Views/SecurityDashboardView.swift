@@ -3,8 +3,6 @@ import SwiftUI
 /// Security posture dashboard with letter grade and categorized check results
 public struct SecurityDashboardView: View {
     @StateObject private var store = SecurityAssessmentStore()
-    @Environment(\.dismiss) private var dismiss
-
     public init() {}
 
     public var body: some View {
@@ -37,15 +35,6 @@ public struct SecurityDashboardView: View {
         }
         .task { await store.runAssessment() }
         .toolbar {
-            ToolbarItem(placement: .navigation) {
-                Button(action: { dismiss() }) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "chevron.left")
-                        Text("Back")
-                    }
-                    .foregroundColor(Color(red: 0.4, green: 0.7, blue: 1.0))
-                }
-            }
             ToolbarItem(placement: .automatic) {
                 Button(action: { Task { await store.runAssessment() } }) {
                     Image(systemName: "arrow.clockwise")

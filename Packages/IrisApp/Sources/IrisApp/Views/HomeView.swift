@@ -125,7 +125,6 @@ public struct HomeView: View {
 struct PlaceholderView: View {
     let title: String
     let description: String
-    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         ZStack {
@@ -153,17 +152,6 @@ struct PlaceholderView: View {
                     .font(.caption)
                     .foregroundColor(Color(red: 0.4, green: 0.6, blue: 1.0))
                     .padding(.top, 20)
-            }
-        }
-        .toolbar {
-            ToolbarItem(placement: .navigation) {
-                Button(action: { dismiss() }) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "chevron.left")
-                        Text("Back")
-                    }
-                    .foregroundColor(Color(red: 0.4, green: 0.7, blue: 1.0))
-                }
             }
         }
     }

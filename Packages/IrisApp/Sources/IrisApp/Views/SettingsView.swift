@@ -3,8 +3,6 @@ import SwiftUI
 /// Settings view for managing app preferences and security extension
 public struct SettingsView: View {
     @StateObject var extensionManager = ExtensionManager.shared
-    @Environment(\.dismiss) var dismiss
-
     // API key state stored in UserDefaults
     @AppStorage("abuseIPDBAPIKey") var abuseIPDBKey: String = ""
 
@@ -52,17 +50,6 @@ public struct SettingsView: View {
                     Spacer()
                 }
                 .padding(32)
-            }
-        }
-        .toolbar {
-            ToolbarItem(placement: .navigation) {
-                Button(action: { dismiss() }) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "chevron.left")
-                        Text("Back")
-                    }
-                    .foregroundColor(Color(red: 0.4, green: 0.7, blue: 1.0))
-                }
             }
         }
         .onAppear {

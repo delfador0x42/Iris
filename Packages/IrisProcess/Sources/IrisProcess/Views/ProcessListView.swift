@@ -5,7 +5,6 @@ public struct ProcessListView: View {
     @ObservedObject private var store = ProcessStore.shared
     @State private var selectedProcess: ProcessInfo?
     @State private var showingDetail = false
-    @Environment(\.dismiss) private var dismiss
 
     public init() {}
 
@@ -47,27 +46,27 @@ public struct ProcessListView: View {
                 }
             }
         }
+        .overlay {
+            if showingDetail, let process = selectedProcess {
+                ZStack {
+                    Color.black.opacity(0.5)
+                        .ignoresSafeArea()
+                        .onTapGesture { showingDetail = false }
+
+                    ProcessDetailView(process: process, onDismiss: { showingDetail = false })
+                        .frame(width: 600, height: 700)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .shadow(color: .black.opacity(0.5), radius: 20)
+                }
+                .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: showingDetail)
         .onAppear {
             store.startAutoRefresh()
         }
         .onDisappear {
             store.stopAutoRefresh()
-        }
-        .sheet(isPresented: $showingDetail) {
-            if let process = selectedProcess {
-                ProcessDetailView(process: process)
-            }
-        }
-        .toolbar {
-            ToolbarItem(placement: .navigation) {
-                Button(action: { dismiss() }) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "chevron.left")
-                        Text("Back")
-                    }
-                    .foregroundColor(Color(red: 0.4, green: 0.7, blue: 1.0))
-                }
-            }
         }
     }
 

@@ -4,7 +4,6 @@ import SwiftUI
 /// Entry point to all security scanning, monitoring, and auditing capabilities.
 public struct SecurityHubView: View {
     @State private var selectedModule: SecurityModule?
-    @Environment(\.dismiss) private var dismiss
 
     public init() {}
 
@@ -12,16 +11,34 @@ public struct SecurityHubView: View {
         ZStack {
             gridBackground
             if let module = selectedModule {
-                moduleView(for: module)
+                VStack(spacing: 0) {
+                    // Inline back-to-grid button
+                    HStack {
+                        Button(action: {
+                            withAnimation(.easeInOut(duration: 0.2)) { selectedModule = nil }
+                        }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "chevron.left")
+                                Text("Security")
+                            }
+                            .foregroundColor(.cyan)
+                            .font(.system(size: 13, weight: .medium))
+                        }
+                        .buttonStyle(.plain)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 12)
+                    .padding(.bottom, 4)
+
+                    moduleView(for: module)
+                }
             } else {
                 VStack(spacing: 0) {
                     hubHeader
                     moduleGrid
                 }
             }
-        }
-        .toolbar {
-            ToolbarItem(placement: .navigation) { backButton }
         }
     }
 
@@ -124,20 +141,6 @@ public struct SecurityHubView: View {
         }.ignoresSafeArea()
     }
 
-    private var backButton: some View {
-        Button(action: {
-            if selectedModule != nil {
-                withAnimation(.easeInOut(duration: 0.2)) { selectedModule = nil }
-            } else {
-                dismiss()
-            }
-        }) {
-            HStack(spacing: 4) {
-                Image(systemName: "chevron.left")
-                Text("Back")
-            }.foregroundColor(.cyan)
-        }
-    }
 }
 
 // MARK: - Module Definition

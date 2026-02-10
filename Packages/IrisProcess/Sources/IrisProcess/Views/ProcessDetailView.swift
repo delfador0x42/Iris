@@ -3,7 +3,7 @@ import SwiftUI
 /// Detail view for a single process showing all information
 struct ProcessDetailView: View {
     let process: ProcessInfo
-    @Environment(\.dismiss) private var dismiss
+    var onDismiss: () -> Void = {}
     @State private var manPageContent: String?
     @State private var isLoadingManPage = false
     @State private var showManPage = false
@@ -30,7 +30,7 @@ struct ProcessDetailView: View {
 
                         Spacer()
 
-                        Button("Close") { dismiss() }
+                        Button("Close") { onDismiss() }
                             .foregroundColor(.blue)
                     }
                     .padding(.bottom, 10)
@@ -108,7 +108,6 @@ struct ProcessDetailView: View {
                 .padding(24)
             }
         }
-        .frame(width: 600, height: 700)
         .task {
             await loadManPage()
         }

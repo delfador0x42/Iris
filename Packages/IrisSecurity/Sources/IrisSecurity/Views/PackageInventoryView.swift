@@ -6,8 +6,6 @@ public struct PackageInventoryView: View {
     @State private var isLoading = true
     @State private var searchText = ""
     @State private var selectedSource: PackageSource?
-    @Environment(\.dismiss) private var dismiss
-
     public init() {}
 
     public var body: some View {
@@ -33,17 +31,6 @@ public struct PackageInventoryView: View {
             }
         }
         .task { await loadPackages() }
-        .toolbar {
-            ToolbarItem(placement: .navigation) {
-                Button(action: { dismiss() }) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "chevron.left")
-                        Text("Back")
-                    }
-                    .foregroundColor(Color(red: 0.4, green: 0.7, blue: 1.0))
-                }
-            }
-        }
     }
 
     private var filteredPackages: [InstalledPackage] {
