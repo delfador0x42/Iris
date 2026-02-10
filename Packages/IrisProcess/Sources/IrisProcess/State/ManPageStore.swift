@@ -48,10 +48,9 @@ public final class ManPageStore: ObservableObject {
             return cached
         }
 
-        // Check on disk
+        // Check on disk (save deferred to batch caller)
         let exists = checkManPageExists(for: normalizedCommand)
         manPageExistsCache[normalizedCommand] = exists
-        saveExistenceCache()
 
         return exists
     }
@@ -73,7 +72,6 @@ public final class ManPageStore: ObservableObject {
         }.value
 
         manPageExistsCache[normalizedCommand] = exists
-        saveExistenceCache()
 
         return exists
     }
@@ -111,16 +109,29 @@ public final class ManPageStore: ObservableObject {
         return content
     }
 
-    /// Pre-cache man pages for a list of commands
-    /// - Parameter commands: Array of command names to cache
+    /// Pre-cache man pages for a list of commands.
+    /// Only checks names not already in cache. Max 10 concurrent subprocess checks.
     public func preCacheManPages(for commands: [String]) async {
+        let uncached = commands.filter { manPageExistsCache[normalizeCommand($0)] == nil }
+        guard !uncached.isEmpty else { return }
+
+        let maxConcurrency = 10
         await withTaskGroup(of: Void.self) { group in
-            for command in commands {
+            var running = 0
+            for command in uncached {
+                if running >= maxConcurrency {
+                    await group.next()
+                    running -= 1
+                }
                 group.addTask {
                     _ = await self.hasManPageAsync(for: command)
                 }
+                running += 1
             }
         }
+
+        // Save once after batch completes (not per-lookup)
+        saveExistenceCache()
     }
 
     /// Clear all cached man pages

@@ -9,17 +9,19 @@
 import Foundation
 
 /// Bounded cache with TTL and LRU eviction.
+/// Uses sequence counters for O(1) get/set (eviction is O(n) but rare).
 /// Designed for use inside actors (no internal locking needed).
 /// Marked nonisolated to avoid actor-isolation inference in Swift 6.
 nonisolated struct BoundedCache<Value> {
     private var entries: [String: Entry] = [:]
-    private var accessOrder: [String] = []  // Most recent at end
+    private var sequence: UInt64 = 0
     let maxSize: Int
     let ttl: TimeInterval
 
     struct Entry {
         let value: Value
         let insertedAt: Date
+        var lastAccess: UInt64
     }
 
     init(maxSize: Int = 5000, ttl: TimeInterval = 3600) {
@@ -28,31 +30,26 @@ nonisolated struct BoundedCache<Value> {
     }
 
     mutating func get(_ key: String) -> Value? {
-        guard let entry = entries[key] else { return nil }
-        // Check TTL
-        if Date().timeIntervalSince(entry.insertedAt) > ttl {
+        guard var entry = entries[key] else { return nil }
+        if Date().timeIntervalSince(entry.insertedAt) >= ttl {
             entries.removeValue(forKey: key)
-            accessOrder.removeAll { $0 == key }
             return nil
         }
-        // Move to end (most recently accessed)
-        accessOrder.removeAll { $0 == key }
-        accessOrder.append(key)
+        sequence += 1
+        entry.lastAccess = sequence
+        entries[key] = entry
         return entry.value
     }
 
     mutating func set(_ key: String, value: Value) {
-        // Remove existing entry if present
-        if entries[key] != nil {
-            accessOrder.removeAll { $0 == key }
+        // Evict LRU if at capacity and this is a new key
+        if entries[key] == nil, entries.count >= maxSize {
+            if let oldest = entries.min(by: { $0.value.lastAccess < $1.value.lastAccess }) {
+                entries.removeValue(forKey: oldest.key)
+            }
         }
-        // Evict LRU if at capacity
-        while entries.count >= maxSize, let oldest = accessOrder.first {
-            entries.removeValue(forKey: oldest)
-            accessOrder.removeFirst()
-        }
-        entries[key] = Entry(value: value, insertedAt: Date())
-        accessOrder.append(key)
+        sequence += 1
+        entries[key] = Entry(value: value, insertedAt: Date(), lastAccess: sequence)
     }
 
     /// Check if key exists (even if expired -- for negative caching)
@@ -62,7 +59,7 @@ nonisolated struct BoundedCache<Value> {
 
     mutating func removeAll() {
         entries.removeAll()
-        accessOrder.removeAll()
+        sequence = 0
     }
 
     var count: Int { entries.count }

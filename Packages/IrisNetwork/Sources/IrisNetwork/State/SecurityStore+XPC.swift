@@ -43,13 +43,22 @@ extension SecurityStore {
 
         logger.info("Connected to security extension")
 
-        // Start refresh timer
-        startRefreshTimer()
-
-        // Initial data fetch
+        // Initial data fetch (timer started separately via startMonitoring)
         Task {
             await refreshData()
         }
+    }
+
+    /// Start periodic refresh timer. Call from view's .onAppear.
+    /// XPC connection must be established first via connect().
+    public func startMonitoring() {
+        startRefreshTimer()
+    }
+
+    /// Stop periodic refresh timer. Call from view's .onDisappear.
+    /// XPC connection stays alive for instant resume.
+    public func stopMonitoring() {
+        stopRefreshTimer()
     }
 
     /// Disconnect from the extension

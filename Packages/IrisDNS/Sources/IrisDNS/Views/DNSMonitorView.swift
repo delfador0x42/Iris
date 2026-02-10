@@ -35,6 +35,10 @@ public struct DNSMonitorView: View {
         }
         .onAppear {
             store.connect()
+            store.startMonitoring()
+        }
+        .onDisappear {
+            store.stopMonitoring()
         }
         .alert("Clear All Queries?", isPresented: $showingClearConfirmation) {
             Button("Cancel", role: .cancel) {}

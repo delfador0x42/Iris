@@ -80,19 +80,21 @@ public struct NetworkMonitorView: View {
             // Set callback for when extension becomes ready (after user approval)
             extensionManager.onNetworkExtensionReady = { [weak store] in
                 store?.connect()
+                store?.startMonitoring()
             }
 
             Task {
                 // Check if extension is already installed
                 await extensionManager.checkNetworkExtensionStatus()
-                // If installed, connect automatically
+                // If installed, connect and start polling
                 if extensionManager.networkExtensionState == .installed {
                     store.connect()
+                    store.startMonitoring()
                 }
             }
         }
         .onDisappear {
-            store.disconnect()
+            store.stopMonitoring()
             extensionManager.onNetworkExtensionReady = nil
         }
     }

@@ -37,4 +37,86 @@ enum ProcessEnumeration {
         guard !path.isEmpty else { return "unknown" }
         return URL(fileURLWithPath: path).lastPathComponent
     }
+
+    /// Get command-line arguments for a PID via KERN_PROCARGS2.
+    /// Format: [4-byte argc][exec path \0][padding \0s][arg0 \0][arg1 \0]...
+    static func getProcessArguments(_ pid: pid_t) -> [String] {
+        var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, pid]
+        var size: Int = 0
+        guard sysctl(&mib, 3, nil, &size, nil, 0) == 0, size > 0 else { return [] }
+
+        var buffer = [UInt8](repeating: 0, count: size)
+        guard sysctl(&mib, 3, &buffer, &size, nil, 0) == 0,
+              size > MemoryLayout<Int32>.size else { return [] }
+
+        let argc: Int32 = buffer.withUnsafeBufferPointer {
+            $0.baseAddress!.withMemoryRebound(to: Int32.self, capacity: 1) { $0.pointee }
+        }
+        guard argc > 0, argc < 512 else { return [] }
+
+        var offset = MemoryLayout<Int32>.size
+        // Skip executable path
+        while offset < size && buffer[offset] != 0 { offset += 1 }
+        // Skip null padding
+        while offset < size && buffer[offset] == 0 { offset += 1 }
+
+        var args: [String] = []
+        while args.count < Int(argc) && offset < size {
+            let start = offset
+            while offset < size && buffer[offset] != 0 { offset += 1 }
+            if offset > start,
+               let arg = String(bytes: buffer[start..<offset], encoding: .utf8) {
+                args.append(arg)
+            }
+            offset += 1
+        }
+        return args
+    }
+
+    /// Get environment variables for a PID via KERN_PROCARGS2.
+    /// Returns all env vars after the command-line arguments.
+    static func getProcessEnvironment(_ pid: pid_t) -> [(key: String, value: String)] {
+        var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, pid]
+        var size: Int = 0
+        guard sysctl(&mib, 3, nil, &size, nil, 0) == 0, size > 0 else { return [] }
+
+        var buffer = [UInt8](repeating: 0, count: size)
+        guard sysctl(&mib, 3, &buffer, &size, nil, 0) == 0,
+              size > MemoryLayout<Int32>.size else { return [] }
+
+        let argc: Int32 = buffer.withUnsafeBufferPointer {
+            $0.baseAddress!.withMemoryRebound(to: Int32.self, capacity: 1) { $0.pointee }
+        }
+        guard argc > 0, argc < 512 else { return [] }
+
+        var offset = MemoryLayout<Int32>.size
+        // Skip executable path
+        while offset < size && buffer[offset] != 0 { offset += 1 }
+        // Skip null padding
+        while offset < size && buffer[offset] == 0 { offset += 1 }
+
+        // Skip arguments
+        var argsSkipped = 0
+        while argsSkipped < Int(argc) && offset < size {
+            while offset < size && buffer[offset] != 0 { offset += 1 }
+            offset += 1
+            argsSkipped += 1
+        }
+
+        // Parse environment variables (KEY=VALUE\0 format)
+        var envVars: [(key: String, value: String)] = []
+        while offset < size {
+            let start = offset
+            while offset < size && buffer[offset] != 0 { offset += 1 }
+            guard offset > start else { break }
+            if let entry = String(bytes: buffer[start..<offset], encoding: .utf8),
+               let eqIdx = entry.firstIndex(of: "=") {
+                let key = String(entry[entry.startIndex..<eqIdx])
+                let value = String(entry[entry.index(after: eqIdx)...])
+                envVars.append((key: key, value: value))
+            }
+            offset += 1
+        }
+        return envVars
+    }
 }

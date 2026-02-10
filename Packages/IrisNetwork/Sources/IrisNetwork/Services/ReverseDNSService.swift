@@ -49,54 +49,12 @@ public actor ReverseDNSService {
     }
 
     /// Batch lookup hostnames for multiple IP addresses
-    /// - Parameter ips: Array of IP addresses to look up
-    /// - Returns: Dictionary mapping IP addresses to their hostnames
     public func batchLookup(_ ips: [String]) async -> [String: String] {
-        // Filter out private IPs and already-cached
-        let publicIPs = EnrichmentHelpers.filterPublic(ips)
-        var uncachedIPs: [String] = []
-        var results: [String: String] = [:]
-
-        // Start with cached results
-        for ip in publicIPs {
-            if let cached = cache.get(ip) {
-                results[ip] = cached
-            } else {
-                uncachedIPs.append(ip)
-            }
-        }
-
-        guard !uncachedIPs.isEmpty else { return results }
-
-        // Fetch uncached IPs concurrently with limit
-        await withTaskGroup(of: (String, String?).self) { group in
-            for ip in uncachedIPs.prefix(maxConcurrent) {
-                group.addTask {
-                    let hostname = await self.lookup(ip)
-                    return (ip, hostname)
-                }
-            }
-
-            for await (ip, hostname) in group {
-                if let hostname = hostname {
-                    results[ip] = hostname
-                }
-            }
-        }
-
-        let successCount = results.count - (publicIPs.count - uncachedIPs.count)
-        if successCount > 0 {
-            logger.info("Reverse DNS batch: \(successCount)/\(uncachedIPs.count) IPs resolved")
-        }
-
-        return results
+        await EnrichmentHelpers.batchLookup(ips, maxConcurrent: maxConcurrent, lookup: lookup)
     }
 
     /// Clear the cache
-    public func clearCache() {
-        cache.removeAll()
-        logger.info("Reverse DNS cache cleared")
-    }
+    public func clearCache() { cache.removeAll() }
 
     // MARK: - Private Methods
 

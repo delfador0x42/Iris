@@ -23,16 +23,25 @@ public final class DNSStore: ObservableObject {
     @Published public internal(set) var isActive: Bool = false
 
     /// All captured DNS queries.
-    @Published public internal(set) var queries: [DNSQueryRecord] = []
+    @Published public internal(set) var queries: [DNSQueryRecord] = [] { didSet { updateFilteredQueries() } }
 
-    /// Current search/filter query.
+    /// Current search/filter query (debounced via Combine).
     @Published public var searchQuery: String = ""
 
     /// Active record type filter.
-    @Published public var typeFilter: String?
+    @Published public var typeFilter: String? { didSet { updateFilteredQueries() } }
 
     /// Whether to show only blocked queries.
-    @Published public var showBlockedOnly: Bool = false
+    @Published public var showBlockedOnly: Bool = false { didSet { updateFilteredQueries() } }
+
+    /// Derived: filtered queries (updated when queries or filters change).
+    @Published public internal(set) var filteredQueries: [DNSQueryRecord] = []
+
+    /// Derived: unique record types in captured queries.
+    @Published public internal(set) var availableTypes: [String] = []
+
+    /// Derived: top queried domains.
+    @Published public internal(set) var topDomains: [(domain: String, count: Int)] = []
 
     /// Currently selected query for detail view.
     @Published public var selectedQuery: DNSQueryRecord?

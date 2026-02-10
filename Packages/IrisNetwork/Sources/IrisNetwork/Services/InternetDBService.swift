@@ -74,57 +74,11 @@ public actor InternetDBService {
     }
 
     /// Look up security data for multiple IP addresses concurrently
-    /// Returns dictionary mapping IP -> InternetDBResult
-    public func batchLookup(_ ipAddresses: [String]) async -> [String: InternetDBResult] {
-        // Filter out private IPs
-        let publicIPs = EnrichmentHelpers.filterPublic(ipAddresses)
-
-        guard !publicIPs.isEmpty else { return [:] }
-
-        // Start with cached results
-        var results: [String: InternetDBResult] = [:]
-        var uncachedIPs: [String] = []
-
-        for ip in publicIPs {
-            if let cached = cache.get(ip) {
-                results[ip] = cached
-            } else {
-                uncachedIPs.append(ip)
-            }
-        }
-
-        // Nothing new to fetch
-        guard !uncachedIPs.isEmpty else { return results }
-
-        // InternetDB doesn't support batch API, so fetch concurrently
-        // Limit concurrent requests to avoid overwhelming the API
-        let maxConcurrent = 20
-
-        await withTaskGroup(of: (String, InternetDBResult?).self) { group in
-            for ip in uncachedIPs.prefix(maxConcurrent) {
-                group.addTask {
-                    let result = await self.lookup(ip)
-                    return (ip, result)
-                }
-            }
-
-            for await (ip, result) in group {
-                if let result = result {
-                    results[ip] = result
-                }
-            }
-        }
-
-        let successCount = results.count - (publicIPs.count - uncachedIPs.count)
-        logger.info("InternetDB batch lookup: \(successCount)/\(uncachedIPs.count) IPs resolved")
-
-        return results
+    public func batchLookup(_ ips: [String]) async -> [String: InternetDBResult] {
+        await EnrichmentHelpers.batchLookup(ips, maxConcurrent: 20, lookup: lookup)
     }
 
     /// Clear the cache
-    public func clearCache() {
-        cache.removeAll()
-        logger.info("InternetDB cache cleared")
-    }
+    public func clearCache() { cache.removeAll() }
 
 }

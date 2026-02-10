@@ -162,70 +162,37 @@ public struct ProcessInfo: Identifiable, Sendable, Codable, Equatable {
         name.hasPrefix(".")
     }
 
-    /// Reasons why this process might be suspicious
-    public var suspicionReasons: [SuspicionReason] {
-        var reasons: [SuspicionReason] = []
-
-        // Check code signing status
-        if let csInfo = codeSigningInfo {
-            // Unsigned binary (high severity)
-            if csInfo.signingId == nil && csInfo.teamId == nil && !csInfo.isAppleSigned {
-                reasons.append(.unsigned)
-            }
-            // Ad-hoc signed (medium severity) - has signing ID but no team ID
-            else if csInfo.teamId == nil && csInfo.signingId != nil && !csInfo.isAppleSigned {
-                reasons.append(.adHocSigned)
-            }
-            // Not Apple signed (low severity)
-            else if !csInfo.isAppleSigned && !csInfo.isPlatformBinary {
-                reasons.append(.notAppleSigned)
-            }
-        } else {
-            // No code signing info available - treat as unsigned
-            reasons.append(.unsigned)
-        }
-
-        // Check location (high severity)
-        if isFromSuspiciousLocation {
-            reasons.append(.suspiciousLocation)
-        }
-
-        // Check for hidden process (medium severity)
-        if isHiddenProcess {
-            reasons.append(.hiddenProcess)
-        }
-
-        // Check for missing man page (low severity)
-        // Only flag if we've checked and confirmed no man page exists
-        if hasManPage == false {
-            reasons.append(.noManPage)
-        }
-
-        // Check for high CPU (medium severity) - sustained >80%
-        if let res = resources, res.cpuUsagePercent > 80 {
-            reasons.append(.highCPU)
-        }
-
-        // Check for deleted binary (high severity) - binary no longer on disk
-        if !FileManager.default.fileExists(atPath: path) {
-            reasons.append(.deletedBinary)
-        }
-
-        // Check for recently spawned (low severity) - within last 10 seconds
-        if Date().timeIntervalSince(timestamp) < 10 {
-            reasons.append(.recentlySpawned)
-        }
-
-        return reasons
-    }
+    /// Cached suspicion reasons (call `refreshSuspicion()` to update).
+    public var suspicionReasons: [SuspicionReason] = []
 
     /// Whether this process should be highlighted as suspicious
-    public var isSuspicious: Bool {
-        !suspicionReasons.isEmpty
-    }
+    public var isSuspicious: Bool { !suspicionReasons.isEmpty }
 
     /// The highest severity level among all suspicion reasons
     public var highestSeverity: SuspicionSeverity? {
         suspicionReasons.map(\.severity).max()
+    }
+
+    /// Recompute suspicion reasons. Call once when data changes, not on every view render.
+    public mutating func refreshSuspicion() {
+        var reasons: [SuspicionReason] = []
+        if let csInfo = codeSigningInfo {
+            if csInfo.signingId == nil && csInfo.teamId == nil && !csInfo.isAppleSigned {
+                reasons.append(.unsigned)
+            } else if csInfo.teamId == nil && csInfo.signingId != nil && !csInfo.isAppleSigned {
+                reasons.append(.adHocSigned)
+            } else if !csInfo.isAppleSigned && !csInfo.isPlatformBinary {
+                reasons.append(.notAppleSigned)
+            }
+        } else {
+            reasons.append(.unsigned)
+        }
+        if isFromSuspiciousLocation { reasons.append(.suspiciousLocation) }
+        if isHiddenProcess { reasons.append(.hiddenProcess) }
+        if hasManPage == false { reasons.append(.noManPage) }
+        if let res = resources, res.cpuUsagePercent > 80 { reasons.append(.highCPU) }
+        if !FileManager.default.fileExists(atPath: path) { reasons.append(.deletedBinary) }
+        if Date().timeIntervalSince(timestamp) < 10 { reasons.append(.recentlySpawned) }
+        suspicionReasons = reasons
     }
 }

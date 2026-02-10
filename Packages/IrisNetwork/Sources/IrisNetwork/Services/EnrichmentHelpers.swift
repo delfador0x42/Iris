@@ -36,4 +36,28 @@ public enum EnrichmentHelpers {
     public static func filterPublic(_ ips: [String]) -> [String] {
         ips.filter { !isPrivateIP($0) }
     }
+
+    /// Standard batch lookup: filter private, fetch via TaskGroup with concurrency limit.
+    /// Each service's `lookup()` already handles cache, so we just call it for every IP.
+    /// Cache hits are O(1) dict lookups — no wasted API calls.
+    public static func batchLookup<R: Sendable>(
+        _ ips: [String],
+        maxConcurrent: Int,
+        lookup: @escaping @Sendable (String) async -> R?
+    ) async -> [String: R] {
+        let publicIPs = filterPublic(ips)
+        guard !publicIPs.isEmpty else { return [:] }
+
+        var results: [String: R] = [:]
+
+        await withTaskGroup(of: (String, R?).self) { group in
+            for ip in publicIPs.prefix(maxConcurrent) {
+                group.addTask { (ip, await lookup(ip)) }
+            }
+            for await (ip, result) in group {
+                if let result = result { results[ip] = result }
+            }
+        }
+        return results
+    }
 }

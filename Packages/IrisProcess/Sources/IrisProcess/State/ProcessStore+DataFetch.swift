@@ -29,6 +29,9 @@ extension ProcessStore {
         // Enrich with resource metrics (CPU, memory, threads, FDs)
         await enrichWithResources()
 
+        // Compute suspicion reasons once (not per-render)
+        for i in processes.indices { processes[i].refreshSuspicion() }
+
         // Check man pages for processes (in background, don't block refresh)
         Task {
             await checkManPagesForProcesses()
@@ -48,11 +51,12 @@ extension ProcessStore {
         // Pre-cache man page existence for all commands
         await manPageStore.preCacheManPages(for: Array(commandNames))
 
-        // Update processes with man page status
+        // Update processes with man page status and recompute suspicion
         for i in processes.indices {
             let hasManPage = manPageStore.hasManPage(for: processes[i].name)
             if processes[i].hasManPage != hasManPage {
                 processes[i].hasManPage = hasManPage
+                processes[i].refreshSuspicion()
             }
         }
     }

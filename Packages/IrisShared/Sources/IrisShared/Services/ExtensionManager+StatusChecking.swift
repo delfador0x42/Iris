@@ -8,13 +8,14 @@ import os.log
 @MainActor
 extension ExtensionManager {
 
-    /// Check status of all extensions
+    /// Check status of all extensions (parallel — max(checks) instead of sum)
     public func checkAllExtensionStatuses() async {
-        await checkNetworkExtensionStatus()
-        await checkEndpointExtensionStatus()
-        await checkProxyExtensionStatus()
-        await checkDNSExtensionStatus()
-        await checkFullDiskAccess()
+        async let network: Void = checkNetworkExtensionStatus()
+        async let endpoint: Void = checkEndpointExtensionStatus()
+        async let proxy: Void = checkProxyExtensionStatus()
+        async let dns: Void = checkDNSExtensionStatus()
+        async let fda: Void = checkFullDiskAccess()
+        _ = await (network, endpoint, proxy, dns, fda)
     }
 
     /// Check network extension status via NEFilterManager

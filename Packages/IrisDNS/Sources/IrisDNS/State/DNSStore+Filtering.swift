@@ -12,15 +12,16 @@ extension DNSStore {
         $searchQuery
             .debounce(for: .milliseconds(300), scheduler: RunLoop.main)
             .sink { [weak self] _ in
-                self?.objectWillChange.send()
+                self?.updateFilteredQueries()
             }
             .store(in: &cancellables)
     }
 
-    // MARK: - Filtered Queries
+    // MARK: - Derived State
 
-    /// Queries filtered by current search and filters.
-    public var filteredQueries: [DNSQueryRecord] {
+    /// Recalculate filtered queries and top domains.
+    /// Called when queries, typeFilter, or showBlockedOnly change.
+    func updateFilteredQueries() {
         var result = queries
 
         if !searchQuery.isEmpty {
@@ -40,23 +41,16 @@ extension DNSStore {
             result = result.filter { $0.isBlocked }
         }
 
-        return result
-    }
+        filteredQueries = result
+        availableTypes = Array(Set(queries.map { $0.recordType })).sorted()
 
-    /// Unique record types in captured queries.
-    public var availableTypes: [String] {
-        Array(Set(queries.map { $0.recordType })).sorted()
-    }
-
-    /// Top queried domains.
-    public var topDomains: [(domain: String, count: Int)] {
+        // Top domains
         var counts: [String: Int] = [:]
         for query in queries {
-            // Use root domain (e.g., "apple.com" from "api.apple.com")
             let parts = query.domain.split(separator: ".")
             let root = parts.count >= 2 ? parts.suffix(2).joined(separator: ".") : query.domain
             counts[root, default: 0] += 1
         }
-        return counts.sorted { $0.value > $1.value }.prefix(10).map { ($0.key, $0.value) }
+        topDomains = counts.sorted { $0.value > $1.value }.prefix(10).map { ($0.key, $0.value) }
     }
 }

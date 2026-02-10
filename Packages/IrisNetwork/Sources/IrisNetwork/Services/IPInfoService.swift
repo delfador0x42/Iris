@@ -53,51 +53,12 @@ public actor IPInfoService {
     }
 
     /// Batch lookup geolocation for multiple IP addresses
-    /// - Parameter ips: Array of IP addresses to look up
-    /// - Returns: Dictionary mapping IP addresses to their geolocation results
     public func batchLookup(_ ips: [String]) async -> [String: GeoIPService.GeoIPResult] {
-        let publicIPs = EnrichmentHelpers.filterPublic(ips)
-        var results: [String: GeoIPService.GeoIPResult] = [:]
-        var uncachedIPs: [String] = []
-
-        // Start with cached results
-        for ip in publicIPs {
-            if let cached = cache.get(ip) {
-                results[ip] = cached
-            } else {
-                uncachedIPs.append(ip)
-            }
-        }
-
-        guard !uncachedIPs.isEmpty else { return results }
-
-        // ipinfo.io doesn't have a batch API, so fetch concurrently
-        // Limit concurrent requests to avoid overwhelming the API
-        let maxConcurrent = 10
-
-        await withTaskGroup(of: (String, GeoIPService.GeoIPResult?).self) { group in
-            for ip in uncachedIPs.prefix(maxConcurrent) {
-                group.addTask {
-                    let result = await self.lookup(ip)
-                    return (ip, result)
-                }
-            }
-
-            for await (ip, result) in group {
-                if let result = result {
-                    results[ip] = result
-                }
-            }
-        }
-
-        return results
+        await EnrichmentHelpers.batchLookup(ips, maxConcurrent: 10, lookup: lookup)
     }
 
     /// Clear the cache
-    public func clearCache() {
-        cache.removeAll()
-        logger.info("IPInfo cache cleared")
-    }
+    public func clearCache() { cache.removeAll() }
 
     // MARK: - Private Methods
 

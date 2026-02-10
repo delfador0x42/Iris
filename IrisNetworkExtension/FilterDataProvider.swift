@@ -32,6 +32,10 @@ class FilterDataProvider: NEFilterDataProvider {
     var rules: [SecurityRule] = []
     let rulesLock = NSLock()
 
+    /// Cache signing identifiers by PID to avoid redundant SecCode verification.
+    /// A browser with 50 connections would otherwise verify the same binary 50 times.
+    var signingIdCache: [pid_t: String?] = [:]
+
     // MARK: - Connection Tracking
 
     struct ConnectionTracker {
@@ -131,7 +135,10 @@ class FilterDataProvider: NEFilterDataProvider {
         // Only remove flow entries pointing to stale IDs (avoids rebuilding entire dict)
         flowToConnection = flowToConnection.filter { !staleIdSet.contains($0.value) }
 
+        // Prune signing cache for PIDs with no remaining connections (handles PID reuse)
         if !staleIds.isEmpty {
+            let activePIDs = Set(connections.values.map { $0.connection.processId })
+            signingIdCache = signingIdCache.filter { activePIDs.contains($0.key) }
             logger.debug("Cleaned up \(staleIds.count) stale connections, \(self.connections.count) remaining")
         }
         connectionsLock.unlock()

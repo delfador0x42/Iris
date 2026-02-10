@@ -132,47 +132,11 @@ public actor AbuseIPDBService {
 
     /// Batch lookup abuse scores for multiple IP addresses
     public func batchLookup(_ ips: [String]) async -> [String: AbuseResult] {
-        var results: [String: AbuseResult] = [:]
-
-        let publicIPs = EnrichmentHelpers.filterPublic(ips)
-        var uncachedIPs: [String] = []
-
-        // Start with cached results
-        for ip in publicIPs {
-            if let cached = cache.get(ip) {
-                results[ip] = cached
-            } else {
-                uncachedIPs.append(ip)
-            }
-        }
-
-        // Fetch uncached IPs concurrently
-        let maxFetch = min(uncachedIPs.count, 20)  // Limit per batch
-
-        await withTaskGroup(of: (String, AbuseResult?).self) { group in
-            for ip in uncachedIPs.prefix(maxFetch) {
-                guard isAvailable() else { break }
-                group.addTask {
-                    let result = await self.lookup(ip)
-                    return (ip, result)
-                }
-            }
-
-            for await (ip, result) in group {
-                if let result = result {
-                    results[ip] = result
-                }
-            }
-        }
-
-        return results
+        await EnrichmentHelpers.batchLookup(ips, maxConcurrent: 20, lookup: lookup)
     }
 
     /// Clear the cache
-    public func clearCache() {
-        cache.removeAll()
-        logger.info("AbuseIPDB cache cleared")
-    }
+    public func clearCache() { cache.removeAll() }
 
     // MARK: - Private Methods
 

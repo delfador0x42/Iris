@@ -33,63 +33,49 @@ public final class SecurityStore: ObservableObject {
     var refreshTimer: Timer?
 
     /// Refresh interval in seconds.
-    /// Rationale: 1 second provides near-real-time network visibility.
-    /// Network connections change rapidly, so faster polling is valuable here.
-    let refreshInterval: TimeInterval = 1.0
+    /// Rationale: 2 seconds balances responsiveness with CPU/XPC overhead.
+    let refreshInterval: TimeInterval = 2.0
 
     /// Optional data source for dependency injection (used in tests)
     let dataSource: (any NetworkDataSourceProtocol)?
 
-    // MARK: - Computed Properties
+    // MARK: - Derived State (updated when connections change)
 
     /// Unique processes with connections
-    public var processes: [ProcessSummary] {
-        connectionsByProcess.map { pid, connections in
-            let totalBytesUp = connections.reduce(0) { $0 + $1.bytesUp }
-            let totalBytesDown = connections.reduce(0) { $0 + $1.bytesDown }
+    @Published public internal(set) var processes: [ProcessSummary] = []
 
-            return ProcessSummary(
+    /// Total bytes uploaded
+    @Published public internal(set) var totalBytesUp: UInt64 = 0
+
+    /// Total bytes downloaded
+    @Published public internal(set) var totalBytesDown: UInt64 = 0
+
+    /// Count of connections with geolocation
+    @Published public internal(set) var geolocatedCount: Int = 0
+
+    /// Unique countries in connections
+    @Published public internal(set) var uniqueCountries: Set<String> = []
+
+    /// Recalculates all derived state from current connections.
+    func updateDerivedState() {
+        totalBytesUp = connections.reduce(0) { $0 + $1.bytesUp }
+        totalBytesDown = connections.reduce(0) { $0 + $1.bytesDown }
+        geolocatedCount = connections.filter { $0.hasGeolocation }.count
+        uniqueCountries = Set(connections.compactMap { $0.remoteCountryCode })
+        processes = connectionsByProcess.map { pid, conns in
+            ProcessSummary(
                 pid: pid,
-                name: connections.first?.processName ?? "Unknown",
-                path: connections.first?.processPath ?? "",
-                connectionCount: connections.count,
-                totalBytesUp: totalBytesUp,
-                totalBytesDown: totalBytesDown
+                name: conns.first?.processName ?? "Unknown",
+                path: conns.first?.processPath ?? "",
+                connectionCount: conns.count,
+                totalBytesUp: conns.reduce(0) { $0 + $1.bytesUp },
+                totalBytesDown: conns.reduce(0) { $0 + $1.bytesDown }
             )
         }
         .sorted {
-            // Sort alphabetically by name first, then by PID (lower PIDs on top) for stability
-            let nameComparison = $0.name.localizedCaseInsensitiveCompare($1.name)
-            if nameComparison != .orderedSame {
-                return nameComparison == .orderedAscending
-            }
-            return $0.pid < $1.pid
+            let cmp = $0.name.localizedCaseInsensitiveCompare($1.name)
+            return cmp != .orderedSame ? cmp == .orderedAscending : $0.pid < $1.pid
         }
-    }
-
-    /// Total bytes uploaded
-    public var totalBytesUp: UInt64 {
-        connections.reduce(0) { $0 + $1.bytesUp }
-    }
-
-    /// Total bytes downloaded
-    public var totalBytesDown: UInt64 {
-        connections.reduce(0) { $0 + $1.bytesDown }
-    }
-
-    /// Connections that have geolocation data
-    public var geolocatedConnections: [NetworkConnection] {
-        connections.filter { $0.hasGeolocation }
-    }
-
-    /// Unique countries in connections
-    public var uniqueCountries: Set<String> {
-        Set(connections.compactMap { $0.remoteCountryCode })
-    }
-
-    /// Count of connections with geolocation
-    public var geolocatedCount: Int {
-        geolocatedConnections.count
     }
 
     // MARK: - Types

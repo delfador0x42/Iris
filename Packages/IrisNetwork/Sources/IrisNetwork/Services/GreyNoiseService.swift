@@ -141,10 +141,7 @@ public actor GreyNoiseService {
     }
 
     /// Clear the cache
-    public func clearCache() {
-        cache.removeAll()
-        logger.info("GreyNoise cache cleared")
-    }
+    public func clearCache() { cache.removeAll() }
 
     // MARK: - Private Methods
 

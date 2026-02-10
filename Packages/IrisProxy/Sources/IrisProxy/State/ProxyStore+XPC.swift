@@ -32,16 +32,24 @@ extension ProxyStore {
         connection.resume()
         xpcConnection = connection
 
-        // Start periodic refresh
-        startRefreshTimer()
-
-        // Initial status check
+        // Initial status check (timer started separately via startMonitoring)
         Task {
             await refreshStatus()
             await refreshFlows()
         }
 
         logger.info("Connected to proxy extension")
+    }
+
+    /// Start periodic refresh timer. Call from view's .onAppear.
+    public func startMonitoring() {
+        startRefreshTimer()
+    }
+
+    /// Stop periodic refresh timer. Call from view's .onDisappear.
+    /// XPC connection stays alive for instant resume.
+    public func stopMonitoring() {
+        stopRefreshTimer()
     }
 
     /// Disconnects from the proxy extension.

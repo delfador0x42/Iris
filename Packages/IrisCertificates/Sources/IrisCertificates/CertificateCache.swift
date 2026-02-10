@@ -13,7 +13,7 @@ public final class CertificateCache: @unchecked Sendable {
         let privateKey: SecKey
         let certificate: SecCertificate
         let createdAt: Date
-        var lastAccessedAt: Date
+        var lastAccess: UInt64
     }
 
     // MARK: - Properties
@@ -29,8 +29,8 @@ public final class CertificateCache: @unchecked Sendable {
     /// The cache storage.
     private var cache: [String: CacheEntry] = [:]
 
-    /// Order of access for LRU eviction.
-    private var accessOrder: [String] = []
+    /// Monotonic sequence counter for LRU tracking (O(1) on access).
+    private var sequence: UInt64 = 0
 
     /// Lock for thread-safe access.
     private let lock = NSLock()
@@ -73,10 +73,10 @@ public final class CertificateCache: @unchecked Sendable {
             return nil
         }
 
-        // Update access time and order
-        entry.lastAccessedAt = Date()
+        // Update access sequence (O(1))
+        sequence += 1
+        entry.lastAccess = sequence
         cache[hostname] = entry
-        updateAccessOrderUnsafe(hostname: hostname)
 
         logger.debug("Cache hit for hostname: \(hostname)")
         return (entry.privateKey, entry.certificate)
@@ -98,15 +98,15 @@ public final class CertificateCache: @unchecked Sendable {
         }
 
         // Add new entry
+        sequence += 1
         let entry = CacheEntry(
             privateKey: certificate.privateKey,
             certificate: certificate.certificate,
             createdAt: now,
-            lastAccessedAt: now
+            lastAccess: sequence
         )
 
         cache[hostname] = entry
-        accessOrder.append(hostname)
 
         logger.debug("Cached certificate for hostname: \(hostname), cache size: \(self.cache.count)")
     }
@@ -125,7 +125,7 @@ public final class CertificateCache: @unchecked Sendable {
         defer { lock.unlock() }
 
         cache.removeAll()
-        accessOrder.removeAll()
+        sequence = 0
 
         logger.info("Certificate cache cleared")
     }
@@ -186,25 +186,13 @@ public final class CertificateCache: @unchecked Sendable {
     /// Removes an entry without locking (caller must hold lock).
     private func removeEntryUnsafe(hostname: String) {
         cache.removeValue(forKey: hostname)
-        if let index = accessOrder.firstIndex(of: hostname) {
-            accessOrder.remove(at: index)
-        }
-    }
-
-    /// Updates access order without locking (caller must hold lock).
-    private func updateAccessOrderUnsafe(hostname: String) {
-        if let index = accessOrder.firstIndex(of: hostname) {
-            accessOrder.remove(at: index)
-        }
-        accessOrder.append(hostname)
     }
 
     /// Evicts the least recently used entry without locking (caller must hold lock).
     private func evictLRUUnsafe() {
-        guard let oldest = accessOrder.first else { return }
-
-        logger.debug("Evicting LRU entry: \(oldest)")
-        removeEntryUnsafe(hostname: oldest)
+        guard let oldest = cache.min(by: { $0.value.lastAccess < $1.value.lastAccess }) else { return }
+        logger.debug("Evicting LRU entry: \(oldest.key)")
+        cache.removeValue(forKey: oldest.key)
     }
 }
 

@@ -32,14 +32,24 @@ extension DNSStore {
         connection.resume()
         xpcConnection = connection
 
-        startRefreshTimer()
-
+        // Initial data fetch (timer started separately via startMonitoring)
         Task {
             await refreshStatus()
             await refreshQueries()
         }
 
         logger.info("Connected to DNS proxy extension")
+    }
+
+    /// Start periodic refresh timer. Call from view's .onAppear.
+    public func startMonitoring() {
+        startRefreshTimer()
+    }
+
+    /// Stop periodic refresh timer. Call from view's .onDisappear.
+    /// XPC connection stays alive for instant resume.
+    public func stopMonitoring() {
+        stopRefreshTimer()
     }
 
     /// Disconnects from the DNS proxy extension.

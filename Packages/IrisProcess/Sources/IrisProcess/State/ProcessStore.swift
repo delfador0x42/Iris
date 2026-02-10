@@ -8,13 +8,13 @@ public final class ProcessStore: ObservableObject {
 
     // MARK: - Published State
 
-    @Published public internal(set) var processes: [ProcessInfo] = []
+    @Published public internal(set) var processes: [ProcessInfo] = [] { didSet { updateDisplayedProcesses() } }
     @Published public internal(set) var isLoading = false
     @Published public internal(set) var lastUpdate: Date?
     @Published public internal(set) var errorMessage: String?
-    @Published public var filterText: String = ""
-    @Published public var showOnlySuspicious: Bool = false
-    @Published public var sortOrder: SortOrder = .name
+    @Published public var filterText: String = "" { didSet { updateDisplayedProcesses() } }
+    @Published public var showOnlySuspicious: Bool = false { didSet { updateDisplayedProcesses() } }
+    @Published public var sortOrder: SortOrder = .name { didSet { updateDisplayedProcesses() } }
     @Published public var viewMode: ViewMode = .list
 
     // MARK: - Types
@@ -48,13 +48,21 @@ public final class ProcessStore: ObservableObject {
     /// Process list changes infrequently, so faster polling adds overhead without benefit.
     let refreshInterval: TimeInterval = 2.0
 
-    // MARK: - Computed Properties
+    // MARK: - Derived State (updated via didSet, not recomputed per render)
 
     /// Filtered and sorted processes
-    public var displayedProcesses: [ProcessInfo] {
-        var result = processes
+    @Published public internal(set) var displayedProcesses: [ProcessInfo] = []
 
-        // Filter by search text
+    /// Count of suspicious processes
+    @Published public internal(set) var suspiciousCount: Int = 0
+
+    /// Total process count
+    public var totalCount: Int { processes.count }
+
+    func updateDisplayedProcesses() {
+        suspiciousCount = processes.filter { $0.isSuspicious }.count
+
+        var result = processes
         if !filterText.isEmpty {
             result = result.filter { process in
                 process.name.localizedCaseInsensitiveContains(filterText) ||
@@ -62,13 +70,9 @@ public final class ProcessStore: ObservableObject {
                 String(process.pid).contains(filterText)
             }
         }
-
-        // Filter suspicious only
         if showOnlySuspicious {
             result = result.filter { $0.isSuspicious }
         }
-
-        // Sort
         switch sortOrder {
         case .name:
             result.sort { $0.name.lowercased() < $1.name.lowercased() }
@@ -82,24 +86,11 @@ public final class ProcessStore: ObservableObject {
             result.sort { ($0.resources?.residentMemory ?? 0) > ($1.resources?.residentMemory ?? 0) }
         case .suspicious:
             result.sort { lhs, rhs in
-                if lhs.isSuspicious != rhs.isSuspicious {
-                    return lhs.isSuspicious
-                }
+                if lhs.isSuspicious != rhs.isSuspicious { return lhs.isSuspicious }
                 return lhs.name.lowercased() < rhs.name.lowercased()
             }
         }
-
-        return result
-    }
-
-    /// Count of suspicious processes
-    public var suspiciousCount: Int {
-        processes.filter { $0.isSuspicious }.count
-    }
-
-    /// Total process count
-    public var totalCount: Int {
-        processes.count
+        displayedProcesses = result
     }
 
     // MARK: - Initialization

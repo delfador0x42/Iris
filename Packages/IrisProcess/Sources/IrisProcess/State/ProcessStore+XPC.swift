@@ -62,8 +62,12 @@ extension ProcessStore {
 
     // MARK: - Auto Refresh
 
+    /// Start periodic refresh and connect to XPC. Call from view's .onAppear.
     public func startAutoRefresh() {
         stopAutoRefresh()
+
+        // Connect XPC if not already connected
+        connect()
 
         refreshTimer = Timer.scheduledTimer(withTimeInterval: refreshInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
@@ -71,14 +75,17 @@ extension ProcessStore {
             }
         }
 
-        // Try to connect to XPC (will fall back to local if fails)
-        connect()
-
         // Initial fetch
         Task {
             await refreshProcesses()
         }
     }
+
+    /// Alias for consistency with other stores.
+    public func startMonitoring() { startAutoRefresh() }
+
+    /// Alias for consistency with other stores.
+    public func stopMonitoring() { stopAutoRefresh() }
 
     public func stopAutoRefresh() {
         refreshTimer?.invalidate()

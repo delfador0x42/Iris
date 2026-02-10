@@ -34,6 +34,10 @@ public struct ProxyMonitorView: View {
         }
         .onAppear {
             store.connect()
+            store.startMonitoring()
+        }
+        .onDisappear {
+            store.stopMonitoring()
         }
         .alert("Clear All Flows?", isPresented: $showingClearConfirmation) {
             Button("Cancel", role: .cancel) {}

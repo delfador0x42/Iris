@@ -8,17 +8,32 @@ import os.log
 extension FilterDataProvider {
 
     func getSigningIdentifier(pid: Int32) -> String? {
+        // Check cache first — same PID always has the same signing identity
+        if let cached = signingIdCache[pid] {
+            return cached
+        }
+
         var code: SecCode?
         let attrs = [kSecGuestAttributePid: pid] as NSDictionary
         guard SecCodeCopyGuestWithAttributes(nil, attrs, SecCSFlags(), &code) == errSecSuccess,
-              let guestCode = code else { return nil }
+              let guestCode = code else {
+            signingIdCache[pid] = .some(nil)
+            return nil
+        }
         var staticCode: SecStaticCode?
         guard SecCodeCopyStaticCode(guestCode, SecCSFlags(), &staticCode) == errSecSuccess,
-              let sc = staticCode else { return nil }
+              let sc = staticCode else {
+            signingIdCache[pid] = .some(nil)
+            return nil
+        }
         var info: CFDictionary?
         guard SecCodeCopySigningInformation(sc, SecCSFlags(), &info) == errSecSuccess,
               let dict = info as? [String: Any],
-              let identifier = dict[kSecCodeInfoIdentifier as String] as? String else { return nil }
+              let identifier = dict[kSecCodeInfoIdentifier as String] as? String else {
+            signingIdCache[pid] = .some(nil)
+            return nil
+        }
+        signingIdCache[pid] = identifier
         return identifier
     }
 
