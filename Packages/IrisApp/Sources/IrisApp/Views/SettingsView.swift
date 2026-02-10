@@ -31,11 +31,14 @@ public struct SettingsView: View {
                         .foregroundColor(.white)
                         .padding(.bottom, 8)
 
-                    // Network Extension Section
+                    // System Extensions Section
                     networkExtensionSection
 
-                    // Endpoint Extension Section
                     endpointExtensionSection
+
+                    proxyExtensionSection
+
+                    dnsExtensionSection
 
                     // Permissions Section
                     permissionsSection

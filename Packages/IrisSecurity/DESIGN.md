@@ -1,63 +1,63 @@
-# IrisSecurity — 18 Detection Engines, 51 Files, 8095 Lines
+# IrisSecurity — Evidence-Based macOS Threat Detection
 
 ## What This Does
-Comprehensive macOS threat detection: process integrity verification,
-filesystem baseline diffing (IPSW-style), credential theft detection,
-kernel extension auditing, authorization DB monitoring, DYLD injection
-scanning, supply chain integrity, LOLBin abuse, stealth persistence,
-event tap/keylogger detection, dylib hijack scanning, ransomware
-detection, beaconing analysis, XPC auditing, CIS-Benchmark assessment.
+Comprehensive macOS security scanner: 20 detection engines across persistence,
+process integrity, credential theft, supply chain, stealth techniques, and more.
+Every finding carries weighted evidence that accumulates into a suspicion score.
+Nothing gets a pass — everything is audited and visible, from stock Apple daemons
+to unsigned cron jobs running curl|bash from /tmp.
 
 ## Why This Design
-Think like the attacker. Every detection maps to real APT TTPs.
-MITRE ATT&CK IDs on every finding. Actors for thread safety.
-SecurityHubView as Tron-style command center entry point.
+**Evidence accumulation, not binary flags.** Old model: `isSuspicious: Bool`.
+New model: `evidence: [Evidence]` where each piece has a weight (0.0–1.0) and
+category (signing, content, location, behavior, context). Score = sum of weights,
+clamped [0,1]. Weights only go UP — nothing reduces suspicion. IPSW baseline
+(macOS 26.2 build 25C56) provides a context tag (`isBaselineItem`) that says
+"ships with stock macOS" but does NOT affect the score. Every item is visible.
+
+## Scoring
+- 0.0 (no evidence) → low — still visible, still auditable
+- 0.3–0.6 → medium
+- 0.6–0.8 → high
+- 0.8+ → critical
 
 ## Data Flow
 ```
-SecurityHubView → 6 module cards → dedicated views
-ThreatScanView → runs 11 scanners sequentially:
-  LOLBinDetector → proc_listpids + KERN_PROCARGS2
-  StealthScanner → filesystem + xattr + sysctl
-  XPCServiceAuditor → directory walk + SecStaticCode
-  NetworkAnomalyDetector → netstat + interval analysis
-  ProcessIntegrityChecker → proc_regionfilename + CS flags
-  CredentialAccessDetector → proc_pidfdinfo + file perms
-  KextAnomalyDetector → kextstat + disk scan + boot-args
-  AuthorizationDBMonitor → security authorizationdb + plugins
-  DyldEnvDetector → KERN_PROCARGS2 env + plists + shells
-  SupplyChainAuditor → brew/npm/pip/xcode audit
-  FileSystemBaseline → SHA-256 hash + diff
+SecurityHubView → 11 module cards → dedicated views
+  ThreatScanView → 15 scanner engines (ProcessAnomaly output)
+  PersistenceView → PersistenceScanner (13 locations, Evidence model)
+  EventTapView → EventTapScanner (CGGetEventTapList)
+  DylibHijackView → DylibHijackScanner + MachOParser
+  + FileIntegrity, SupplyChain, AVMonitor, TCC, Ransomware, PackageInventory
+
+PersistenceScanner flow:
+  scanAll() → 6 parallel sub-scans → [PersistenceItem]
+    each item: evidence[] accumulates → suspicionScore (computed) → severity
+    BaselineService tags isBaselineItem from IPSW baseline-25C56.json
 ```
 
-## Key Files — Advanced Detection
-- Services/ProcessIntegrityChecker.swift — injected dylibs, CS_DEBUGGED
-- Services/FileSystemBaseline.swift — IPSW-style SHA-256 baseline+diff
-- Services/CredentialAccessDetector.swift — Keychain, SSH, cloud creds
-- Services/KextAnomalyDetector.swift — rootkit patterns, IOKit hooks
-- Services/AuthorizationDBMonitor.swift — right weakening, auth plugins
-- Services/DyldEnvDetector.swift — DYLD_ in procs, plists, shells
-- Services/SupplyChainAuditor.swift — brew/npm/pip/xcode tampering
+## Decisions Made
+- **Evidence only accumulates up** — no negative weights, no passes, no suppressions
+- **IPSW baseline is context-only** — extracted from real IPSW mount, not live system
+- **Backward compatible** — `isSuspicious` and `suspicionReasons` derived from evidence
+- **Per-scanner evidence weights** — each scanner defines domain-specific evidence factors
+- **MITRE ATT&CK IDs** on every ProcessAnomaly finding
 
-## Key Files — APT Detection
-- Services/LOLBinDetector.swift — 40+ LOLBins, lineage, MITRE IDs
-- Services/TCCMonitor.swift — TCC.db SHA-256 baseline + diff
-- Services/StealthScanner.swift — 9 stealth persistence locations
-- Services/NetworkAnomalyDetector.swift — beaconing CV analysis
-- Services/XPCServiceAuditor.swift — signing mismatch detection
+## Key Files — Evidence Model
+- Models/Evidence.swift — EvidenceCategory enum, Evidence struct, score/severity helpers
+- Models/PersistenceItem.swift — evidence array, isBaselineItem, computed score/severity
+- Services/BaselineService.swift — loads baseline-25C56.json (418 daemons, 460 agents, 674 kexts)
+- Resources/baseline-25C56.json — IPSW-extracted stock macOS 26.2 inventory
 
-## Key Files — Objective-See Layer
-- Services/PersistenceScanner.swift + 5 extensions — 13 locations
-- Services/EventTapScanner.swift — CGGetEventTapList
-- Services/DylibHijackScanner.swift + MachOParser.swift
-- Services/EntropyAnalyzer.swift + RansomwareDetector.swift
-- Services/PersistenceMonitor.swift — BlockBlock-style
+## Key Files — Scanners (31 files)
+- Services/PersistenceScanner.swift + 5 extensions — 13 persistence locations with evidence
+- Services/LOLBinDetector.swift — 44 LOLBins, recursive ancestry (8 levels)
+- Services/DyldEnvDetector.swift — DYLD_ in processes, plists, shells
+- Services/EventTapScanner.swift — CGGetEventTapList, 30+ known-benign
+- Services/SigningVerifier.swift — SecStaticCode + Team ID + hardened runtime
+- Services/ProcessEnumeration.swift — shared PID/path/parent helpers (deduplicated)
 
-## Key Files — UI
-- Views/SecurityHubView.swift — Tron command center
-- Views/ThreatScanView.swift — 11-engine full sweep
-- Views/FileIntegrityView.swift — baseline + diff UI
-- Views/SupplyChainView.swift — package manager audit
-- Views/PersistenceView.swift — persistence enumeration
-- Views/EventTapView.swift — keylogger detection
-- Views/DylibHijackView.swift — Mach-O hijack scan
+## Key Files — Views (13 files)
+- Views/SecurityHubView.swift — 11-module command center
+- Views/ThreatScanView.swift — 15-engine full sweep
+- Views/PersistenceView.swift — persistence enumeration with evidence scores

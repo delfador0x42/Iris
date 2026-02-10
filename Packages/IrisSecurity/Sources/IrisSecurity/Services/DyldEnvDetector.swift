@@ -50,7 +50,7 @@ public actor DyldEnvDetector {
     /// Parse KERN_PROCARGS2 past argc to extract environment variables
     private func scanProcessEnvironments() -> [ProcessAnomaly] {
         var anomalies: [ProcessAnomaly] = []
-        let pids = getRunningPIDs()
+        let pids = ProcessEnumeration.getRunningPIDs()
 
         for pid in pids {
             guard pid > 0 else { continue }
@@ -58,7 +58,7 @@ public actor DyldEnvDetector {
 
             for (key, value) in envVars {
                 for dangerVar in Self.dangerousVars where key == dangerVar.name {
-                    let path = getProcessPath(pid)
+                    let path = ProcessEnumeration.getProcessPath(pid)
                     let name = path.isEmpty ? "PID \(pid)" : URL(fileURLWithPath: path).lastPathComponent
 
                     // Apple processes with DYLD_ are especially suspicious
@@ -174,23 +174,6 @@ public actor DyldEnvDetector {
     }
 
     // MARK: - Process Utilities
-
-    private func getRunningPIDs() -> [pid_t] {
-        let bufSize = proc_listpids(UInt32(PROC_ALL_PIDS), 0, nil, 0)
-        guard bufSize > 0 else { return [] }
-        var pids = [pid_t](repeating: 0, count: Int(bufSize) / MemoryLayout<pid_t>.size)
-        let actual = proc_listpids(UInt32(PROC_ALL_PIDS), 0, &pids, bufSize)
-        guard actual > 0 else { return [] }
-        return Array(pids.prefix(Int(actual) / MemoryLayout<pid_t>.size)).filter { $0 > 0 }
-    }
-
-    private func getProcessPath(_ pid: pid_t) -> String {
-        let buf = UnsafeMutablePointer<UInt8>.allocate(capacity: Int(MAXPATHLEN))
-        defer { buf.deallocate() }
-        let len = proc_pidpath(pid, buf, UInt32(MAXPATHLEN))
-        guard len > 0 else { return "" }
-        return String(cString: buf)
-    }
 
     /// Parse KERN_PROCARGS2: skip argc, skip args, then parse env vars
     private func getProcessEnvironment(_ pid: pid_t) -> [(String, String)] {

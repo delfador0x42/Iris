@@ -18,18 +18,25 @@ public actor KextAnomalyDetector {
         "com.apple", // Apple
     ]
 
-    /// Suspicious kext names/patterns from known rootkits
+    /// Suspicious kext names/patterns from known macOS rootkits and malware
     private static let knownMaliciousPatterns: [String] = [
-        "rubilyn",       // macOS rootkit
-        "jynx",          // jynx rootkit
-        "reptile",       // reptile rootkit
-        "diamorphine",   // diamorphine rootkit
-        "adore-ng",      // adore-ng rootkit
-        "knark",         // knark rootkit
-        "volatility",    // memory forensics evasion
+        // Real macOS rootkits and malware
+        "rubilyn",       // macOS rootkit (kernel-level process hiding)
+        "fruitfly",      // Fruitfly spyware kext component
+        "thiefquest",    // ThiefQuest/EvilQuest ransomware
+        "zuru",          // ZuRu trojan (modified Xcode)
+        "shlayer",       // Shlayer adware/dropper
+        "cdrthief",      // CDRThief targeting softswitch
+        "keydnap",       // Keydnap credential stealer
+        "calisto",       // Calisto backdoor (Proton variant)
+        "xcsset",        // XCSSET malware
+        "osx.dummy",     // OSX.Dummy cryptominer
+        // Generic suspicious patterns
         "hideproc",      // process hiding kext
         "hidefile",      // file hiding kext
-        "netfilter",     // network interception kext (non-Apple)
+        "rootkit",       // explicit rootkit in name
+        "keylog",        // keylogger kext
+        "inject",        // code injection kext
     ]
 
     public func scan() async -> [ProcessAnomaly] {

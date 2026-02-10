@@ -46,7 +46,9 @@ public enum SigningStatus: String, Sendable, Codable {
     case invalid = "Invalid"
 }
 
-/// A single persistence item found on the system
+/// A single persistence item found on the system.
+/// Everything is audited — nothing gets a pass.
+/// Evidence accumulates upward to show how concerning an item is.
 public struct PersistenceItem: Identifiable, Sendable, Codable, Equatable {
     public let id: UUID
     public let type: PersistenceType
@@ -56,8 +58,23 @@ public struct PersistenceItem: Identifiable, Sendable, Codable, Equatable {
     public let signingStatus: SigningStatus
     public let signingIdentifier: String?
     public let isAppleSigned: Bool
+    /// Context tag: this item ships with stock macOS 26.2 per IPSW.
+    /// Informational only — does NOT affect suspicion score.
+    public let isBaselineItem: Bool
+    /// Evidence that raised concern. Empty = no flags, still visible.
+    public let evidence: [Evidence]
+
+    // Derived from evidence — backward compatible with views
     public let isSuspicious: Bool
     public let suspicionReasons: [String]
+
+    /// Sum of evidence weights, clamped [0, 1]
+    public var suspicionScore: Double {
+        min(evidence.reduce(0.0) { $0 + $1.weight }, 1.0)
+    }
+
+    /// Severity derived from score
+    public var severity: AnomalySeverity { severityFromScore(suspicionScore) }
 
     public init(
         id: UUID = UUID(),
@@ -68,8 +85,8 @@ public struct PersistenceItem: Identifiable, Sendable, Codable, Equatable {
         signingStatus: SigningStatus = .unknown,
         signingIdentifier: String? = nil,
         isAppleSigned: Bool = false,
-        isSuspicious: Bool = false,
-        suspicionReasons: [String] = []
+        isBaselineItem: Bool = false,
+        evidence: [Evidence] = []
     ) {
         self.id = id
         self.type = type
@@ -79,7 +96,9 @@ public struct PersistenceItem: Identifiable, Sendable, Codable, Equatable {
         self.signingStatus = signingStatus
         self.signingIdentifier = signingIdentifier
         self.isAppleSigned = isAppleSigned
-        self.isSuspicious = isSuspicious
-        self.suspicionReasons = suspicionReasons
+        self.isBaselineItem = isBaselineItem
+        self.evidence = evidence
+        self.isSuspicious = !evidence.isEmpty
+        self.suspicionReasons = evidence.map(\.factor)
     }
 }

@@ -1470,3 +1470,79 @@ error that crashes app. No graceful degradation to "rendering disabled" state.
 `Renderer+Setup.swift:34` — `DispatchSemaphore(value: configuration.maxFramesInFlight)`.
 If `maxFramesInFlight <= 0`, semaphore behaves unexpectedly.
 **Fix**: Guard `maxFramesInFlight > 0`.
+
+---
+
+## Active Claude Instances — Coordination Board
+
+### Instance A: Evidence-Based Scoring + IPSW Baseline (COMPLETE)
+**Status**: All PersistenceScanner files refactored, all 5 targets build clean
+**Task**: Refactored PersistenceScanner from binary `isSuspicious: Bool` to evidence-accumulation scoring model. IPSW baseline as context-only tag.
+
+**What Was Done**:
+1. Created `Evidence.swift` — EvidenceCategory enum + Evidence struct (weight 0.0-1.0, no negatives)
+2. Created `BaselineService.swift` — loads baseline-25C56.json, context-only lookups
+3. Created `baseline-25C56.json` — 418 daemons, 460 agents, 674 kexts, 12 auth plugins (from IPSW mount)
+4. Refactored `PersistenceItem.swift` — evidence array, isBaselineItem tag, computed score/severity
+5. Refactored all 6 PersistenceScanner extension files with evidence accumulation
+6. Backward compatible: `isSuspicious` and `suspicionReasons` derived from evidence in init
+
+**Design Principles** (for extending to other scanners):
+- Weights 0.0 to 1.0 ONLY. No negative weights. Nothing reduces suspicion.
+- Everything visible in audit list. Zero evidence = still shown.
+- `isBaselineItem` is context label only, does NOT affect score.
+- Score = sum of weights, clamped to [0, 1]. Severity: 0.8+ critical, 0.6-0.8 high, 0.3-0.6 medium, <0.3 low.
+
+**Follow-up needed**: Propagate evidence model to ProcessAnomaly-based scanners (EventTapScanner, DylibHijackScanner, LOLBinDetector, etc.)
+
+### Instance B: Bug Fixes + Scanner Quality (ONGOING)
+**Status**: Active — P0 scanner bugs fixed, code quality improved, all 5 targets build
+**Task**: Fix audit bugs (rounds 1-4) + wire all orphaned scanners/views + improve scanner quality
+
+**Session 1 Work (COMPLETE):**
+
+1. **Bug fixes (uncommitted)**:
+   - SHARED1 (chunked overflow), SHARED2 (Content-Length cap), SHARED3 (XPC ping double-resume)
+   - CERT12 (DER parseLength), CERT15 (typo), CERT2 parity (keyUsage + IP SAN)
+   - E3 (UDP flow reader), P1 (SSLWrite retry), NET7 (header redaction)
+   - DISK1 (symlink traversal), X1 (timer in invalidation), D4 (SERVFAIL), D5 (response size)
+   - Plus earlier: D1, D2/D3, C1, C2, P3, P4, P6, P9/CERT1, P11, P12, P16, P19, M1, M3
+
+2. **A2: Cron job flagging** — ALL cron jobs `isSuspicious: true` with "non-standard on macOS" reason, dangerous content adds extra reason. **FILE: PersistenceScanner+System.swift** ← CONFLICT WITH YOUR PLAN
+
+3. **Scanner wiring (zero orphans)**:
+   - Created: AVMonitorView.swift, TCCMonitorView.swift, RansomwareCheckView.swift
+   - SecurityHubView: 6→11 modules
+   - ThreatScanView: 11→15 scan phases
+   - PersistenceView: wired PersistenceMonitor.takeSnapshot()
+
+**Session 2 Work (COMPLETE):**
+
+4. **EventTapScanner fix** — Expanded knownBenign from 5 to 30+ entries (Karabiner, BetterTouchTool, Alfred, Raycast, 1Password, Rectangle, Hammerspoon, skhd, etc.). Added listen-only keyboard tap detection.
+
+5. **LOLBinDetector fix** — Recursive ancestry walking (up to 8 levels, was 1). Expanded LOLBins from 33→44 entries (added osacompile, jxa, dns-sd, installer, pkgutil, softwareupdate, kextutil, textutil, mdm, log, tmutil). Attack chains like `Safari→bash→curl→python3` now fully detected.
+
+6. **KextAnomalyDetector fix** — Replaced 5 Linux-only rootkit patterns (diamorphine, adore-ng, reptile, jynx, knark) with 10 real macOS malware names (Fruitfly, ThiefQuest, ZuRu, Shlayer, CDRThief, Keydnap, Calisto, XCSSET, OSX.Dummy) + generic patterns (rootkit, keylog, inject).
+
+7. **ProcessEnumeration shared helper** — Extracted `getRunningPIDs()`, `getProcessPath()`, `getParentPID()` into single `ProcessEnumeration` enum. Removed 16 duplicate implementations across 8 scanner files.
+
+8. **SigningVerifier upgrade** — Added `verifyFull()` returning `VerificationResult` struct with Team ID (`kSecCodeInfoTeamIdentifier`), hardened runtime flag (`CS_RUNTIME`), strict validation (`kSecCSStrictValidate | kSecCSCheckNestedCode`). Old `verify()` preserved as convenience wrapper.
+
+**Files I Modified (watch for conflicts):**
+- `IrisSecurity/Views/SecurityHubView.swift`, `ThreatScanView.swift`, `PersistenceView.swift`
+- `IrisSecurity/Views/AVMonitorView.swift`, `TCCMonitorView.swift`, `RansomwareCheckView.swift` (NEW)
+- `IrisSecurity/Services/ProcessEnumeration.swift` (NEW) — shared helper
+- `IrisSecurity/Services/EventTapScanner.swift` — benign list, listen-only detection
+- `IrisSecurity/Services/LOLBinDetector.swift` — recursive ancestry, expanded LOLBins
+- `IrisSecurity/Services/KextAnomalyDetector.swift` — macOS rootkit patterns
+- `IrisSecurity/Services/SigningVerifier.swift` — Team ID, hardened runtime, strict validation
+- `IrisSecurity/Models/VerificationResult.swift` (NEW)
+- `IrisSecurity/Services/{DyldEnvDetector,DylibHijackScanner,StealthScanner,ProcessIntegrityChecker,CredentialAccessDetector,RansomwareDetector}.swift` — replaced private helpers with ProcessEnumeration
+- **`IrisSecurity/Services/PersistenceScanner+System.swift`** ← you plan to modify this too
+
+**POTENTIAL CONFLICTS WITH INSTANCE A:**
+- I modified `PersistenceScanner+System.swift` — you plan to refactor all PersistenceScanner files
+- My ThreatScanView converts PersistenceItem/EventTapInfo/DylibHijack/TCCEntry→ProcessAnomaly — if you unify the finding types, the conversion code in ThreatScanView needs updating
+- My cron job fix uses `isSuspicious: true` + `suspicionReasons: [String]` — if you switch to evidence-accumulation, this needs to change to the new model
+- I created ProcessEnumeration.swift — if you add process helpers elsewhere, use this file
+- I upgraded SigningVerifier with `verifyFull()` — if you change verification logic, use the new VerificationResult struct

@@ -24,6 +24,7 @@ extension PersistenceScanner {
     private func scanLaunchItems(dirs: [String], type: PersistenceType) async -> [PersistenceItem] {
         var items: [PersistenceItem] = []
         let fm = FileManager.default
+        let baseline = BaselineService.shared
 
         for dir in dirs {
             guard let contents = try? fm.contentsOfDirectory(atPath: dir) else { continue }
@@ -34,28 +35,42 @@ extension PersistenceScanner {
                 let binaryPath = extractBinaryPath(from: plist)
                 let autoRun = isAutoRun(plist)
                 let (signing, identifier, apple) = await verifyBinary(binaryPath)
+                let label = file.replacingOccurrences(of: ".plist", with: "")
+                let isBaseline = baseline.isBaselineLaunchItem(
+                    (plist["Label"] as? String) ?? label
+                )
 
-                var reasons: [String] = []
-                if !apple && binaryPath != nil {
-                    if signing == .unsigned { reasons.append("Unsigned binary") }
-                    if signing == .adHoc { reasons.append("Ad-hoc signed") }
-                    if dir.contains("/Users/") { reasons.append("User-level persistence") }
-                    if !autoRun { reasons.append("Non-standard auto-run config") }
+                var ev: [Evidence] = []
+
+                if signing == .unsigned && binaryPath != nil {
+                    ev.append(Evidence(factor: "Unsigned binary", weight: 0.5, category: .signing))
+                }
+                if signing == .adHoc && binaryPath != nil {
+                    ev.append(Evidence(factor: "Ad-hoc signed binary", weight: 0.3, category: .signing))
+                }
+                if signing == .invalid {
+                    ev.append(Evidence(factor: "Invalid code signature", weight: 0.6, category: .signing))
+                }
+                if dir.contains("/Users/") {
+                    ev.append(Evidence(factor: "User-level persistence", weight: 0.2, category: .location))
+                }
+                if !autoRun && !apple {
+                    ev.append(Evidence(factor: "Non-standard auto-run configuration", weight: 0.1, category: .context))
                 }
                 if let bp = binaryPath, !fm.fileExists(atPath: bp) {
-                    reasons.append("Binary missing from disk")
+                    ev.append(Evidence(factor: "Binary missing from disk", weight: 0.6, category: .context))
                 }
 
                 items.append(PersistenceItem(
                     type: type,
-                    name: file.replacingOccurrences(of: ".plist", with: ""),
+                    name: label,
                     path: plistPath,
                     binaryPath: binaryPath,
                     signingStatus: signing,
                     signingIdentifier: identifier,
                     isAppleSigned: apple,
-                    isSuspicious: !reasons.isEmpty,
-                    suspicionReasons: reasons
+                    isBaselineItem: isBaseline,
+                    evidence: ev
                 ))
             }
         }
@@ -64,14 +79,10 @@ extension PersistenceScanner {
 
     /// Extract the executable path from a launchd plist
     private func extractBinaryPath(from plist: NSDictionary) -> String? {
-        // Lowercase all keys for case-insensitive matching
         let lower = Dictionary(uniqueKeysWithValues: plist.map { key, val in
             ((key as? String)?.lowercased() ?? "", val)
         })
-
-        if let program = lower["program"] as? String {
-            return program
-        }
+        if let program = lower["program"] as? String { return program }
         if let args = lower["programarguments"] as? [String], let first = args.first {
             return first
         }

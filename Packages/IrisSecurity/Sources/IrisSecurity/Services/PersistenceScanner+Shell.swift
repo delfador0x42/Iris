@@ -1,13 +1,13 @@
 import Foundation
 
 extension PersistenceScanner {
-    /// Scan shell configuration files for persistence
+    /// Scan shell configuration files with content analysis
     func scanShellConfigs() async -> [PersistenceItem] {
         var items: [PersistenceItem] = []
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let fm = FileManager.default
+        let baseline = BaselineService.shared
 
-        // User-level shell configs
         let userConfigs = [
             ".zshenv", ".zprofile", ".zshrc", ".zlogin", ".zlogout",
             ".bash_profile", ".bashrc", ".profile"
@@ -15,29 +15,62 @@ extension PersistenceScanner {
         for config in userConfigs {
             let path = "\(home)/\(config)"
             guard fm.fileExists(atPath: path) else { continue }
+            let ev = shellConfigEvidence(path: path)
             items.append(PersistenceItem(
-                type: .shellConfig,
-                name: config,
-                path: path
+                type: .shellConfig, name: config, path: path, evidence: ev
             ))
         }
 
-        // System-wide shell configs
         let systemConfigs = [
             "/etc/zshenv", "/etc/zprofile", "/etc/zshrc",
-            "/etc/zlogin", "/etc/zlogout",
-            "/etc/bashrc", "/etc/profile"
+            "/etc/zlogin", "/etc/zlogout", "/etc/bashrc", "/etc/profile"
         ]
         for config in systemConfigs {
             guard fm.fileExists(atPath: config) else { continue }
+            let name = URL(fileURLWithPath: config).lastPathComponent
+            let isBaseline = baseline.isBaselineShellConfig(config)
+            let ev = shellConfigEvidence(path: config)
             items.append(PersistenceItem(
-                type: .shellConfig,
-                name: URL(fileURLWithPath: config).lastPathComponent,
-                path: config
+                type: .shellConfig, name: name, path: config,
+                isBaselineItem: isBaseline, evidence: ev
             ))
         }
-
         return items
+    }
+
+    /// Analyze shell config content for dangerous patterns
+    private func shellConfigEvidence(path: String) -> [Evidence] {
+        guard let content = try? String(contentsOfFile: path, encoding: .utf8) else {
+            return []
+        }
+        var ev: [Evidence] = []
+        let lower = content.lowercased()
+
+        // curl|bash or wget|sh patterns
+        if lower.contains("curl") && (lower.contains("| bash") || lower.contains("|bash") ||
+            lower.contains("| sh") || lower.contains("|sh")) {
+            ev.append(Evidence(factor: "Contains curl|bash pattern", weight: 0.6, category: .content))
+        } else if lower.contains("wget") && (lower.contains("| bash") || lower.contains("| sh")) {
+            ev.append(Evidence(factor: "Contains wget|sh pattern", weight: 0.6, category: .content))
+        }
+
+        // base64 decode execution
+        if lower.contains("base64") && (lower.contains("decode") || lower.contains("-d")) {
+            ev.append(Evidence(factor: "Contains base64 decode execution", weight: 0.4, category: .content))
+        }
+
+        // DYLD_ exports
+        if lower.contains("dyld_insert") || lower.contains("dyld_library_path") ||
+           lower.contains("dyld_framework_path") {
+            ev.append(Evidence(factor: "Contains DYLD_ export", weight: 0.3, category: .content))
+        }
+
+        // Sourcing remote scripts
+        if lower.contains("source <(curl") || lower.contains("eval \"$(curl") {
+            ev.append(Evidence(factor: "Sources remote script", weight: 0.5, category: .content))
+        }
+
+        return ev
     }
 
     /// Scan login/logout hooks from loginwindow plist
@@ -57,6 +90,12 @@ extension PersistenceScanner {
                 guard let hookPath = plist[key] as? String else { continue }
                 let (signing, identifier, apple) = await verifyBinary(hookPath)
 
+                var ev: [Evidence] = []
+                ev.append(Evidence(factor: "Login/logout hooks are deprecated", weight: 0.5, category: .context))
+                if signing == .unsigned {
+                    ev.append(Evidence(factor: "Unsigned binary", weight: 0.3, category: .signing))
+                }
+
                 items.append(PersistenceItem(
                     type: .loginHook,
                     name: "\(key): \(URL(fileURLWithPath: hookPath).lastPathComponent)",
@@ -65,8 +104,7 @@ extension PersistenceScanner {
                     signingStatus: signing,
                     signingIdentifier: identifier,
                     isAppleSigned: apple,
-                    isSuspicious: true,
-                    suspicionReasons: ["Login/logout hooks are deprecated and suspicious"]
+                    evidence: ev
                 ))
             }
         }
@@ -86,12 +124,12 @@ extension PersistenceScanner {
 
         for script in scripts {
             guard fm.fileExists(atPath: script) else { continue }
+            let ev = [Evidence(factor: "Startup script exists (unusual on modern macOS)", weight: 0.4, category: .context)]
             items.append(PersistenceItem(
                 type: .startupScript,
                 name: URL(fileURLWithPath: script).lastPathComponent,
                 path: script,
-                isSuspicious: true,
-                suspicionReasons: ["Startup script exists (unusual on modern macOS)"]
+                evidence: ev
             ))
         }
         return items
@@ -102,7 +140,6 @@ extension PersistenceScanner {
         var items: [PersistenceItem] = []
         let home = FileManager.default.homeDirectoryForCurrentUser.path
 
-        // Check launch plists for DYLD_INSERT_LIBRARIES
         let launchDirs = [
             "/Library/LaunchDaemons", "/Library/LaunchAgents",
             "\(home)/Library/LaunchAgents"
@@ -123,15 +160,14 @@ extension PersistenceScanner {
                 }
                 for (key, value) in envVars {
                     let lowerKey = key.lowercased()
-                    if lowerKey == "dyld_insert_libraries" ||
-                       lowerKey == "__xpc_dyld_insert_libraries" {
+                    if lowerKey == "dyld_insert_libraries" || lowerKey == "__xpc_dyld_insert_libraries" {
+                        let ev = [Evidence(factor: "DYLD_INSERT_LIBRARIES in launch plist", weight: 0.8, category: .behavior)]
                         items.append(PersistenceItem(
                             type: .dylibInsert,
                             name: "\(file): \(key)",
                             path: path,
                             binaryPath: value,
-                            isSuspicious: true,
-                            suspicionReasons: ["DYLD_INSERT_LIBRARIES is a common attack vector"]
+                            evidence: ev
                         ))
                     }
                 }
@@ -146,19 +182,18 @@ extension PersistenceScanner {
                       let env = plist["LSEnvironment"] as? [String: String] else { continue }
                 for (key, value) in env {
                     if key.lowercased().contains("dyld_insert") {
+                        let ev = [Evidence(factor: "LSEnvironment DYLD injection in application", weight: 0.9, category: .behavior)]
                         items.append(PersistenceItem(
                             type: .dylibInsert,
                             name: "\(app): \(key)",
                             path: plistPath,
                             binaryPath: value,
-                            isSuspicious: true,
-                            suspicionReasons: ["LSEnvironment DYLD injection in application"]
+                            evidence: ev
                         ))
                     }
                 }
             }
         }
-
         return items
     }
 
@@ -166,6 +201,7 @@ extension PersistenceScanner {
     func scanPeriodicScripts() async -> [PersistenceItem] {
         var items: [PersistenceItem] = []
         let fm = FileManager.default
+        let baseline = BaselineService.shared
         let dirs = ["/etc/periodic/daily", "/etc/periodic/weekly", "/etc/periodic/monthly"]
 
         for dir in dirs {
@@ -173,13 +209,42 @@ extension PersistenceScanner {
             let period = URL(fileURLWithPath: dir).lastPathComponent
             for file in contents {
                 let path = "\(dir)/\(file)"
+                let isBaseline = baseline.isBaselinePeriodicScript("\(period)/\(file)")
+                let ev = periodicScriptEvidence(path: path)
                 items.append(PersistenceItem(
                     type: .periodicScript,
                     name: "\(period)/\(file)",
-                    path: path
+                    path: path,
+                    isBaselineItem: isBaseline,
+                    evidence: ev
                 ))
             }
         }
         return items
+    }
+
+    /// Analyze periodic script content
+    private func periodicScriptEvidence(path: String) -> [Evidence] {
+        guard let content = try? String(contentsOfFile: path, encoding: .utf8) else {
+            return []
+        }
+        var ev: [Evidence] = []
+        let lower = content.lowercased()
+
+        let dangerousPatterns: [(String, String, Double)] = [
+            ("curl", "Contains network download command", 0.4),
+            ("wget", "Contains network download command", 0.4),
+            ("base64", "Contains base64 encoding", 0.3),
+            ("| bash", "Pipes to shell interpreter", 0.4),
+            ("| sh", "Pipes to shell interpreter", 0.4),
+            ("eval ", "Uses eval execution", 0.3),
+        ]
+        for (pattern, factor, weight) in dangerousPatterns {
+            if lower.contains(pattern) {
+                ev.append(Evidence(factor: factor, weight: weight, category: .content))
+                break // One content evidence per script is enough
+            }
+        }
+        return ev
     }
 }

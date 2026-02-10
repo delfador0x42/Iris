@@ -14,6 +14,8 @@
 		3FB000052F2600000004D070 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3F0974A62F24FCC20004D070 /* NetworkExtension.framework */; };
 		3FB000092F2600000004D070 /* com.wudan.iris.dns.extension.systemextension in Embed System Extensions */ = {isa = PBXBuildFile; fileRef = 3FB000042F2600000004D070 /* com.wudan.iris.dns.extension.systemextension */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		3FE0000C2F25A0000004D070 /* com.wudan.iris.endpoint.extension.systemextension in Embed System Extensions */ = {isa = PBXBuildFile; fileRef = 3FE000012F25A0000004D070 /* com.wudan.iris.endpoint.extension.systemextension */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		3FES00032F26000000000003 /* libEndpointSecurity.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 3FES00012F26000000000001 /* libEndpointSecurity.tbd */; };
+		3FES00042F26000000000004 /* libbsm.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 3FES00022F26000000000002 /* libbsm.tbd */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -71,6 +73,8 @@
 		3FA000042F2600000004D070 /* com.wudan.iris.proxy.extension.systemextension */ = {isa = PBXFileReference; explicitFileType = "wrapper.system-extension"; includeInIndex = 0; path = com.wudan.iris.proxy.extension.systemextension; sourceTree = BUILT_PRODUCTS_DIR; };
 		3FB000042F2600000004D070 /* com.wudan.iris.dns.extension.systemextension */ = {isa = PBXFileReference; explicitFileType = "wrapper.system-extension"; includeInIndex = 0; path = com.wudan.iris.dns.extension.systemextension; sourceTree = BUILT_PRODUCTS_DIR; };
 		3FE000012F25A0000004D070 /* com.wudan.iris.endpoint.extension.systemextension */ = {isa = PBXFileReference; explicitFileType = "wrapper.system-extension"; includeInIndex = 0; path = com.wudan.iris.endpoint.extension.systemextension; sourceTree = BUILT_PRODUCTS_DIR; };
+		3FES00012F26000000000001 /* libEndpointSecurity.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libEndpointSecurity.tbd; path = usr/lib/libEndpointSecurity.tbd; sourceTree = SDKROOT; };
+		3FES00022F26000000000002 /* libbsm.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libbsm.tbd; path = usr/lib/libbsm.tbd; sourceTree = SDKROOT; };
 		3FFBF9372F25539F00E3D581 /* Iris.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Iris.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -198,6 +202,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3FES00032F26000000000003 /* libEndpointSecurity.tbd in Frameworks */,
+				3FES00042F26000000000004 /* libbsm.tbd in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -208,6 +214,8 @@
 			isa = PBXGroup;
 			children = (
 				3F0974A62F24FCC20004D070 /* NetworkExtension.framework */,
+				3FES00012F26000000000001 /* libEndpointSecurity.tbd */,
+				3FES00022F26000000000002 /* libbsm.tbd */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";

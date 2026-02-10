@@ -24,14 +24,72 @@ extension ExtensionManager {
         filterState = filter
     }
 
-    /// Check endpoint extension status by trying XPC connection
+    /// Check endpoint extension status by querying ES health via XPC getStatus()
     public func checkEndpointExtensionStatus() async {
         logger.info("Checking endpoint extension status...")
-        let reachable = await pingXPCService(
-            machServiceName: "99HGW2AR62.com.wudan.iris.endpoint.xpc",
-            protocol: EndpointXPCProtocol.self
-        )
-        endpointExtensionState = reachable ? .installed : .notInstalled
+        let status = await queryEndpointStatus()
+
+        if let status = status {
+            let esEnabled = status["esEnabled"] as? Bool ?? false
+            let mode = status["mode"] as? String ?? "unknown"
+
+            if esEnabled && mode == "active" {
+                endpointExtensionState = .installed
+            } else {
+                // Extension is running but ES failed to initialize
+                let reason = status["esError"] as? String
+                endpointExtensionState = .failed(reason ?? "ES client not active (mode: \(mode))")
+            }
+        } else {
+            endpointExtensionState = .notInstalled
+        }
+    }
+
+    /// Query the endpoint extension's getStatus() via XPC for real ES health info
+    private func queryEndpointStatus() async -> [String: Any]? {
+        await withCheckedContinuation { continuation in
+            let connection = NSXPCConnection(machServiceName: "99HGW2AR62.com.wudan.iris.endpoint.xpc")
+            connection.remoteObjectInterface = NSXPCInterface(with: EndpointXPCProtocol.self)
+
+            let lock = NSLock()
+            var didResume = false
+
+            connection.invalidationHandler = {
+                lock.lock()
+                guard !didResume else { lock.unlock(); return }
+                didResume = true
+                lock.unlock()
+                continuation.resume(returning: nil)
+            }
+
+            connection.resume()
+
+            guard let proxy = connection.remoteObjectProxyWithErrorHandler({ _ in
+                connection.invalidate()
+            }) as? EndpointXPCProtocol else {
+                connection.invalidate()
+                return
+            }
+
+            proxy.getStatus { status in
+                lock.lock()
+                guard !didResume else { lock.unlock(); connection.invalidate(); return }
+                didResume = true
+                lock.unlock()
+                connection.invalidate()
+                continuation.resume(returning: status)
+            }
+
+            // Timeout after 2 seconds
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                lock.lock()
+                guard !didResume else { lock.unlock(); return }
+                didResume = true
+                lock.unlock()
+                connection.invalidate()
+                continuation.resume(returning: nil)
+            }
+        }
     }
 
     /// Check proxy extension status by trying XPC connection

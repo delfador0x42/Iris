@@ -134,7 +134,7 @@ public struct ThreatScanView: View {
             Image(systemName: "checkmark.shield.fill")
                 .font(.system(size: 48)).foregroundColor(.green)
             Text("No threats detected").font(.headline).foregroundColor(.white)
-            Text("All 8 scans passed")
+            Text("All 15 scans passed")
                 .font(.caption).foregroundColor(.gray)
         }.frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -150,7 +150,7 @@ public struct ThreatScanView: View {
     private func runFullScan() async {
         isLoading = true
         var all: [ProcessAnomaly] = []
-        let totalPhases: Double = 11
+        let totalPhases: Double = 15
 
         scanPhase = "LOLBin activity"
         scanProgress = 1 / totalPhases
@@ -198,12 +198,67 @@ public struct ThreatScanView: View {
         scanProgress = 9 / totalPhases
         all.append(contentsOf: await DyldEnvDetector.shared.scan())
 
-        scanPhase = "Supply chain"
+        scanPhase = "Persistence locations"
         scanProgress = 10 / totalPhases
+        let persistenceItems = await PersistenceScanner.shared.scanAll()
+        all.append(contentsOf: persistenceItems.filter(\.isSuspicious).map { item in
+            ProcessAnomaly(
+                pid: 0, processName: item.name, processPath: item.path,
+                parentPID: 0, parentName: "",
+                technique: "Suspicious \(item.type.rawValue)",
+                description: item.suspicionReasons.joined(separator: "; "),
+                severity: item.signingStatus == .unsigned ? .high : .medium,
+                mitreID: "T1547"
+            )
+        })
+
+        scanPhase = "Event taps"
+        scanProgress = 11 / totalPhases
+        let taps = await EventTapScanner.shared.scan()
+        all.append(contentsOf: taps.filter(\.isSuspicious).map { tap in
+            ProcessAnomaly(
+                pid: tap.tappingPID, processName: tap.tappingProcessName,
+                processPath: tap.tappingProcessPath,
+                parentPID: 0, parentName: "",
+                technique: "Suspicious Event Tap",
+                description: tap.suspicionReasons.joined(separator: "; "),
+                severity: tap.isKeyboardTap ? .high : .medium,
+                mitreID: "T1056.001"
+            )
+        })
+
+        scanPhase = "Dylib hijacking"
+        scanProgress = 12 / totalPhases
+        let hijacks = await DylibHijackScanner.shared.scanRunningProcesses()
+        all.append(contentsOf: hijacks.filter(\.isActiveHijack).map { h in
+            ProcessAnomaly(
+                pid: 0, processName: h.binaryName, processPath: h.binaryPath,
+                parentPID: 0, parentName: "",
+                technique: h.type.rawValue,
+                description: h.details,
+                severity: .high, mitreID: "T1574.004"
+            )
+        })
+
+        scanPhase = "TCC permissions"
+        scanProgress = 13 / totalPhases
+        let tccEntries = await TCCMonitor.shared.scan()
+        all.append(contentsOf: tccEntries.filter(\.isSuspicious).map { entry in
+            ProcessAnomaly(
+                pid: 0, processName: entry.client, processPath: "",
+                parentPID: 0, parentName: "",
+                technique: "Suspicious TCC Grant",
+                description: entry.suspicionReason ?? "Suspicious permission: \(entry.serviceName)",
+                severity: .high, mitreID: "T1005"
+            )
+        })
+
+        scanPhase = "Supply chain"
+        scanProgress = 14 / totalPhases
         let scFindings = await SupplyChainAuditor.shared.auditAll()
 
         scanPhase = "Filesystem integrity"
-        scanProgress = 11 / totalPhases
+        scanProgress = 15 / totalPhases
         let fsResult = await FileSystemBaseline.shared.diff()
 
         anomalies = all.sorted { $0.severity > $1.severity }

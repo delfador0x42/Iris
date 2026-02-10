@@ -19,8 +19,10 @@ do {
     try esClient.start()
     logger.info("Endpoint Security client started successfully")
 } catch {
-    logger.error("Failed to start Endpoint Security client: \(error.localizedDescription)")
+    let msg = error.localizedDescription
+    logger.error("Failed to start Endpoint Security client: \(msg)")
+    esClient.startupError = msg
 }
 
-// Keep the extension running
+// Keep the extension running (XPC still serves even if ES failed)
 dispatchMain()

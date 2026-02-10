@@ -41,7 +41,7 @@ public struct SecurityHubView: View {
                         .font(.system(size: 24, weight: .black, design: .monospaced))
                         .foregroundColor(.white)
                         .tracking(6)
-                    Text("11 DETECTION ENGINES")
+                    Text("20 DETECTION ENGINES")
                         .font(.system(size: 10, weight: .medium, design: .monospaced))
                         .foregroundColor(.cyan.opacity(0.7))
                         .tracking(2)
@@ -67,6 +67,7 @@ public struct SecurityHubView: View {
                 columns: [
                     GridItem(.flexible(), spacing: 12),
                     GridItem(.flexible(), spacing: 12),
+                    GridItem(.flexible(), spacing: 12),
                 ],
                 spacing: 12
             ) {
@@ -89,6 +90,11 @@ public struct SecurityHubView: View {
         case .dylibHijack: DylibHijackView()
         case .fileIntegrity: FileIntegrityView()
         case .supplyChain: SupplyChainView()
+        case .securityPosture: SecurityDashboardView()
+        case .packageInventory: PackageInventoryView()
+        case .avMonitor: AVMonitorView()
+        case .tccPermissions: TCCMonitorView()
+        case .ransomware: RansomwareCheckView()
         }
     }
 
@@ -138,44 +144,64 @@ public struct SecurityHubView: View {
 
 enum SecurityModule: String, CaseIterable, Identifiable {
     case threatScan = "Threat Scan"
+    case securityPosture = "Security Posture"
     case persistence = "Persistence"
     case eventTaps = "Event Taps"
     case dylibHijack = "Dylib Hijack"
     case fileIntegrity = "File Integrity"
     case supplyChain = "Supply Chain"
+    case avMonitor = "AV Monitor"
+    case tccPermissions = "TCC Permissions"
+    case ransomware = "Ransomware Check"
+    case packageInventory = "Package Inventory"
 
     var id: String { rawValue }
 
     var icon: String {
         switch self {
         case .threatScan: return "exclamationmark.shield"
+        case .securityPosture: return "gauge.with.dots.needle.33percent"
         case .persistence: return "arrow.clockwise.circle"
         case .eventTaps: return "keyboard"
         case .dylibHijack: return "link.badge.plus"
         case .fileIntegrity: return "externaldrive.badge.checkmark"
         case .supplyChain: return "shippingbox"
+        case .avMonitor: return "video.badge.waveform.fill"
+        case .tccPermissions: return "hand.raised.fill"
+        case .ransomware: return "lock.trianglebadge.exclamationmark"
+        case .packageInventory: return "archivebox"
         }
     }
 
     var subtitle: String {
         switch self {
-        case .threatScan: return "11 engines \u{00B7} full sweep"
+        case .threatScan: return "15 engines \u{00B7} full sweep"
+        case .securityPosture: return "SIP \u{00B7} FileVault \u{00B7} grade"
         case .persistence: return "13 locations \u{00B7} signing"
         case .eventTaps: return "keylogger detection"
         case .dylibHijack: return "Mach-O \u{00B7} rpath \u{00B7} weak"
         case .fileIntegrity: return "SHA-256 baseline \u{00B7} diff"
         case .supplyChain: return "brew \u{00B7} npm \u{00B7} pip \u{00B7} xcode"
+        case .avMonitor: return "mic \u{00B7} camera \u{00B7} realtime"
+        case .tccPermissions: return "FDA \u{00B7} screen \u{00B7} accessibility"
+        case .ransomware: return "entropy \u{00B7} chi-square \u{00B7} pi"
+        case .packageInventory: return "brew \u{00B7} app store \u{00B7} pkgutil"
         }
     }
 
     var accentColor: Color {
         switch self {
         case .threatScan: return .red
+        case .securityPosture: return .blue
         case .persistence: return .orange
         case .eventTaps: return .purple
         case .dylibHijack: return .yellow
         case .fileIntegrity: return .cyan
         case .supplyChain: return .green
+        case .avMonitor: return .pink
+        case .tccPermissions: return .mint
+        case .ransomware: return Color(red: 0.8, green: 0.2, blue: 0.2)
+        case .packageInventory: return .indigo
         }
     }
 }

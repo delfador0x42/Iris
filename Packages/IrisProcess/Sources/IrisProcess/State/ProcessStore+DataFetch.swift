@@ -90,6 +90,7 @@ extension ProcessStore {
 
     func processProcessData(_ dataArray: [Data]) {
         let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
         processes = dataArray.compactMap { data -> ProcessInfo? in
             try? decoder.decode(ProcessInfo.self, from: data)
         }
@@ -250,8 +251,8 @@ extension ProcessStore {
         // Check for Apple signature
         let isAppleSigned = teamId == nil && signingId?.hasPrefix("com.apple.") == true
 
-        // Check if platform binary
-        let isPlatformBinary = isAppleSigned && (flags & 0x0001) != 0  // CS_VALID
+        // Check if platform binary (CS_PLATFORM_BINARY = 0x4000)
+        let isPlatformBinary = (flags & 0x4000) != 0
 
         return ProcessInfo.CodeSigningInfo(
             teamId: teamId,

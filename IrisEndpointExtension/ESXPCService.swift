@@ -133,13 +133,8 @@ extension ESXPCService: EndpointXPCProtocol {
     func getProcess(pid: Int32, reply: @escaping (Data?) -> Void) {
         logger.debug("XPC: getProcess(\(pid))")
 
-        guard let client = esClient else {
-            reply(nil)
-            return
-        }
-
-        let processes = client.getTrackedProcesses()
-        guard let process = processes.first(where: { $0.pid == pid }) else {
+        guard let client = esClient,
+              let process = client.getProcess(pid: pid) else {
             reply(nil)
             return
         }
@@ -158,12 +153,16 @@ extension ESXPCService: EndpointXPCProtocol {
     func getStatus(reply: @escaping ([String: Any]) -> Void) {
         logger.debug("XPC: getStatus")
 
-        let status: [String: Any] = [
+        var status: [String: Any] = [
             "version": "1.0.0",
             "esEnabled": esClient?.isRunning ?? false,
             "processCount": esClient?.getTrackedProcesses().count ?? 0,
-            "mode": "stub" // Change to "active" when ES is enabled
+            "mode": esClient?.isRunning == true ? "active" : "inactive"
         ]
+
+        if let error = esClient?.startupError {
+            status["esError"] = error
+        }
 
         reply(status)
     }

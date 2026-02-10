@@ -38,7 +38,8 @@ public actor RansomwareDetector {
         // Check threshold
         if entries.count >= encryptionCountThreshold && !reportedPIDs.contains(pid) {
             reportedPIDs.insert(pid)
-            let processPath = Self.getProcessPath(pid)
+            let rawPath = ProcessEnumeration.getProcessPath(pid)
+            let processPath = rawPath.isEmpty ? "unknown" : rawPath
             let processName = URL(fileURLWithPath: processPath).lastPathComponent
 
             let alert = RansomwareAlert(
@@ -98,11 +99,4 @@ public actor RansomwareDetector {
         return results
     }
 
-    private static func getProcessPath(_ pid: pid_t) -> String {
-        let buf = UnsafeMutablePointer<UInt8>.allocate(capacity: Int(MAXPATHLEN))
-        defer { buf.deallocate() }
-        let len = proc_pidpath(pid, buf, UInt32(MAXPATHLEN))
-        guard len > 0 else { return "unknown" }
-        return String(cString: buf)
-    }
 }

@@ -8,13 +8,35 @@ public actor EventTapScanner {
     private let logger = Logger(subsystem: "com.wudan.iris", category: "EventTapScanner")
     private let verifier = SigningVerifier.shared
 
-    // Known benign tapping process identifiers
+    // Known benign tapping process signing identifiers
     private let knownBenign: Set<String> = [
-        "com.vmware.vmware-vmx",
-        "com.apple.universalaccess",
-        "com.apple.dock",
-        "com.apple.SecurityAgent",
-        "com.apple.WindowServer"
+        // Apple
+        "com.apple.universalaccess", "com.apple.dock",
+        "com.apple.SecurityAgent", "com.apple.WindowServer",
+        "com.apple.Accessibility-Inspector",
+        // Virtualization
+        "com.vmware.vmware-vmx", "com.parallels.vm.main",
+        // Keyboard remapping / window management
+        "org.pqrs.Karabiner-EventViewer", "org.pqrs.karabiner.agent.grabber",
+        "org.pqrs.Karabiner-VirtualHIDDevice-Manager",
+        "com.knollsoft.Rectangle", "com.crowdcafe.windowmagnet",
+        "com.hegenberg.BetterTouchTool", "com.hegenberg.BetterSnapTool",
+        "com.koekeishiya.skhd", "com.koekeishiya.yabai",
+        // Launchers / productivity
+        "com.runningwithcrayons.Alfred", "com.raycast.macos",
+        "org.hammerspoon.Hammerspoon",
+        // Password managers
+        "com.1password.1password", "com.agilebits.onepassword7",
+        // Text expansion / automation
+        "com.smileonmymac.TextExpander",
+        "com.stairways.keyboardmaestro.engine",
+        // Terminal / dev tools
+        "com.googlecode.iterm2", "net.kovidgoyal.kitty",
+        // Peripheral software
+        "com.logi.cp-dev-mgr", "com.steelseries.gg",
+        "com.elgato.StreamDeck",
+        // Menu bar managers
+        "com.surteesstudios.Bartender",
     ]
 
     /// Enumerate all active event taps and identify suspicious ones
@@ -43,7 +65,8 @@ public actor EventTapScanner {
 
             let isActive = tap.options == .defaultTap
             let isSystemWide = tap.processBeingTapped == 0
-            let processPath = Self.getProcessPath(tap.tappingProcess)
+            let rawPath = ProcessEnumeration.getProcessPath(tap.tappingProcess)
+            let processPath = rawPath.isEmpty ? "unknown (\(tap.tappingProcess))" : rawPath
             let processName = URL(fileURLWithPath: processPath).lastPathComponent
 
             // Verify signing
@@ -52,7 +75,9 @@ public actor EventTapScanner {
             // Determine suspicion
             var reasons: [String] = []
             if isKeyboard && isActive {
-                reasons.append("Active keyboard filter (can intercept keystrokes)")
+                reasons.append("Active keyboard filter (can intercept/modify keystrokes)")
+            } else if isKeyboard {
+                reasons.append("Keyboard listener (can log keystrokes)")
             }
             if isKeyboard && isSystemWide {
                 reasons.append("System-wide keyboard monitoring")
@@ -70,8 +95,9 @@ public actor EventTapScanner {
             }
             if apple { reasons.removeAll() }
 
+            let targetPath = ProcessEnumeration.getProcessPath(tap.processBeingTapped)
             let targetDesc = isSystemWide ? "All Processes" :
-                Self.getProcessPath(tap.processBeingTapped)
+                (targetPath.isEmpty ? "PID \(tap.processBeingTapped)" : targetPath)
 
             results.append(EventTapInfo(
                 tapID: tap.eventTapID,
@@ -93,12 +119,4 @@ public actor EventTapScanner {
         return results.sorted { $0.isSuspicious && !$1.isSuspicious }
     }
 
-    /// Get the executable path for a PID
-    static func getProcessPath(_ pid: pid_t) -> String {
-        let pathBuffer = UnsafeMutablePointer<UInt8>.allocate(capacity: Int(MAXPATHLEN))
-        defer { pathBuffer.deallocate() }
-        let len = proc_pidpath(pid, pathBuffer, UInt32(MAXPATHLEN))
-        guard len > 0 else { return "unknown (\(pid))" }
-        return String(cString: pathBuffer)
-    }
 }

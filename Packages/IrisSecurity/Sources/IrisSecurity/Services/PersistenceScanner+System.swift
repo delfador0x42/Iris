@@ -2,7 +2,9 @@ import AppKit
 import Foundation
 
 extension PersistenceScanner {
-    /// Scan cron jobs for all users
+    /// Scan cron jobs for all users.
+    /// Cron is non-standard on macOS — all jobs get base evidence.
+    /// Dangerous content patterns add extra weight.
     func scanCronJobs() async -> [PersistenceItem] {
         var items: [PersistenceItem] = []
 
@@ -11,17 +13,14 @@ extension PersistenceScanner {
         for line in output.split(separator: "\n") {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if trimmed.isEmpty || trimmed.hasPrefix("#") { continue }
-            // Valid cron line starts with digit, *, or @
             guard let first = trimmed.first,
                   first.isNumber || first == "*" || first == "@" else { continue }
 
-            let suspicious = isCronLineSuspicious(String(trimmed))
             items.append(PersistenceItem(
                 type: .cronJob,
                 name: String(trimmed.prefix(60)),
                 path: "/var/cron/",
-                isSuspicious: suspicious,
-                suspicionReasons: suspicious ? ["Suspicious cron job content"] : []
+                evidence: cronEvidence(String(trimmed))
             ))
         }
 
@@ -40,13 +39,11 @@ extension PersistenceScanner {
                     guard let first = trimmed.first,
                           first.isNumber || first == "*" || first == "@" else { continue }
 
-                    let suspicious = isCronLineSuspicious(String(trimmed))
                     items.append(PersistenceItem(
                         type: .cronJob,
                         name: "\(user): \(trimmed.prefix(50))",
                         path: cronFile,
-                        isSuspicious: suspicious,
-                        suspicionReasons: suspicious ? ["Suspicious cron job for \(user)"] : []
+                        evidence: cronEvidence(String(trimmed))
                     ))
                 }
             }
@@ -54,11 +51,56 @@ extension PersistenceScanner {
         return items
     }
 
+    /// Build evidence for a cron line
+    private func cronEvidence(_ line: String) -> [Evidence] {
+        var ev: [Evidence] = []
+        let lower = line.lowercased()
+
+        // Base: cron is non-standard on macOS
+        ev.append(Evidence(factor: "Cron job (non-standard on macOS)", weight: 0.3, category: .context))
+
+        // Network commands
+        let networkPatterns = ["curl", "wget", "nc ", "ncat", "netcat"]
+        if networkPatterns.contains(where: { lower.contains($0) }) {
+            ev.append(Evidence(factor: "Contains network commands", weight: 0.3, category: .content))
+        }
+
+        // Shell piping
+        if lower.contains("| sh") || lower.contains("| bash") || lower.contains("|sh") || lower.contains("|bash") {
+            ev.append(Evidence(factor: "Pipes to shell interpreter", weight: 0.3, category: .content))
+        }
+
+        // Temp directories
+        if lower.contains("/tmp/") || lower.contains("/var/tmp/") {
+            ev.append(Evidence(factor: "Executes from temp directory", weight: 0.2, category: .location))
+        }
+
+        // Encoding/obfuscation
+        let obfuscation = ["base64", "openssl enc", "eval "]
+        if obfuscation.contains(where: { lower.contains($0) }) {
+            ev.append(Evidence(factor: "Uses encoding or obfuscation", weight: 0.2, category: .content))
+        }
+
+        // Shell one-liners
+        let shellOneLiner = ["bash -c", "sh -c", "python -c", "python3 -c"]
+        if shellOneLiner.contains(where: { lower.contains($0) }) {
+            ev.append(Evidence(factor: "Inline script execution", weight: 0.1, category: .content))
+        }
+
+        // Permission changes
+        if lower.contains("chmod +x") || lower.contains("chmod 777") {
+            ev.append(Evidence(factor: "Modifies file permissions", weight: 0.1, category: .content))
+        }
+
+        return ev
+    }
+
     /// Scan kernel extensions
     func scanKernelExtensions() async -> [PersistenceItem] {
         var items: [PersistenceItem] = []
         let dirs = ["/Library/Extensions", "/System/Library/Extensions"]
         let fm = FileManager.default
+        let baseline = BaselineService.shared
 
         for dir in dirs {
             guard let contents = try? fm.contentsOfDirectory(atPath: dir) else { continue }
@@ -67,11 +109,17 @@ extension PersistenceScanner {
                 let name = file.replacingOccurrences(of: ".kext", with: "")
                 let isSystem = dir.hasPrefix("/System")
                 let (signing, identifier, apple) = await verifyBinary(path)
+                let isBaseline = baseline.isBaselineKext(identifier ?? name)
 
-                var reasons: [String] = []
+                var ev: [Evidence] = []
                 if !isSystem && !apple {
-                    reasons.append("Third-party kernel extension")
-                    if signing == .unsigned { reasons.append("Unsigned kext") }
+                    ev.append(Evidence(factor: "Third-party kernel extension", weight: 0.3, category: .context))
+                }
+                if signing == .unsigned {
+                    ev.append(Evidence(factor: "Unsigned kernel extension", weight: 0.5, category: .signing))
+                }
+                if signing == .adHoc {
+                    ev.append(Evidence(factor: "Ad-hoc signed kernel extension", weight: 0.3, category: .signing))
                 }
 
                 items.append(PersistenceItem(
@@ -81,8 +129,8 @@ extension PersistenceScanner {
                     signingStatus: signing,
                     signingIdentifier: identifier,
                     isAppleSigned: apple,
-                    isSuspicious: !reasons.isEmpty,
-                    suspicionReasons: reasons
+                    isBaselineItem: isBaseline,
+                    evidence: ev
                 ))
             }
         }
@@ -96,7 +144,6 @@ extension PersistenceScanner {
 
         guard let plist = NSDictionary(contentsOfFile: dbPath) else { return items }
 
-        // Walk the plist for extensions with activated_enabled state
         if let extensions = plist["extensions"] as? [NSDictionary] {
             for ext in extensions {
                 guard let state = ext["state"] as? String,
@@ -106,13 +153,19 @@ extension PersistenceScanner {
                 let name = URL(fileURLWithPath: originPath).lastPathComponent
                 let (signing, identifier, apple) = await verifyBinary(originPath)
 
+                var ev: [Evidence] = []
+                if !apple {
+                    ev.append(Evidence(factor: "Third-party system extension", weight: 0.2, category: .context))
+                }
+
                 items.append(PersistenceItem(
                     type: .systemExtension,
                     name: name,
                     path: originPath,
                     signingStatus: signing,
                     signingIdentifier: identifier,
-                    isAppleSigned: apple
+                    isAppleSigned: apple,
+                    evidence: ev
                 ))
             }
         }
@@ -128,6 +181,7 @@ extension PersistenceScanner {
         ]
         let fm = FileManager.default
         let ws = NSWorkspace.shared
+        let baseline = BaselineService.shared
 
         for dir in dirs {
             guard let contents = try? fm.contentsOfDirectory(atPath: dir) else { continue }
@@ -136,10 +190,11 @@ extension PersistenceScanner {
                 guard ws.isFilePackage(atPath: path) else { continue }
                 let (signing, identifier, apple) = await verifyBinary(path)
                 let isSystem = dir.hasPrefix("/System")
+                let isBaseline = baseline.isBaselineAuthPlugin(file)
 
-                var reasons: [String] = []
+                var ev: [Evidence] = []
                 if !isSystem && !apple {
-                    reasons.append("Third-party authorization plugin")
+                    ev.append(Evidence(factor: "Third-party authorization plugin", weight: 0.5, category: .context))
                 }
 
                 items.append(PersistenceItem(
@@ -149,25 +204,12 @@ extension PersistenceScanner {
                     signingStatus: signing,
                     signingIdentifier: identifier,
                     isAppleSigned: apple,
-                    isSuspicious: !reasons.isEmpty,
-                    suspicionReasons: reasons
+                    isBaselineItem: isBaseline,
+                    evidence: ev
                 ))
             }
         }
         return items
-    }
-
-    /// Only flag cron jobs with suspicious content patterns
-    private func isCronLineSuspicious(_ line: String) -> Bool {
-        let lower = line.lowercased()
-        let suspiciousPatterns = [
-            "curl", "wget", "nc ", "ncat", "netcat",
-            "bash -c", "sh -c", "python -c", "python3 -c",
-            "base64", "openssl enc", "eval ",
-            "/tmp/", "/var/tmp/", "| sh", "| bash",
-            "chmod +x", "chmod 777"
-        ]
-        return suspiciousPatterns.contains { lower.contains($0) }
     }
 
     func runCommand(_ path: String, args: [String]) async -> String {

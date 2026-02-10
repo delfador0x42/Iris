@@ -217,7 +217,7 @@ public actor StealthScanner {
     /// Scan running processes for DYLD_INSERT_LIBRARIES environment variables
     private func scanDYLDEnvironment() async -> [ProcessAnomaly] {
         var anomalies: [ProcessAnomaly] = []
-        let pids = getRunningPIDs()
+        let pids = ProcessEnumeration.getRunningPIDs()
 
         for pid in pids {
             let env = getProcessEnvironment(pid)
@@ -227,7 +227,7 @@ public actor StealthScanner {
                    lowerKey == "__xpc_dyld_insert_libraries" ||
                    lowerKey == "dyld_framework_path" ||
                    lowerKey == "dyld_library_path" {
-                    let path = getProcessPath(pid)
+                    let path = ProcessEnumeration.getProcessPath(pid)
                     let name = URL(fileURLWithPath: path).lastPathComponent
                     anomalies.append(ProcessAnomaly(
                         pid: pid, processName: name, processPath: path,
@@ -304,23 +304,6 @@ public actor StealthScanner {
     private func hasExtendedAttribute(_ path: String, name: String) -> Bool {
         let size = getxattr(path, name, nil, 0, 0, 0)
         return size >= 0
-    }
-
-    private func getRunningPIDs() -> [pid_t] {
-        let bufSize = proc_listpids(UInt32(PROC_ALL_PIDS), 0, nil, 0)
-        guard bufSize > 0 else { return [] }
-        var pids = [pid_t](repeating: 0, count: Int(bufSize) / MemoryLayout<pid_t>.size)
-        let actual = proc_listpids(UInt32(PROC_ALL_PIDS), 0, &pids, bufSize)
-        guard actual > 0 else { return [] }
-        return Array(pids.prefix(Int(actual) / MemoryLayout<pid_t>.size)).filter { $0 > 0 }
-    }
-
-    private func getProcessPath(_ pid: pid_t) -> String {
-        let buf = UnsafeMutablePointer<UInt8>.allocate(capacity: Int(MAXPATHLEN))
-        defer { buf.deallocate() }
-        let len = proc_pidpath(pid, buf, UInt32(MAXPATHLEN))
-        guard len > 0 else { return "" }
-        return String(cString: buf)
     }
 
     private func getProcessEnvironment(_ pid: pid_t) -> [(String, String)] {

@@ -117,6 +117,8 @@ public struct PersistenceView: View {
     private func loadItems() async {
         isLoading = true
         items = await PersistenceScanner.shared.scanAll()
+        // Wire PersistenceMonitor: take snapshot for future diffing
+        await PersistenceMonitor.shared.takeSnapshot()
         isLoading = false
     }
 }

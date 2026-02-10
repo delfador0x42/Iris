@@ -12,54 +12,72 @@ public actor LOLBinDetector {
     /// macOS LOLBins — legitimate binaries commonly abused by attackers
     /// Keyed by binary name, value is the MITRE ATT&CK technique
     static let lolBins: [String: String] = [
+        // Scripting / execution
         "osascript": "T1059.002",     // AppleScript execution
-        "curl": "T1105",              // Ingress tool transfer
-        "wget": "T1105",              // Ingress tool transfer
+        "bash": "T1059.004",          // Unix shell
+        "zsh": "T1059.004",
+        "sh": "T1059.004",
         "python": "T1059.006",        // Python execution
         "python3": "T1059.006",
         "ruby": "T1059.005",          // Ruby execution
         "perl": "T1059.006",          // Script execution
         "swift": "T1059",             // On-the-fly compilation
         "swiftc": "T1027.004",        // Compile after delivery
+        "tclsh": "T1059",
+        "expect": "T1059",
+        "awk": "T1059.004",
+        "sed": "T1059.004",
+        "osacompile": "T1059.002",    // Compile AppleScript to app
+        "jxa": "T1059.007",           // JavaScript for Automation
+        // Network / transfer
+        "curl": "T1105",              // Ingress tool transfer
+        "wget": "T1105",              // Ingress tool transfer
+        "nscurl": "T1105",            // Network transfer
+        "scp": "T1048",               // Exfiltration over SSH
+        "sftp": "T1048",
+        "nc": "T1095",                // Non-application layer protocol
+        "ncat": "T1095",
+        "networksetup": "T1090",      // Proxy config
+        "scutil": "T1016",            // System network config
+        "dns-sd": "T1016",            // DNS service discovery
+        // Credential / data access
         "sqlite3": "T1555.001",       // Credential access / TCC
         "security": "T1555.001",      // Keychain dumping
         "screencapture": "T1113",     // Screen capture
         "pbcopy": "T1115",            // Clipboard data
         "pbpaste": "T1115",
+        // Execution / evasion
         "open": "T1204.002",          // User execution
         "xattr": "T1553.001",         // Remove quarantine
+        "hdiutil": "T1553.001",       // Mount disk images
+        "codesign": "T1553.002",      // Subvert trust controls
+        "spctl": "T1553.002",
+        "installer": "T1218",         // Proxy execution via installer
+        "pkgutil": "T1218",           // Package inspection / install
+        "softwareupdate": "T1218",    // Masquerade as update
+        // Archiving / staging
         "ditto": "T1560.001",         // Archive collection
         "zip": "T1560.001",
         "tar": "T1560.001",
+        // Persistence / config
         "launchctl": "T1569.001",     // Service execution
         "defaults": "T1547.011",      // Plist modification
         "plutil": "T1547.011",
-        "networksetup": "T1090",      // Proxy config
-        "scutil": "T1016",            // System network config
-        "scp": "T1048",              // Exfiltration over SSH
-        "sftp": "T1048",
-        "nc": "T1095",               // Non-application layer protocol
-        "ncat": "T1095",
-        "bash": "T1059.004",          // Unix shell
-        "zsh": "T1059.004",
-        "sh": "T1059.004",
-        "tclsh": "T1059",
-        "expect": "T1059",
-        "awk": "T1059.004",
-        "sed": "T1059.004",
-        "nscurl": "T1105",            // Network transfer
+        "profiles": "T1176",          // MDM profile install
+        "csrutil": "T1562.001",       // Disable SIP
+        "kextload": "T1547.006",      // Kernel module loading
+        "kextutil": "T1547.006",      // Kernel module loading
+        // System manipulation
         "caffeinate": "T1497.001",    // Anti-sleep (keep C2 alive)
-        "say": "T1059",               // Audio output (uncommon)
         "pmset": "T1529",             // Power management
         "killall": "T1489",           // Service stop
         "pkill": "T1489",
         "diskutil": "T1561",          // Disk manipulation
-        "hdiutil": "T1553.001",       // Mount disk images
-        "codesign": "T1553.002",      // Subvert trust controls
-        "spctl": "T1553.002",
-        "csrutil": "T1562.001",       // Disable SIP
-        "kextload": "T1547.006",      // Kernel module loading
-        "profiles": "T1176",          // MDM profile install
+        "say": "T1059",               // Audio output (uncommon)
+        "textutil": "T1005",          // Convert/read documents
+        "mdm": "T1176",              // MDM enrollment
+        "log": "T1070.002",           // Clear/read system logs
+        "tmutil": "T1490",            // Time Machine manipulation
     ]
 
     /// Suspicious parent→child relationships. If the parent spawns this child,
@@ -85,34 +103,58 @@ public actor LOLBinDetector {
         "/dev/shm/",
     ]
 
+    private static let maxAncestryDepth = 8
+
+    /// Walk process ancestry up to maxAncestryDepth, return (names, pids) from child to root
+    private func getAncestry(_ pid: pid_t) -> [(name: String, pid: pid_t)] {
+        var chain: [(name: String, pid: pid_t)] = []
+        var current = pid
+        var seen = Set<pid_t>()
+        for _ in 0..<Self.maxAncestryDepth {
+            let ppid = ProcessEnumeration.getParentPID(current)
+            guard ppid > 0, ppid != current, !seen.contains(ppid) else { break }
+            seen.insert(ppid)
+            let path = ProcessEnumeration.getProcessPath(ppid)
+            let name = path.isEmpty ? "unknown" : URL(fileURLWithPath: path).lastPathComponent
+            chain.append((name: name, pid: ppid))
+            current = ppid
+        }
+        return chain
+    }
+
     /// Analyze all running processes for LOLBin abuse
     public func scan() async -> [ProcessAnomaly] {
         var anomalies: [ProcessAnomaly] = []
-        let pids = getRunningPIDs()
+        let pids = ProcessEnumeration.getRunningPIDs()
 
         for pid in pids {
-            let path = getProcessPath(pid)
+            let path = ProcessEnumeration.getProcessPath(pid)
             guard !path.isEmpty else { continue }
             let name = URL(fileURLWithPath: path).lastPathComponent
 
             // Get parent info
-            let ppid = getParentPID(pid)
-            let parentPath = ppid > 0 ? getProcessPath(ppid) : ""
+            let ppid = ProcessEnumeration.getParentPID(pid)
+            let parentPath = ppid > 0 ? ProcessEnumeration.getProcessPath(ppid) : ""
             let parentName = parentPath.isEmpty ? "unknown" :
                 URL(fileURLWithPath: parentPath).lastPathComponent
 
             // Check 1: Is this a LOLBin?
             if let mitreID = Self.lolBins[name] {
-                // Check suspicious parent→child lineage
-                if let suspChildren = Self.suspiciousLineages[parentName],
-                   suspChildren.contains(name) {
-                    anomalies.append(ProcessAnomaly(
-                        pid: pid, processName: name, processPath: path,
-                        parentPID: ppid, parentName: parentName,
-                        technique: "Suspicious Process Lineage",
-                        description: "\(parentName) → \(name) is a known attack chain. \(parentName) should not normally spawn \(name).",
-                        severity: .high, mitreID: mitreID
-                    ))
+                // Walk ancestry to find suspicious lineage at any depth
+                let ancestry = getAncestry(pid)
+                for ancestor in ancestry {
+                    if let suspChildren = Self.suspiciousLineages[ancestor.name],
+                       suspChildren.contains(name) {
+                        let chain = ancestry.reversed().map(\.name).joined(separator: " → ") + " → \(name)"
+                        anomalies.append(ProcessAnomaly(
+                            pid: pid, processName: name, processPath: path,
+                            parentPID: ppid, parentName: parentName,
+                            technique: "Suspicious Process Lineage",
+                            description: "\(ancestor.name) spawned \(name) (chain: \(chain)). \(ancestor.name) should not normally lead to \(name).",
+                            severity: .high, mitreID: mitreID
+                        ))
+                        break
+                    }
                 }
 
                 // Check LOLBin executing from temp/suspicious directory
@@ -211,31 +253,7 @@ public actor LOLBinDetector {
         return anomalies.sorted { $0.severity > $1.severity }
     }
 
-    // MARK: - Process Info Helpers
-
-    private func getRunningPIDs() -> [pid_t] {
-        let bufSize = proc_listpids(UInt32(PROC_ALL_PIDS), 0, nil, 0)
-        guard bufSize > 0 else { return [] }
-        var pids = [pid_t](repeating: 0, count: Int(bufSize) / MemoryLayout<pid_t>.size)
-        let actual = proc_listpids(UInt32(PROC_ALL_PIDS), 0, &pids, bufSize)
-        guard actual > 0 else { return [] }
-        return Array(pids.prefix(Int(actual) / MemoryLayout<pid_t>.size)).filter { $0 > 0 }
-    }
-
-    private func getProcessPath(_ pid: pid_t) -> String {
-        let buf = UnsafeMutablePointer<UInt8>.allocate(capacity: Int(MAXPATHLEN))
-        defer { buf.deallocate() }
-        let len = proc_pidpath(pid, buf, UInt32(MAXPATHLEN))
-        guard len > 0 else { return "" }
-        return String(cString: buf)
-    }
-
-    private func getParentPID(_ pid: pid_t) -> pid_t {
-        var info = proc_bsdinfo()
-        let size = proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, Int32(MemoryLayout<proc_bsdinfo>.size))
-        guard size > 0 else { return 0 }
-        return pid_t(info.pbi_ppid)
-    }
+    // MARK: - Unique Helpers (CWD, Args — not shared)
 
     private func getProcessCWD(_ pid: pid_t) -> String {
         var vinfo = proc_vnodepathinfo()

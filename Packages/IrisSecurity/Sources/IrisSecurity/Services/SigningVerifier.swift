@@ -9,65 +9,104 @@ public actor SigningVerifier {
 
     /// Verify the signing status of a binary at the given path
     public func verify(_ path: String) -> (status: SigningStatus, identifier: String?, isApple: Bool) {
+        let result = verifyFull(path)
+        return (result.status, result.identifier, result.isApple)
+    }
+
+    /// Full verification including Team ID and hardened runtime check
+    public func verifyFull(_ path: String) -> VerificationResult {
         let url = URL(fileURLWithPath: path) as CFURL
         var staticCode: SecStaticCode?
 
         guard SecStaticCodeCreateWithPath(url, [], &staticCode) == errSecSuccess,
               let code = staticCode else {
-            return (.unknown, nil, false)
+            return VerificationResult(status: .unknown)
         }
 
-        // Check if valid signature
+        let info = extractSigningInfo(code)
+
+        // Check Apple anchor
         let appleReq = "anchor apple" as CFString
         var requirement: SecRequirement?
         SecRequirementCreateWithString(appleReq, [], &requirement)
 
         if let req = requirement, SecStaticCodeCheckValidity(code, [], req) == errSecSuccess {
-            let identifier = extractIdentifier(code)
-            return (.apple, identifier, true)
+            return VerificationResult(
+                status: .apple, identifier: info.identifier, teamID: info.teamID,
+                isApple: true, isHardenedRuntime: info.isHardenedRuntime
+            )
         }
 
-        // Check general validity
-        let valid = SecStaticCodeCheckValidity(code, [], nil) == errSecSuccess
-        guard valid else {
+        // Check general validity with strict validation
+        let strictFlags = SecCSFlags(rawValue: kSecCSStrictValidate | kSecCSCheckNestedCode)
+        let strictValid = SecStaticCodeCheckValidity(code, strictFlags, nil) == errSecSuccess
+        let basicValid = strictValid || SecStaticCodeCheckValidity(code, [], nil) == errSecSuccess
+
+        guard basicValid else {
             // Check if ad-hoc
-            var info: CFDictionary?
-            SecCodeCopySigningInformation(code, [], &info)
-            if let dict = info as? [String: Any],
-               let flags = dict[kSecCodeInfoFlags as String] as? UInt32,
-               flags & 0x0002 != 0 { // CS_ADHOC
-                return (.adHoc, extractIdentifier(code), false)
+            if let flags = info.csFlags, flags & 0x0002 != 0 { // CS_ADHOC
+                return VerificationResult(
+                    status: .adHoc, identifier: info.identifier, teamID: info.teamID,
+                    isHardenedRuntime: info.isHardenedRuntime
+                )
             }
-            return (.invalid, nil, false)
+            return VerificationResult(status: .invalid)
         }
 
-        // Check for Developer ID
+        // Developer ID
         let devIdReq = "anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6]" as CFString
         var devIdRequirement: SecRequirement?
         SecRequirementCreateWithString(devIdReq, [], &devIdRequirement)
 
         if let req = devIdRequirement, SecStaticCodeCheckValidity(code, [], req) == errSecSuccess {
-            return (.devID, extractIdentifier(code), false)
+            return VerificationResult(
+                status: .devID, identifier: info.identifier, teamID: info.teamID,
+                isHardenedRuntime: info.isHardenedRuntime
+            )
         }
 
-        // Check for App Store
+        // App Store
         let appStoreReq = "anchor apple generic and certificate leaf[field.1.2.840.113635.100.6.1.9]" as CFString
         var appStoreRequirement: SecRequirement?
         SecRequirementCreateWithString(appStoreReq, [], &appStoreRequirement)
 
         if let req = appStoreRequirement, SecStaticCodeCheckValidity(code, [], req) == errSecSuccess {
-            return (.appStore, extractIdentifier(code), false)
+            return VerificationResult(
+                status: .appStore, identifier: info.identifier, teamID: info.teamID,
+                isHardenedRuntime: info.isHardenedRuntime
+            )
         }
 
-        return (.unsigned, extractIdentifier(code), false)
+        return VerificationResult(
+            status: .unsigned, identifier: info.identifier, teamID: info.teamID,
+            isHardenedRuntime: info.isHardenedRuntime
+        )
     }
 
-    private func extractIdentifier(_ code: SecStaticCode) -> String? {
+    private struct SigningInfo {
+        var identifier: String?
+        var teamID: String?
+        var csFlags: UInt32?
+        var isHardenedRuntime: Bool = false
+    }
+
+    private func extractSigningInfo(_ code: SecStaticCode) -> SigningInfo {
         var info: CFDictionary?
-        guard SecCodeCopySigningInformation(code, [], &info) == errSecSuccess,
+        guard SecCodeCopySigningInformation(code, SecCSFlags(rawValue: kSecCSSigningInformation), &info) == errSecSuccess,
               let dict = info as? [String: Any] else {
-            return nil
+            return SigningInfo()
         }
-        return dict[kSecCodeInfoIdentifier as String] as? String
+
+        let identifier = dict[kSecCodeInfoIdentifier as String] as? String
+        let teamID = dict[kSecCodeInfoTeamIdentifier as String] as? String
+        let flags = dict[kSecCodeInfoFlags as String] as? UInt32
+
+        // CS_RUNTIME = 0x10000 (hardened runtime)
+        let isHardened = flags.map { $0 & 0x10000 != 0 } ?? false
+
+        return SigningInfo(
+            identifier: identifier, teamID: teamID,
+            csFlags: flags, isHardenedRuntime: isHardened
+        )
     }
 }

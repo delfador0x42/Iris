@@ -17,7 +17,6 @@ extension PersistenceScanner {
                   let objects = plist["$objects"] as? [Any] else { continue }
 
             for obj in objects {
-                // Extract bookmark data from various formats
                 var bookmarkData: Data?
                 if let data = obj as? Data {
                     bookmarkData = data
@@ -26,16 +25,19 @@ extension PersistenceScanner {
                     bookmarkData = data
                 }
                 guard let bookmark = bookmarkData else { continue }
-
-                // Resolve bookmark to path
                 guard let resolvedPath = resolveBookmark(bookmark) else { continue }
                 let name = URL(fileURLWithPath: resolvedPath).lastPathComponent
 
                 let (signing, identifier, apple) = await verifyBinary(resolvedPath)
-                var reasons: [String] = []
+
+                var ev: [Evidence] = []
                 if !apple {
-                    if signing == .unsigned { reasons.append("Unsigned login item") }
-                    if signing == .adHoc { reasons.append("Ad-hoc signed login item") }
+                    if signing == .unsigned {
+                        ev.append(Evidence(factor: "Unsigned login item", weight: 0.5, category: .signing))
+                    }
+                    if signing == .adHoc {
+                        ev.append(Evidence(factor: "Ad-hoc signed login item", weight: 0.3, category: .signing))
+                    }
                 }
 
                 items.append(PersistenceItem(
@@ -46,8 +48,7 @@ extension PersistenceScanner {
                     signingStatus: signing,
                     signingIdentifier: identifier,
                     isAppleSigned: apple,
-                    isSuspicious: !reasons.isEmpty,
-                    suspicionReasons: reasons
+                    evidence: ev
                 ))
             }
         }
@@ -90,21 +91,17 @@ extension PersistenceScanner {
             relativeTo: nil,
             bookmarkDataIsStale: &isStale
         ) else {
-            // Try extracting path from bookmark properties
             return extractPathFromBookmarkData(data)
         }
         return url.path
     }
 
     private func extractPathFromBookmarkData(_ data: Data) -> String? {
-        // Bookmark data contains _NSURLPathKey — scan for path-like strings
         guard let str = String(data: data, encoding: .utf8) else { return nil }
-        // Look for /Applications or /Users paths in the binary data
         let patterns = ["/Applications/", "/Users/", "/Library/", "/usr/"]
         for pattern in patterns {
             if let range = str.range(of: pattern) {
                 let remaining = str[range.lowerBound...]
-                // Extract until null byte or non-printable
                 var path = ""
                 for char in remaining {
                     if char.asciiValue == nil || char.asciiValue! < 32 { break }

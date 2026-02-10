@@ -13,10 +13,10 @@ public actor DylibHijackScanner {
     /// Scan all running processes for dylib hijack vulnerabilities
     public func scanRunningProcesses() async -> [DylibHijack] {
         var results: [DylibHijack] = []
-        let pids = getRunningPIDs()
+        let pids = ProcessEnumeration.getRunningPIDs()
 
         for pid in pids {
-            let path = getProcessPath(pid)
+            let path = ProcessEnumeration.getProcessPath(pid)
             guard !path.isEmpty, !isProtectedPath(path) else { continue }
             guard let info = MachOParser.parse(path) else { continue }
             // Only scan executables
@@ -148,23 +148,4 @@ public actor DylibHijackScanner {
         sipProtected.contains { path.hasPrefix($0) }
     }
 
-    private func getRunningPIDs() -> [pid_t] {
-        let bufferSize = proc_listpids(UInt32(PROC_ALL_PIDS), 0, nil, 0)
-        guard bufferSize > 0 else { return [] }
-
-        var pids = [pid_t](repeating: 0, count: Int(bufferSize) / MemoryLayout<pid_t>.size)
-        let actual = proc_listpids(UInt32(PROC_ALL_PIDS), 0, &pids, bufferSize)
-        guard actual > 0 else { return [] }
-
-        let count = Int(actual) / MemoryLayout<pid_t>.size
-        return Array(pids.prefix(count)).filter { $0 > 0 }
-    }
-
-    private func getProcessPath(_ pid: pid_t) -> String {
-        let buf = UnsafeMutablePointer<UInt8>.allocate(capacity: Int(MAXPATHLEN))
-        defer { buf.deallocate() }
-        let len = proc_pidpath(pid, buf, UInt32(MAXPATHLEN))
-        guard len > 0 else { return "" }
-        return String(cString: buf)
-    }
 }
