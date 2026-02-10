@@ -26,6 +26,7 @@ import Foundation
     // MARK: - Raw Data Capture
 
     func getConnectionRawData(_ connectionId: String, reply: @escaping (Data?, Data?) -> Void)
+    func getConnectionConversation(_ connectionId: String, reply: @escaping (Data?) -> Void)
     func setCaptureMemoryBudget(_ bytes: Int, reply: @escaping (Bool) -> Void)
     func getCaptureStats(reply: @escaping ([String: Any]) -> Void)
 }

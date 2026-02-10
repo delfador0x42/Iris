@@ -248,6 +248,22 @@ extension XPCService: NetworkXPCProtocol {
         reply(outbound, inbound)
     }
 
+    func getConnectionConversation(_ connectionId: String, reply: @escaping (Data?) -> Void) {
+        guard let provider = filterProvider,
+              let uuid = UUID(uuidString: connectionId) else {
+            reply(nil)
+            return
+        }
+        let segments = provider.getConversation(for: uuid)
+        guard !segments.isEmpty else {
+            reply(nil)
+            return
+        }
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        reply(try? encoder.encode(segments))
+    }
+
     func setCaptureMemoryBudget(_ bytes: Int, reply: @escaping (Bool) -> Void) {
         logger.info("XPC: setCaptureMemoryBudget(\(bytes))")
         guard let provider = filterProvider, bytes > 0 else {

@@ -60,8 +60,8 @@ extension FilterDataProvider {
                 httpResponseContentType: tracker.httpResponse?.contentType,
                 httpRawRequest: tracker.httpRequest?.rawHeaders,
                 httpRawResponse: tracker.httpResponse?.rawHeaders,
-                capturedOutboundBytes: tracker.rawOutbound.count,
-                capturedInboundBytes: tracker.rawInbound.count
+                capturedOutboundBytes: tracker.captureSegments.filter { $0.direction == .outbound }.reduce(0) { $0 + $1.byteCount },
+                capturedInboundBytes: tracker.captureSegments.filter { $0.direction == .inbound }.reduce(0) { $0 + $1.byteCount }
             )
         }
     }

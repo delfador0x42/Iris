@@ -4,6 +4,7 @@ import AppKit
 /// Rich inline detail view showing IP enrichment data (geolocation + security)
 struct IPDetailPopover: View {
     let aggregated: AggregatedConnection
+    var onViewTraffic: ((NetworkConnection) -> Void)?
     @Environment(\.dismiss) private var dismiss
     @State var showHTTPRawDetail = false
 
@@ -14,6 +15,29 @@ struct IPDetailPopover: View {
             VStack(alignment: .leading, spacing: 16) {
                 // Header with IP and hostname
                 headerSection
+
+                // View Traffic button (prominent)
+                if onViewTraffic != nil {
+                    Button {
+                        dismiss()
+                        onViewTraffic?(connection)
+                    } label: {
+                        HStack {
+                            Image(systemName: "waveform")
+                            Text("View Traffic")
+                            Spacer()
+                            if connection.hasCapturedData {
+                                Text("\(NetworkConnection.formatBytes(UInt64(connection.capturedOutboundBytes ?? 0))) up, \(NetworkConnection.formatBytes(UInt64(connection.capturedInboundBytes ?? 0))) down")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.secondary)
+                            }
+                            Image(systemName: "arrow.up.right.square")
+                        }
+                        .font(.system(size: 13, weight: .medium))
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.cyan.opacity(0.8))
+                }
 
                 Divider()
 

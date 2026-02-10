@@ -175,6 +175,30 @@ extension SecurityStore {
 
     // MARK: - Raw Capture Data
 
+    /// Fetch timestamped conversation segments for a connection (on-demand).
+    public func fetchConversation(for connectionId: UUID) async -> [CaptureSegment] {
+        guard let proxy = xpcConnection?.remoteObjectProxyWithErrorHandler({ [weak self] error in
+            Task { @MainActor in
+                self?.logger.error("XPC error fetching conversation: \(error.localizedDescription)")
+            }
+        }) as? NetworkXPCProtocol else {
+            return []
+        }
+
+        return await withCheckedContinuation { continuation in
+            proxy.getConnectionConversation(connectionId.uuidString) { data in
+                guard let data else {
+                    continuation.resume(returning: [])
+                    return
+                }
+                let decoder = JSONDecoder()
+                decoder.dateDecodingStrategy = .iso8601
+                let segments = (try? decoder.decode([CaptureSegment].self, from: data)) ?? []
+                continuation.resume(returning: segments)
+            }
+        }
+    }
+
     /// Fetch raw captured bytes for a specific connection (on-demand, not polled)
     public func fetchRawData(for connectionId: UUID) async -> (outbound: Data?, inbound: Data?) {
         guard let proxy = xpcConnection?.remoteObjectProxyWithErrorHandler({ [weak self] error in

@@ -3,6 +3,7 @@ import SwiftUI
 /// Individual connection detail row within an expanded process
 struct ConnectionDetailRow: View {
     let aggregated: AggregatedConnection
+    var onViewTraffic: ((NetworkConnection) -> Void)?
     @State private var isHovering = false
     @State private var showDetailPopover = false
 
@@ -80,7 +81,7 @@ struct ConnectionDetailRow: View {
                 }
                 .help("View IP details")
                 .popover(isPresented: $showDetailPopover) {
-                    IPDetailPopover(aggregated: aggregated)
+                    IPDetailPopover(aggregated: aggregated, onViewTraffic: onViewTraffic)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

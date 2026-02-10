@@ -62,9 +62,8 @@ class FilterDataProvider: NEFilterDataProvider {
         var responseParser: HTTPParser.StreamingResponseParser?
         var isHTTPParsed: Bool = false
 
-        // Raw capture buffers (full network tap)
-        var rawOutbound: Data = Data()
-        var rawInbound: Data = Data()
+        // Timestamped capture segments (full network tap)
+        var captureSegments: [CaptureSegment] = []
     }
 
     // MARK: - HTTP Data Structures (for XPC)
@@ -143,7 +142,7 @@ class FilterDataProvider: NEFilterDataProvider {
         let staleIdSet = Set(staleIds)
         for id in staleIds {
             if let tracker = connections[id] {
-                totalCaptureBytes -= tracker.rawOutbound.count + tracker.rawInbound.count
+                totalCaptureBytes -= tracker.captureSegments.reduce(0) { $0 + $1.byteCount }
             }
             connections.removeValue(forKey: id)
         }

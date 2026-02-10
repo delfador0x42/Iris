@@ -34,6 +34,7 @@ public struct NetworkMonitorView: View {
     @StateObject private var extensionManager = ExtensionManager.shared
     @State private var expandedProcesses: Set<Int32> = []
     @State private var viewMode: NetworkViewMode = .list
+    @State private var conversationConnection: NetworkConnection?
 
     public init() {}
 
@@ -76,6 +77,25 @@ public struct NetworkMonitorView: View {
                 }
             }
         }
+        .overlay {
+            if let conn = conversationConnection {
+                ZStack {
+                    Color.black.opacity(0.5)
+                        .ignoresSafeArea()
+                        .onTapGesture { conversationConnection = nil }
+
+                    ConnectionConversationView(
+                        connection: conn,
+                        onDismiss: { conversationConnection = nil }
+                    )
+                    .frame(width: 800, height: 600)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .shadow(color: .black.opacity(0.5), radius: 20)
+                }
+                .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: conversationConnection != nil)
         .environmentObject(store)
         .onAppear {
             // Set callback for when extension becomes ready (after user approval)
@@ -239,6 +259,9 @@ public struct NetworkMonitorView: View {
                         isExpanded: expandedProcesses.contains(process.pid),
                         onToggle: {
                             toggleProcess(process.pid)
+                        },
+                        onViewTraffic: { connection in
+                            conversationConnection = connection
                         }
                     )
                 }

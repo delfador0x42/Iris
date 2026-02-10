@@ -6,6 +6,7 @@ struct ProcessConnectionRow: View {
     let connections: [NetworkConnection]
     let isExpanded: Bool
     let onToggle: () -> Void
+    var onViewTraffic: ((NetworkConnection) -> Void)?
 
     /// Aggregate connections by remote IP for deduplication
     private var aggregatedConnections: [AggregatedConnection] {
@@ -94,7 +95,7 @@ struct ProcessConnectionRow: View {
             // Connection rows (when expanded) - deduplicated by IP
             if isExpanded {
                 ForEach(aggregatedConnections) { aggregated in
-                    ConnectionDetailRow(aggregated: aggregated)
+                    ConnectionDetailRow(aggregated: aggregated, onViewTraffic: onViewTraffic)
                 }
             }
         }

@@ -6,7 +6,7 @@ import os.log
 
 extension FilterDataProvider {
 
-    /// Append raw bytes to a connection's capture buffer.
+    /// Append a timestamped capture segment to a connection's buffer.
     /// Called from handleOutboundData/handleInboundData on every data chunk.
     func appendCaptureData(flow: NEFilterFlow, outbound: Data? = nil, inbound: Data? = nil) {
         connectionsLock.lock()
@@ -15,12 +15,14 @@ extension FilterDataProvider {
         guard let connectionId = flowToConnection[ObjectIdentifier(flow)],
               var tracker = connections[connectionId] else { return }
 
+        let now = Date()
+
         if let data = outbound {
-            tracker.rawOutbound.append(data)
+            tracker.captureSegments.append(CaptureSegment(timestamp: now, direction: .outbound, data: data))
             totalCaptureBytes += data.count
         }
         if let data = inbound {
-            tracker.rawInbound.append(data)
+            tracker.captureSegments.append(CaptureSegment(timestamp: now, direction: .inbound, data: data))
             totalCaptureBytes += data.count
         }
 
@@ -31,35 +33,47 @@ extension FilterDataProvider {
         }
     }
 
-    /// Evict raw data from oldest connections until under budget.
+    /// Evict capture data from oldest connections until under budget.
     /// Must be called while holding connectionsLock.
     private func evictOldestCaptureData() {
         while totalCaptureBytes > captureMemoryBudget {
-            // Find oldest connection that has raw data
             guard let oldest = connections
-                .filter({ $0.value.rawOutbound.count + $0.value.rawInbound.count > 0 })
+                .filter({ !$0.value.captureSegments.isEmpty })
                 .min(by: { $0.value.lastActivity < $1.value.lastActivity })
             else { break }
 
-            let freed = connections[oldest.key]!.rawOutbound.count +
-                        connections[oldest.key]!.rawInbound.count
-            connections[oldest.key]!.rawOutbound = Data()
-            connections[oldest.key]!.rawInbound = Data()
+            let freed = connections[oldest.key]!.captureSegments.reduce(0) { $0 + $1.byteCount }
+            connections[oldest.key]!.captureSegments.removeAll()
             totalCaptureBytes -= freed
 
             logger.debug("Evicted \(freed) capture bytes from connection \(oldest.key)")
         }
     }
 
-    /// Get raw captured data for a specific connection (called from XPC).
+    /// Get conversation segments for a specific connection (called from XPC).
+    func getConversation(for connectionId: UUID) -> [CaptureSegment] {
+        connectionsLock.lock()
+        defer { connectionsLock.unlock() }
+
+        return connections[connectionId]?.captureSegments ?? []
+    }
+
+    /// Get raw captured data as blobs (legacy compatibility for HTTPRawDetailView).
     func getRawData(for connectionId: UUID) -> (Data?, Data?) {
         connectionsLock.lock()
         defer { connectionsLock.unlock() }
 
         guard let tracker = connections[connectionId] else { return (nil, nil) }
-        let out = tracker.rawOutbound.isEmpty ? nil : tracker.rawOutbound
-        let inb = tracker.rawInbound.isEmpty ? nil : tracker.rawInbound
-        return (out, inb)
+
+        var outbound = Data()
+        var inbound = Data()
+        for segment in tracker.captureSegments {
+            switch segment.direction {
+            case .outbound: outbound.append(segment.data)
+            case .inbound: inbound.append(segment.data)
+            }
+        }
+        return (outbound.isEmpty ? nil : outbound, inbound.isEmpty ? nil : inbound)
     }
 
     /// Get capture statistics for XPC status reporting.
@@ -68,7 +82,7 @@ extension FilterDataProvider {
         defer { connectionsLock.unlock() }
 
         let connectionsWithData = connections.values
-            .filter { $0.rawOutbound.count + $0.rawInbound.count > 0 }
+            .filter { !$0.captureSegments.isEmpty }
             .count
 
         return [
