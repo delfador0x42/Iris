@@ -45,16 +45,6 @@ struct ProcessListToolbar: View {
             }
             .buttonStyle(.plain)
 
-            // View mode toggle (Monitor / History)
-            Picker("", selection: $store.viewMode) {
-                ForEach(ProcessStore.ViewMode.allCases, id: \.self) { mode in
-                    Label(mode.rawValue, systemImage: mode == .monitor ? "shield.lefthalf.filled" : "clock.arrow.circlepath")
-                        .tag(mode)
-                }
-            }
-            .pickerStyle(.segmented)
-            .frame(width: 160)
-
             Spacer()
 
             // Sort picker
@@ -71,9 +61,34 @@ struct ProcessListToolbar: View {
                 .pickerStyle(.menu)
                 .frame(width: 120)
             }
+
+            // View mode toggle — custom buttons for dark theme visibility
+            HStack(spacing: 0) {
+                modeButton("Monitor", icon: "shield.lefthalf.filled", mode: .monitor)
+                modeButton("History", icon: "clock.arrow.circlepath", mode: .history)
+            }
+            .background(Color.white.opacity(0.06))
+            .cornerRadius(6)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
         .background(Color.black.opacity(0.2))
+    }
+
+    private func modeButton(_ title: String, icon: String, mode: ProcessStore.ViewMode) -> some View {
+        let selected = store.viewMode == mode
+        return Button(action: { store.viewMode = mode }) {
+            HStack(spacing: 4) {
+                Image(systemName: icon)
+                Text(title)
+            }
+            .font(.system(size: 12, weight: selected ? .semibold : .regular))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(selected ? Color.cyan.opacity(0.3) : Color.clear)
+            .foregroundColor(selected ? .cyan : .gray)
+            .cornerRadius(6)
+        }
+        .buttonStyle(.plain)
     }
 }

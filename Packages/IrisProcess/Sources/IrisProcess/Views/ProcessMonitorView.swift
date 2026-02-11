@@ -8,6 +8,7 @@ struct ProcessMonitorView: View {
     @State private var treeSnapshot: [ProcessInfo] = []
     @State private var treeLastUpdate: Date?
     @State private var treeTimer: Timer?
+    @State private var cachedSuspicious: [ProcessInfo] = []
 
     private let treeRefreshInterval: TimeInterval = 30
 
@@ -19,8 +20,20 @@ struct ProcessMonitorView: View {
             treePaneWrapper
                 .frame(minWidth: 400)
         }
-        .onAppear { refreshTreeSnapshot() ; startTreeTimer() }
+        .onAppear { refreshTreeSnapshot() ; startTreeTimer() ; updateSuspiciousCache() }
         .onDisappear { stopTreeTimer() }
+        .onChange(of: store.displayedProcesses) { _ in updateSuspiciousCache() }
+    }
+
+    /// Only update suspicious cache when the PID set changes.
+    /// ProcessInfo.id is a random UUID regenerated each fetch — without this guard,
+    /// SwiftUI sees a "new" array every 2s and rebuilds all rows (the blink).
+    private func updateSuspiciousCache() {
+        let fresh = store.displayedProcesses
+            .filter { $0.isSuspicious }
+            .sorted { ($0.highestSeverity?.rawValue ?? 0) > ($1.highestSeverity?.rawValue ?? 0) }
+        guard fresh.map(\.pid) != cachedSuspicious.map(\.pid) else { return }
+        cachedSuspicious = fresh
     }
 
     // MARK: - Suspicious Pane (Left)
@@ -35,7 +48,7 @@ struct ProcessMonitorView: View {
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(.white)
                 Spacer()
-                Text("\(suspiciousProcesses.count)")
+                Text("\(cachedSuspicious.count)")
                     .font(.system(size: 12, weight: .bold, design: .monospaced))
                     .foregroundColor(.red)
                     .padding(.horizontal, 8)
@@ -49,7 +62,7 @@ struct ProcessMonitorView: View {
 
             Divider().background(Color.red.opacity(0.3))
 
-            if suspiciousProcesses.isEmpty {
+            if cachedSuspicious.isEmpty {
                 VStack(spacing: 12) {
                     Image(systemName: "checkmark.shield.fill")
                         .font(.system(size: 36))
@@ -62,7 +75,7 @@ struct ProcessMonitorView: View {
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(suspiciousProcesses) { process in
+                        ForEach(cachedSuspicious, id: \.pid) { process in
                             SuspiciousProcessRow(process: process, onSelect: { onSelect(process) })
                             Divider().background(Color.gray.opacity(0.15))
                         }
@@ -70,14 +83,6 @@ struct ProcessMonitorView: View {
                 }
             }
         }
-    }
-
-    private var suspiciousProcesses: [ProcessInfo] {
-        store.displayedProcesses
-            .filter { $0.isSuspicious }
-            .sorted { lhs, rhs in
-                (lhs.highestSeverity?.rawValue ?? 0) > (rhs.highestSeverity?.rawValue ?? 0)
-            }
     }
 
     // MARK: - Tree Pane (Right)
