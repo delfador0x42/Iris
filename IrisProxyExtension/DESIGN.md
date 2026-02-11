@@ -33,10 +33,9 @@ App makes HTTPS request
 - **NWConnection for server TLS** — handles TLS 1.3, ALPN, certificate
   validation automatically. Clean async API.
 - **Hybrid approach** — SSLCreateContext (client-facing) + NWConnection
-  (server-facing). Future upgrade path: SwiftNIO EmbeddedChannel +
-  NIOSSLHandler for both sides.
-- **HTTP parsing in-extension** — request/response parsed on decrypted
-  stream before forwarding. Only headers + body preview cross XPC.
+  (server-facing). Future: SwiftNIO EmbeddedChannel + NIOSSLHandler.
+- **HTTP parsing in-extension** — parsed on decrypted stream, only
+  headers + body preview cross XPC.
 - **RelayState class** — NSLock-based shared state for @Sendable TaskGroup
   closures (Swift concurrency requires it for mutable state in task groups).
 

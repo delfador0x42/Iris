@@ -46,25 +46,12 @@ PersistenceScanner flow:
 - **Per-scanner evidence weights** — each scanner defines domain-specific evidence factors
 - **MITRE ATT&CK IDs** on every ProcessAnomaly finding
 
-## Key Files — Infrastructure
-- Services/ProcessSnapshot.swift — one-shot PID/path/parent capture, eliminates ~4000 redundant syscalls
-- Services/ProcessEnumeration.swift — shared PID/path/parent helpers (deduplicated from 8 scanners)
+## Key Files
 - Models/Evidence.swift — EvidenceCategory enum, Evidence struct, score/severity helpers
 - Models/PersistenceItem.swift — evidence array, isBaselineItem, computed score/severity
-- Services/BaselineService.swift — loads baseline-25C56.json (418 daemons, 460 agents, 674 kexts)
-
-## Key Files — Scanners (31 files)
-- Services/PersistenceScanner.swift + 5 extensions — 13 persistence locations with evidence
-- Services/LOLBinDetector.swift — 44 LOLBins, recursive ancestry (8 levels), accepts ProcessSnapshot
-- Services/DyldEnvDetector.swift — DYLD_ in processes, plists, shells, accepts ProcessSnapshot
-- Services/ProcessIntegrityChecker.swift — injected dylib + CS flag detection, accepts ProcessSnapshot
-- Services/CredentialAccessDetector.swift — keychain/SSH/browser cred access, accepts ProcessSnapshot
-- Services/DylibHijackScanner.swift — @rpath/weak hijack detection, accepts ProcessSnapshot
-- Services/StealthScanner.swift — 9 stealth techniques, accepts ProcessSnapshot
-- Services/EventTapScanner.swift — CGGetEventTapList, 30+ known-benign
-- Services/SigningVerifier.swift — SecStaticCode + Team ID + hardened runtime
-
-## Key Files — Views (13 files)
+- Services/ProcessSnapshot.swift — one-shot PID/path/parent capture, shared by 6 scanners
+- Services/ProcessEnumeration.swift — shared PID/path helpers (deduplicated from 8 scanners)
+- Services/SecurityAssessor.swift — orchestrates all scanners, aggregates results
 - Views/SecurityHubView.swift — 11-module command center
-- Views/ThreatScanView.swift — 15-engine full sweep, creates ProcessSnapshot at scan start
-- Views/PersistenceView.swift — persistence enumeration with evidence scores
+- Views/ThreatScanView.swift — 15-engine sweep, creates ProcessSnapshot at scan start
+- 31 scanner files in Services/ — see iris-research/SCANNER_INVENTORY.md for full catalog

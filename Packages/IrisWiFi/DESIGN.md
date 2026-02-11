@@ -39,13 +39,8 @@ WiFiStore (scan on demand):
   notifications. Supplements the polling timer.
 
 ## Key Files
-- `State/WiFiStore.swift` — Main store, CoreWLAN integration
-- `State/WiFiStore+Monitoring.swift` — 1s signal polling, 5s MCS/NSS
-- `State/WiFiStore+Scanning.swift` — Network scan
-- `State/WiFiStore+Association.swift` — Connect/disconnect
+- `State/WiFiStore.swift` + `+Monitoring` + `+Scanning` + `+Association` — CoreWLAN integration
 - `State/WiFiEventDelegate.swift` — CWWiFiClient event delegate
 - `Models/WiFiNetwork.swift` — Scanned network model
 - `Models/WiFiInterfaceInfo.swift` — Current connection info
-- `Views/WiFiMonitorView.swift` — Main WiFi UI
-- `Views/WiFiMonitorView+SignalGraph.swift` — Signal strength graph
-- `Views/WiFiMonitorView+NetworkScan.swift` — Nearby networks list
+- `Views/WiFiMonitorView.swift` + `+SignalGraph` + `+NetworkScan` — WiFi monitoring UI

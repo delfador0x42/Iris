@@ -45,11 +45,6 @@ TLS handshake (in proxy extension):
 
 ## Key Files
 - `CertificateStore.swift` — Published state: isCAInstalled, isCATrusted
-- `CertificateGenerator.swift` — CA generation, server cert signing
-- `CertificateGenerator+ASN1.swift` — DER encoding helpers
-- `CertificateGenerator+Components.swift` — X.509 field builders
-- `KeychainManager.swift` — Keychain CRUD for certs and keys
-- `KeychainManager+Certificate.swift` — SecCertificate operations
-- `KeychainManager+PrivateKey.swift` — SecKey operations
-- `CertificateCache.swift` — In-memory SNI → cert cache
-- `CertificateError.swift` — Error types
+- `CertificateGenerator.swift` + `+ASN1` + `+Components` — CA gen, server cert signing, DER encoding
+- `KeychainManager.swift` + `+Certificate` + `+PrivateKey` — Keychain CRUD for certs and keys
+- `CertificateCache.swift` — In-memory SNI → cert cache (1000-entry LRU)

@@ -41,11 +41,7 @@ SatelliteStore.loadSatellites()
 ## Key Files
 - `State/SatelliteStore.swift` — Main store, simulation timer, time control
 - `Data/CelesTrakDataSource.swift` — TLE data fetcher
-- `Models/Satellite.swift` — Satellite data + computed position
-- `Models/OrbitalClassification.swift` — LEO/MEO/GEO/HEO classification
 - `Math/MathLibrary.swift` — SGP4 propagation, linear algebra
-- `Rendering/Renderer.swift` — Metal renderer setup
-- `Rendering/Renderer+Draw.swift` — Frame rendering
-- `Rendering/Renderer+Satellites.swift` — Satellite mesh generation
+- `Rendering/Renderer.swift` + `+Draw` + `+Satellites` — Metal renderer pipeline
 - `Rendering/Camera.swift` — 3D camera with mouse/scroll control
 - `Views/MetalView.swift` — Metal rendering surface (NSViewRepresentable)

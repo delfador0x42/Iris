@@ -8,8 +8,8 @@ struct HTTPRawDetailView: View {
     @EnvironmentObject private var store: SecurityStore
     @Environment(\.dismiss) private var dismiss
     @State private var selectedTab = 0
-    @State private var rawOutbound: Data?
-    @State private var rawInbound: Data?
+    @State var rawOutbound: Data?
+    @State var rawInbound: Data?
     @State private var isLoading = true
     @State private var outboundDisplayLimit = 1_048_576  // 1MB initial
     @State private var inboundDisplayLimit = 1_048_576
@@ -128,7 +128,7 @@ struct HTTPRawDetailView: View {
             let displayData = data.prefix(limit.wrappedValue)
             let text = String(data: displayData, encoding: .utf8)
 
-            if let text, isPrintable(text) {
+            if let text, Self.isPrintable(text) {
                 // UTF-8 text display
                 Text(text)
                     .font(.system(size: 12, design: .monospaced))
@@ -167,7 +167,7 @@ struct HTTPRawDetailView: View {
     // MARK: - Hex Dump
 
     private func hexDumpView(data: Data.SubSequence) -> some View {
-        let lines = hexDumpLines(data)
+        let lines = Self.hexDumpLines(data)
         return VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
                 Text(line)
@@ -183,44 +183,6 @@ struct HTTPRawDetailView: View {
             RoundedRectangle(cornerRadius: 8)
                 .stroke(Color.gray.opacity(0.2), lineWidth: 1)
         )
-    }
-
-    private func hexDumpLines(_ data: Data.SubSequence) -> [String] {
-        var lines: [String] = []
-        let bytesPerLine = 16
-        var offset = 0
-
-        while offset < data.count {
-            let end = min(offset + bytesPerLine, data.count)
-            let chunk = data[data.startIndex + offset ..< data.startIndex + end]
-
-            // Offset column
-            var line = String(format: "%08x  ", offset)
-
-            // Hex bytes
-            for (i, byte) in chunk.enumerated() {
-                line += String(format: "%02x ", byte)
-                if i == 7 { line += " " }
-            }
-
-            // Pad if short line
-            let missing = bytesPerLine - chunk.count
-            for i in 0..<missing {
-                line += "   "
-                if chunk.count + i == 7 { line += " " }
-            }
-
-            // ASCII column
-            line += " |"
-            for byte in chunk {
-                line += (byte >= 0x20 && byte < 0x7F) ? String(UnicodeScalar(byte)) : "."
-            }
-            line += "|"
-
-            lines.append(line)
-            offset = end
-        }
-        return lines
     }
 
     // MARK: - Headers Tab (existing parsed data)
@@ -271,14 +233,6 @@ struct HTTPRawDetailView: View {
         isLoading = false
     }
 
-    private func isPrintable(_ text: String) -> Bool {
-        // Consider it printable if <5% of characters are control chars (excluding newline/tab/CR)
-        let controlCount = text.unicodeScalars.filter { scalar in
-            scalar.value < 0x20 && scalar.value != 0x0A && scalar.value != 0x0D && scalar.value != 0x09
-        }.count
-        return controlCount < max(1, text.count / 20)
-    }
-
     private func noDataView(message: String) -> some View {
         VStack(spacing: 12) {
             Image(systemName: "doc.text.magnifyingglass")
@@ -291,79 +245,4 @@ struct HTTPRawDetailView: View {
         .frame(maxWidth: .infinity, minHeight: 200)
     }
 
-    private static let sensitiveHeaders: Set<String> = [
-        "authorization", "cookie", "set-cookie", "x-api-key",
-        "x-auth-token", "proxy-authorization", "www-authenticate"
-    ]
-
-    private func redactSensitiveHeaders(_ text: String) -> String {
-        text.components(separatedBy: "\r\n").map { line in
-            guard let colonIndex = line.firstIndex(of: ":") else { return line }
-            let name = line[..<colonIndex].trimmingCharacters(in: .whitespaces).lowercased()
-            if Self.sensitiveHeaders.contains(name) {
-                return "\(line[..<colonIndex]): [REDACTED]"
-            }
-            return line
-        }.joined(separator: "\r\n")
-    }
-
-    private func copyToClipboard() {
-        var content = ""
-
-        if let data = rawOutbound, !data.isEmpty {
-            content += "=== REQUEST (\(ByteFormatter.format(UInt64(data.count)))) ===\n\n"
-            content += String(data: data, encoding: .utf8) ?? "[binary data]"
-            content += "\n\n"
-        } else if let rawRequest = connection.httpRawRequest {
-            content += "=== REQUEST HEADERS ===\n\n"
-            content += redactSensitiveHeaders(rawRequest)
-            content += "\n\n"
-        }
-
-        if let data = rawInbound, !data.isEmpty {
-            content += "=== RESPONSE (\(ByteFormatter.format(UInt64(data.count)))) ===\n\n"
-            content += String(data: data, encoding: .utf8) ?? "[binary data]"
-        } else if let rawResponse = connection.httpRawResponse {
-            content += "=== RESPONSE HEADERS ===\n\n"
-            content += redactSensitiveHeaders(rawResponse)
-        }
-
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(content, forType: .string)
-    }
-}
-
-// MARK: - Supporting Views
-
-private struct SectionHeader: View {
-    let title: String
-    let icon: String
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: icon)
-                .font(.system(size: 12))
-            Text(title)
-                .font(.system(size: 12, weight: .semibold))
-        }
-        .foregroundColor(.secondary)
-    }
-}
-
-private struct RawTextView: View {
-    let text: String
-
-    var body: some View {
-        Text(text)
-            .font(.system(size: 12, design: .monospaced))
-            .textSelection(.enabled)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(12)
-            .background(Color(nsColor: .textBackgroundColor).opacity(0.5))
-            .cornerRadius(8)
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color.gray.opacity(0.2), lineWidth: 1)
-            )
-    }
 }

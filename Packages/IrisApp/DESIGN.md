@@ -43,9 +43,5 @@ IrisApp (entry point)
 ## Key Files
 - `Views/HomeView.swift` — Navigation hub with 8 route buttons
 - `Views/HomeMetalView.swift` — Metal rendering surface for home screen
-- `Views/SettingsView.swift` — Main settings container
-- `Views/SettingsView+NetworkExtension.swift` — Network ext install/status
-- `Views/SettingsView+EndpointExtension.swift` — Endpoint ext install/status
-- `Views/SettingsView+Permissions.swift` — FDA, system extension approval
-- `Views/SettingsView+ThreatIntelligence.swift` — API key configuration
-- `Rendering/HomeRenderer.swift` — Metal renderer for stone circle + flames
+- `Views/SettingsView.swift` + 5 extensions — Extension management, API keys, permissions
+- `Rendering/HomeRenderer.swift` + `+Shader` — Metal renderer for stone circle

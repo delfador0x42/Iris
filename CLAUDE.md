@@ -62,7 +62,7 @@ The app requires System Extension approval in System Settings > Privacy & Securi
 | TLS interception | `TLSInterceptor.swift` (in IrisProxyExtension) |
 | Proxy flow handling | `AppProxyProvider.swift` → `FlowHandler` actor |
 | Security scans | `SecurityHubView.swift` → `ThreatScanView.swift` |
-| Main navigation | `HomeView.swift` (circular stone menu, 9 sections) |
+| Main navigation | `HomeView.swift` (circular stone menu, 8 buttons) |
 
 ## System Extensions
 
@@ -138,6 +138,12 @@ All entitlements files already include these NE provider types:
 10. **NEDNSProxyManager required**: After DNS extension activates, MUST configure NEDNSProxyManager or DNS traffic won't route to extension. DNSProxyHelper handles this.
 11. **DNS XPC app group**: Main app entitlements MUST include `$(TeamIdentifierPrefix)com.wudan.iris.dns.xpc` for DNS XPC to work.
 12. **DNS over TCP**: Uses 2-byte big-endian length prefix (RFC 1035 Section 4.2.2). Don't assume DNS is UDP-only.
+13. **SWIFT_APPROACHABLE_CONCURRENCY=YES**: Crashes compiler on IrisProxyExtension — set to NO for that target.
+14. **Actor-isolated in TaskGroup**: Can't capture actor-isolated properties in @Sendable closures — capture in local `let` first.
+15. **`[UInt8]` has no `.baseAddress`**: Use `.withUnsafeBufferPointer { $0.baseAddress! }` instead.
+16. **`import` at bottom of file**: Can crash Swift compiler — always put imports at top.
+17. **`for i in array.indices` + `await`**: If array is `@Published`, another task can replace it during suspension → index out of bounds. Fix: snapshot before loop, apply after.
+18. **Shared/ can't have DESIGN.md**: Xcode copies it into all extension bundles, causing duplicate output conflicts.
 
 ## Don't Do This
 
@@ -166,7 +172,7 @@ All entitlements files already include these NE provider types:
 
 ```
 iris/
-├── Shared/                     # XPC protocols, HTTPParser, DEREncoder (compiled into all 6 targets)
+├── Shared/                     # 11 files: XPC protocols, HTTPParser, DEREncoder, CaptureSegment, AtomicFlag (compiled into all 6 targets)
 ├── IrisApp/                    # App entry point (IrisMainApp.swift)
 ├── IrisNetworkExtension/       # Network filter extension (NEFilterDataProvider)
 ├── IrisEndpointExtension/      # Endpoint security extension (ESClient)
@@ -207,13 +213,15 @@ iris/
 - Private frameworks ARE accessible and can be used
 - References: `references/program_examples/` has airport, mitmproxy, WARP binaries
 
-## Current Development State (2026-02-09)
+## Current Development State (2026-02-10)
 
-All 5 targets build. 11 packages, 4 system extensions, ~303 Swift files / ~37K lines.
+All 5 targets build (including CodeSign). 11 packages, 4 system extensions, ~293 Swift files / ~37K lines.
 
-**All features working:** Network filter, proxy MITM, WiFi, disk, satellite, process monitoring, certificates, DNS, security scanning. All packages and extensions in Xcode project.
+**All features working:** Network filter + firewall rules, proxy MITM, WiFi, disk, satellite, process monitoring, certificates, DNS, security scanning. All packages and extensions in Xcode project.
 
-**IrisSecurity (61 files, ~8.8K lines):** 20+ scanners, evidence-based scoring (PersistenceScanner), IPSW baseline structure (baseline-25C56.json — empty, needs data). ProcessEnumeration shared helper. SigningVerifier with Team ID + hardened runtime. ProcessAnomaly factories (.filesystem(), .forProcess()). All scanners wired to views.
+**Firewall (2026-02-10):** Process dedup by signing identity (`identityKey`), SecurityRule CRUD via XPC, rule persistence (JSON in ApplicationSupport), inline allow/block in UI, connection conversation view with timestamped CaptureSegments.
+
+**IrisSecurity (62 files, ~9K lines):** 20+ scanners, evidence-based scoring (PersistenceScanner), IPSW baseline structure (baseline-25C56.json — empty, needs data). ProcessEnumeration shared helper. SigningVerifier with Team ID + hardened runtime. ProcessAnomaly factories (.filesystem(), .forProcess()). All scanners wired to views. Services/ is flat (33 files) — scanner names are descriptive.
 
 **Still broken (architectural):** TCCMonitor (SIP blocks TCC.db), NetworkAnomalyDetector (netstat has no PIDs on macOS), HTTP pipeline (only first request per connection captured).
 
