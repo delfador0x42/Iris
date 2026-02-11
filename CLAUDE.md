@@ -15,21 +15,22 @@ The app requires System Extension approval in System Settings > Privacy & Securi
 ## Architecture Overview
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                          IrisMainApp                             │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────┐ ┌────────┐  │
-│  │Process   │ │Security  │ │DiskUsage │ │ WiFi   │ │ DNS    │  │
-│  │Store     │ │Store     │ │Store     │ │ Store  │ │ Store  │  │
-│  └────┬─────┘ └────┬─────┘ └──────────┘ └────────┘ └───┬────┘  │
-│       │XPC         │XPC                                 │XPC     │
-└───────┼────────────┼────────────────────────────────────┼────────┘
-        ▼            ▼                                    ▼
-┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
-│IrisEndpoint  │ │IrisNetwork   │ │IrisProxy     │ │IrisDNS       │
-│Extension     │ │Extension     │ │Extension     │ │Extension     │
-│(ES)          │ │(NEFilter)    │ │(NEAppProxy)  │ │(NEDNSProxy)  │
-└──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│                          IrisMainApp                                  │
+│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌────────┐ ┌──────┐ ┌───────┐ │
+│  │Process  │ │Security │ │DiskUsage│ │ WiFi   │ │ DNS  │ │Proxy  │ │
+│  │Store    │ │Store    │ │Store    │ │ Store  │ │Store │ │Store  │ │
+│  └───┬─────┘ └───┬─────┘ └─────────┘ └────────┘ └──┬───┘ └──┬────┘ │
+│      │XPC        │XPC                               │XPC     │XPC    │
+└──────┼───────────┼──────────────────────────────────┼────────┼───────┘
+       ▼           ▼                                  ▼        ▼
+┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐
+│IrisEndpoint│ │IrisNetwork │ │IrisDNS     │ │IrisProxy   │
+│Extension   │ │Extension   │ │Extension   │ │Extension   │
+│(ES)        │ │(NEFilter)  │ │(NEDNSProxy)│ │(NEAppProxy)│
+└────────────┘ └────────────┘ └────────────┘ └────────────┘
 ```
+Also: CertificateStore (no XPC), SatelliteStore (no XPC), SecurityAssessmentStore (no XPC)
 
 ## Package Responsibilities
 
@@ -52,13 +53,13 @@ The app requires System Extension approval in System Settings > Privacy & Securi
 | Feature | Start Here |
 |---------|------------|
 | Extension installation | `ExtensionManager.swift` (manages .network, .endpoint, .proxy, .dns) |
-| Process list | `ProcessStore.swift` → `ProcessListView.swift` |
+| Process monitor | `ProcessStore.swift` → `ProcessListView.swift` (Monitor/History tabs) |
 | Network connections | `SecurityStore.swift` → `NetworkMonitorView.swift` |
+| DNS monitoring | DNS is a tab in Network Monitor → `DNSTabView.swift` |
 | HTTP inspection | `IPDetailPopover.swift` → `HTTPRawDetailView` |
 | HTTP proxy flows | `ProxyStore.swift` → `ProxyMonitorView.swift` |
 | Disk usage | `DiskUsageStore.swift` → `DiskUsageView.swift` |
 | WiFi monitoring | `WiFiStore.swift` → `WiFiMonitorView.swift` |
-| DNS monitoring | `DNSStore.swift` → `DNSMonitorView.swift` |
 | TLS interception | `TLSInterceptor.swift` (in IrisProxyExtension) |
 | Proxy flow handling | `AppProxyProvider.swift` → `FlowHandler` actor |
 | Security scans | `SecurityHubView.swift` → `ThreatScanView.swift` |
@@ -173,17 +174,19 @@ All entitlements files already include these NE provider types:
 ```
 iris/
 ├── Shared/                     # 11 files: XPC protocols, HTTPParser, DEREncoder, CaptureSegment, AtomicFlag (compiled into all 6 targets)
-├── IrisApp/                    # App entry point (IrisMainApp.swift)
+├── IrisApp/                    # App entry point (IrisApp.swift)
 ├── IrisNetworkExtension/       # Network filter extension (NEFilterDataProvider)
 ├── IrisEndpointExtension/      # Endpoint security extension (ESClient)
-├── IrisProxyExtension/         # App proxy extension (NEAppProxyProvider)
-│   ├── AppProxyProvider.swift  # Flow interception + FlowHandler actor
-│   ├── TLSInterceptor.swift    # Per-host cert generation, CA from Keychain
-│   ├── TLSSession.swift        # SSLCreateContext wrapper for client-facing TLS
-│   ├── ProxyXPCService.swift   # XPC + CapturedFlow/CapturedRequest/CapturedResponse
+├── IrisProxyExtension/         # App proxy extension (~19 files, +Category split pattern)
+│   ├── AppProxyProvider.swift  # Flow interception entry point
+│   ├── FlowHandler.swift       # Routes to MITM, HTTP, or passthrough (+4 split files)
+│   ├── TLSInterceptor.swift    # Per-host cert generation (+ASN1, +CertBuilder, +DERParsing)
+│   ├── TLSSession.swift        # SSLCreateContext wrapper (+Handshake, +IOCallbacks, +ReadWrite)
+│   ├── ProxyXPCService.swift   # XPC listener (+FlowManagement, +XPCProtocol)
+│   ├── RelayState.swift        # Thread-safe shared state for relay task groups
 │   └── main.swift
 ├── IrisDNSExtension/           # DNS proxy extension (NEDNSProxyProvider)
-│   ├── DNSProxyProvider.swift  # Intercepts DNS, forwards via DoH, records queries
+│   ├── DNSProxyProvider.swift  # Intercepts DNS, DoH forwarding (+FlowHandlers, +Parsing)
 │   ├── ExtensionDoHClient.swift # Lightweight DoH client using IP addresses directly
 │   ├── DNSExtensionXPCService.swift # XPC service for app communication
 │   └── main.swift
@@ -215,9 +218,13 @@ iris/
 
 ## Current Development State (2026-02-10)
 
-All 5 targets build (including CodeSign). 11 packages, 4 system extensions, ~293 Swift files / ~37K lines.
+All 5 targets build (including CodeSign). 11 packages, 4 system extensions, ~297 Swift files / ~37.5K lines.
 
 **All features working:** Network filter + firewall rules, proxy MITM, WiFi, disk, satellite, process monitoring, certificates, DNS, security scanning. All packages and extensions in Xcode project.
+
+**Process Monitor (2026-02-10):** Two-view system via Monitor/History tabs. Monitor view: HSplitView with suspicious processes (left, live 2s refresh) + parent-child tree (right, 30s snapshot). History view: chronological timeline of all processes seen this session, with live/exited status. ES extension records EXEC/FORK/EXIT events in a 5000-entry circular buffer; app fetches via `getRecentEvents()` XPC to catch short-lived processes between polls.
+
+**DNS Tab (2026-02-10):** DNS monitoring is a tab in Network Monitor (`NetworkViewMode.dns`), not a standalone view. Uses its own extension status (separate from network filter). Home screen DNS button is a stub.
 
 **Firewall (2026-02-10):** Process dedup by signing identity (`identityKey`), SecurityRule CRUD via XPC, rule persistence (JSON in ApplicationSupport), inline allow/block in UI, connection conversation view with timestamped CaptureSegments.
 

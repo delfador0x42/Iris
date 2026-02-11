@@ -24,19 +24,13 @@ clamped [0,1]. Weights only go UP — nothing reduces suspicion. IPSW baseline
 ## Data Flow
 ```
 SecurityHubView → 11 module cards → dedicated views
-  ThreatScanView → 15 scanner engines (ProcessAnomaly output)
-    1. ProcessSnapshot.capture() — single pass, shared across 6 PID-based scanners
-    2. LOLBin, Stealth, Integrity, Credential, DYLD, DylibHijack use snapshot
-    3. XPC, Network, Kext, Auth, Persistence, EventTap, TCC, SupplyChain, FS run independently
-  PersistenceView → PersistenceScanner (13 locations, Evidence model)
-  EventTapView → EventTapScanner (CGGetEventTapList)
-  DylibHijackView → DylibHijackScanner + MachOParser
-  + FileIntegrity, SupplyChain, AVMonitor, TCC, Ransomware, PackageInventory
+  ThreatScanView → 15 scanners (ProcessAnomaly output)
+    ProcessSnapshot.capture() shared by 6 PID scanners, 9 run independently
+  PersistenceView → PersistenceScanner (13 locations, evidence accumulation)
+  + EventTap, DylibHijack, FileIntegrity, SupplyChain, TCC, Ransomware, etc.
 
-PersistenceScanner flow:
-  scanAll() → 6 parallel sub-scans → [PersistenceItem]
-    each item: evidence[] accumulates → suspicionScore (computed) → severity
-    BaselineService tags isBaselineItem from IPSW baseline-25C56.json
+PersistenceScanner: scanAll() → 6 parallel sub-scans → [PersistenceItem]
+  evidence[] → suspicionScore → severity; BaselineService tags IPSW items
 ```
 
 ## Decisions Made
@@ -53,5 +47,4 @@ PersistenceScanner flow:
 - Services/ProcessEnumeration.swift — shared PID/path helpers (deduplicated from 8 scanners)
 - Services/SecurityAssessor.swift — orchestrates all scanners, aggregates results
 - Views/SecurityHubView.swift — 11-module command center
-- Views/ThreatScanView.swift — 15-engine sweep, creates ProcessSnapshot at scan start
-- 31 scanner files in Services/ — see iris-research/SCANNER_INVENTORY.md for full catalog
+- Views/ThreatScanView.swift — 15-engine sweep; 31 scanners in Services/

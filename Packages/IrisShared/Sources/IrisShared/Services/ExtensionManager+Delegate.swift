@@ -19,8 +19,8 @@ extension ExtensionManager: OSSystemExtensionRequestDelegate {
 
     nonisolated public func requestNeedsUserApproval(_ request: OSSystemExtensionRequest) {
         Task { @MainActor in
-            let type = pendingInstallationType ?? .network
-            logger.warning("[DELEGATE] requestNeedsUserApproval for \(type.displayName) (bundle: \(type.bundleIdentifier)). User must approve in System Settings > Privacy & Security.")
+            let type = resolveType(for: request)
+            logger.warning("[DELEGATE] requestNeedsUserApproval for \(type.displayName) (bundle: \(request.identifier)). User must approve in System Settings > Privacy & Security.")
 
             switch type {
             case .network:
@@ -42,7 +42,7 @@ extension ExtensionManager: OSSystemExtensionRequestDelegate {
         didFinishWithResult result: OSSystemExtensionRequest.Result
     ) {
         Task { @MainActor in
-            let type = pendingInstallationType ?? .network
+            let type = resolveType(for: request)
 
             switch result {
             case .completed:
@@ -69,7 +69,7 @@ extension ExtensionManager: OSSystemExtensionRequestDelegate {
         didFailWithError error: Error
     ) {
         Task { @MainActor in
-            let type = pendingInstallationType ?? .network
+            let type = resolveType(for: request)
             let nsError = error as NSError
 
             logger.error("[DELEGATE] didFailWithError for \(type.displayName): domain=\(nsError.domain) code=\(nsError.code) desc=\(nsError.localizedDescription)")

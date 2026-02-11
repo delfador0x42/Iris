@@ -18,6 +18,17 @@ public enum ExtensionType: CaseIterable {
         }
     }
 
+    /// Resolve extension type from bundle identifier (used in delegate callbacks)
+    public init?(bundleIdentifier: String) {
+        switch bundleIdentifier {
+        case "com.wudan.iris.network.extension": self = .network
+        case "com.wudan.iris.endpoint.extension": self = .endpoint
+        case "com.wudan.iris.proxy.extension": self = .proxy
+        case "com.wudan.iris.dns.extension": self = .dns
+        default: return nil
+        }
+    }
+
     public var displayName: String {
         switch self {
         case .network: return "Network Filter"

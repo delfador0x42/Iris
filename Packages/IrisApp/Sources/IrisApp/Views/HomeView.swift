@@ -109,7 +109,7 @@ public struct HomeView: View {
                 case .wifiMonitor:
                     WiFiMonitorView()
                 case .dnsMonitor:
-                    DNSMonitorView()
+                    PlaceholderView(title: "DNS Monitor", description: "DNS monitoring moved to Network Monitor")
                 case .securityAssessment:
                     SecurityHubView()
                 case .settings:

@@ -8,7 +8,7 @@ struct ProcessListHeaderView: View {
         VStack(alignment: .leading, spacing: 12) {
             // Title row
             HStack {
-                Text("Process List")
+                Text("Process Monitor")
                     .font(.system(size: 24, weight: .bold, design: .serif))
                     .foregroundColor(.white)
 
@@ -53,6 +53,21 @@ struct ProcessListHeaderView: View {
                 .padding(.vertical, 8)
                 .background(Color.white.opacity(0.05))
                 .cornerRadius(8)
+
+                // History count (visible in history mode)
+                if store.viewMode == .history {
+                    StatBox(
+                        label: "History",
+                        value: "\(store.processHistory.count)",
+                        color: .cyan,
+                        fontSize: 18,
+                        fontWeight: .bold
+                    )
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.white.opacity(0.05))
+                    .cornerRadius(8)
+                }
 
                 // ES status indicator
                 esStatusBadge

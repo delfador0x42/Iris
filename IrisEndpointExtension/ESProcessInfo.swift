@@ -1,5 +1,18 @@
 import Foundation
 
+/// A recorded process lifecycle event for the history buffer
+struct ESProcessEvent: Codable {
+    let eventType: EventType
+    let process: ESProcessInfo
+    let timestamp: Date
+
+    enum EventType: String, Codable {
+        case exec
+        case fork
+        case exit
+    }
+}
+
 /// Process info model from Endpoint Security events.
 /// Encoded via JSON over XPC to the main app.
 struct ESProcessInfo: Codable {

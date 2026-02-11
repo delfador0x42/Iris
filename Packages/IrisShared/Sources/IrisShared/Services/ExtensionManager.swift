@@ -40,8 +40,14 @@ public class ExtensionManager: NSObject, ObservableObject {
     var networkPollTimer: Timer?
     var endpointPollTimer: Timer?
 
-    /// Track which extension type is being installed (for delegate callbacks)
+    /// Track which extension type is being installed (legacy — prefer resolveType(for:))
     var pendingInstallationType: ExtensionType?
+
+    /// Resolve extension type from OSSystemExtensionRequest using its bundle identifier.
+    /// Falls back to pendingInstallationType for single-extension operations.
+    func resolveType(for request: OSSystemExtensionRequest) -> ExtensionType {
+        ExtensionType(bundleIdentifier: request.identifier) ?? pendingInstallationType ?? .network
+    }
 
     /// Pending operation for sequencing uninstall -> reinstall
     enum PendingOperation {

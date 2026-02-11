@@ -13,13 +13,14 @@ public final class ProcessStore: ObservableObject {
     // MARK: - Published State
 
     @Published public internal(set) var processes: [ProcessInfo] = [] { didSet { updateDisplayedProcesses() } }
+    @Published public internal(set) var processHistory: [ProcessInfo] = []
     @Published public internal(set) var isLoading = false
     @Published public internal(set) var lastUpdate: Date?
     @Published public internal(set) var errorMessage: String?
     @Published public var filterText: String = "" { didSet { updateDisplayedProcesses() } }
     @Published public var showOnlySuspicious: Bool = false { didSet { updateDisplayedProcesses() } }
     @Published public var sortOrder: SortOrder = .name { didSet { updateDisplayedProcesses() } }
-    @Published public var viewMode: ViewMode = .list
+    @Published public var viewMode: ViewMode = .monitor
 
     /// Whether process data comes from ES extension (true) or sysctl polling (false)
     @Published public internal(set) var isUsingEndpointSecurity = false
@@ -46,10 +47,10 @@ public final class ProcessStore: ObservableObject {
         case suspicious = "Suspicious"
     }
 
-    /// View mode: flat list or process tree
+    /// View mode: live monitor (split view) or spawn history timeline
     public enum ViewMode: String, CaseIterable {
-        case list = "List"
-        case tree = "Tree"
+        case monitor = "Monitor"
+        case history = "History"
     }
 
     // MARK: - Properties
@@ -68,6 +69,9 @@ public final class ProcessStore: ObservableObject {
     /// Rationale: 2 seconds balances UI responsiveness with CPU usage.
     /// Process list changes infrequently, so faster polling adds overhead without benefit.
     let refreshInterval: TimeInterval = 2.0
+
+    /// Tracks PIDs already in history to avoid duplicates. Keyed by (pid, path) string.
+    var historySeenKeys: Set<String> = []
 
     // MARK: - Derived State (updated via didSet, not recomputed per render)
 
@@ -112,6 +116,21 @@ public final class ProcessStore: ObservableObject {
             }
         }
         displayedProcesses = result
+    }
+
+    /// Merge current processes into session history. New entries only — deduped by (pid, path).
+    func mergeIntoHistory(_ current: [ProcessInfo]) {
+        var newEntries: [ProcessInfo] = []
+        for process in current {
+            let key = "\(process.pid):\(process.path)"
+            if !historySeenKeys.contains(key) {
+                historySeenKeys.insert(key)
+                newEntries.append(process)
+            }
+        }
+        if !newEntries.isEmpty {
+            processHistory.append(contentsOf: newEntries)
+        }
     }
 
     // MARK: - Initialization

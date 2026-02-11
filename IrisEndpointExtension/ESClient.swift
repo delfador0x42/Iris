@@ -16,6 +16,12 @@ class ESClient {
     var processTable: [pid_t: ESProcessInfo] = [:]
     let processLock = NSLock()
 
+    /// Circular event history buffer — retains all EXEC/FORK/EXIT events for the app's history view.
+    /// Bounded to prevent unbounded memory growth in long-running extension.
+    private var eventHistory: [ESProcessEvent] = []
+    private let eventHistoryLock = NSLock()
+    private let maxEventHistory = 5000
+
     /// Serial queue for processing ES events off the callback thread
     private let processingQueue = DispatchQueue(label: "com.wudan.iris.endpoint.processing")
 
@@ -142,6 +148,7 @@ class ESClient {
             processTable[pid] = info
             processLock.unlock()
 
+            recordEvent(.exec, process: info)
             execCount += 1
             logger.debug("[ES] EXEC: \(info.name) (PID \(pid))")
 
@@ -165,6 +172,7 @@ class ESClient {
             processTable[childPid] = stub
             processLock.unlock()
 
+            recordEvent(.fork, process: stub)
             forkCount += 1
             logger.debug("[ES] FORK: child PID \(childPid) from parent PID \(parentPid)")
 
@@ -173,8 +181,13 @@ class ESClient {
             let pid = audit_token_to_pid(proc.audit_token)
 
             processLock.lock()
-            processTable.removeValue(forKey: pid)
+            let exitingProcess = processTable.removeValue(forKey: pid)
             processLock.unlock()
+
+            // Record the exit event with the process info (if we had it)
+            if let info = exitingProcess {
+                recordEvent(.exit, process: info)
+            }
 
             exitCount += 1
             logger.debug("[ES] EXIT: PID \(pid)")
@@ -241,6 +254,29 @@ class ESClient {
         processLock.unlock()
 
         logger.info("Seeded process table with \(seeded) existing processes")
+    }
+
+    // MARK: - Event History
+
+    /// Record a process event into the bounded circular buffer
+    private func recordEvent(_ type: ESProcessEvent.EventType, process: ESProcessInfo) {
+        let event = ESProcessEvent(eventType: type, process: process, timestamp: Date())
+        eventHistoryLock.lock()
+        eventHistory.append(event)
+        // Trim oldest events if over capacity
+        if eventHistory.count > maxEventHistory {
+            eventHistory.removeFirst(eventHistory.count - maxEventHistory)
+        }
+        eventHistoryLock.unlock()
+    }
+
+    /// Get the most recent N events from the history buffer
+    func getRecentEvents(limit: Int) -> [ESProcessEvent] {
+        eventHistoryLock.lock()
+        let count = min(limit, eventHistory.count)
+        let events = Array(eventHistory.suffix(count))
+        eventHistoryLock.unlock()
+        return events
     }
 
     // MARK: - Public API (for XPC)

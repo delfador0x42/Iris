@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Main view for process list - displays all running processes with suspicious highlighting
+/// Main container for process monitoring — switches between Monitor and History views
 public struct ProcessListView: View {
     @ObservedObject private var store = ProcessStore.shared
     @State private var selectedProcess: ProcessInfo?
@@ -10,7 +10,6 @@ public struct ProcessListView: View {
 
     public var body: some View {
         ZStack {
-            // Background gradient matching app style
             LinearGradient(
                 colors: [
                     Color(red: 0.02, green: 0.03, blue: 0.05),
@@ -22,27 +21,19 @@ public struct ProcessListView: View {
             .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // Header
                 ProcessListHeaderView(store: store)
-
-                // Toolbar
                 ProcessListToolbar(store: store)
 
-                // Content
+                // Content — switches on view mode
                 if store.isLoading && store.processes.isEmpty {
                     loadingView
-                } else if store.displayedProcesses.isEmpty {
-                    emptyView
-                } else if store.viewMode == .tree {
-                    ProcessTreeView(
-                        processes: store.displayedProcesses,
-                        onSelect: { process in
-                            selectedProcess = process
-                            showingDetail = true
-                        }
-                    )
                 } else {
-                    processListView
+                    switch store.viewMode {
+                    case .monitor:
+                        ProcessMonitorView(store: store, onSelect: selectProcess)
+                    case .history:
+                        ProcessHistoryView(store: store, onSelect: selectProcess)
+                    }
                 }
             }
         }
@@ -62,102 +53,25 @@ public struct ProcessListView: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: showingDetail)
-        .onAppear {
-            store.startAutoRefresh()
-        }
-        .onDisappear {
-            store.stopAutoRefresh()
-        }
+        .onAppear { store.startAutoRefresh() }
+        .onDisappear { store.stopAutoRefresh() }
     }
 
-    // MARK: - Loading View
+    private func selectProcess(_ process: ProcessInfo) {
+        selectedProcess = process
+        showingDetail = true
+    }
 
     private var loadingView: some View {
         VStack(spacing: 16) {
             ProgressView()
                 .scaleEffect(1.2)
                 .tint(.white)
-
             Text("Loading processes...")
                 .font(.system(size: 14))
                 .foregroundColor(.gray)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    // MARK: - Empty View
-
-    private var emptyView: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "list.bullet.rectangle")
-                .font(.system(size: 48))
-                .foregroundColor(.gray)
-
-            Text("No processes found")
-                .font(.headline)
-                .foregroundColor(.white)
-
-            if !store.filterText.isEmpty || store.showOnlySuspicious {
-                Text("Try adjusting your filters")
-                    .font(.system(size: 14))
-                    .foregroundColor(.gray)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    // MARK: - Process List View
-
-    private var processListView: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                // Column headers
-                processHeaderRow
-
-                Divider()
-                    .background(Color.gray.opacity(0.3))
-
-                // Process rows
-                ForEach(store.displayedProcesses) { process in
-                    ProcessRow(
-                        process: process,
-                        onSelect: {
-                            selectedProcess = process
-                            showingDetail = true
-                        }
-                    )
-
-                    Divider()
-                        .background(Color.gray.opacity(0.15))
-                }
-            }
-            .padding()
-        }
-    }
-
-    private var processHeaderRow: some View {
-        HStack(spacing: 0) {
-            Text("PID")
-                .frame(width: 70, alignment: .leading)
-
-            Text("COMMAND")
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            Text("CPU")
-                .frame(width: 70, alignment: .trailing)
-
-            Text("MEM")
-                .frame(width: 80, alignment: .trailing)
-
-            Text("USER")
-                .frame(width: 100, alignment: .leading)
-
-            Text("SIGNING")
-                .frame(width: 140, alignment: .leading)
-        }
-        .font(.system(size: 11, weight: .medium, design: .monospaced))
-        .foregroundColor(Color(red: 0.0, green: 0.8, blue: 0.8))
-        .padding(.vertical, 8)
     }
 }
 

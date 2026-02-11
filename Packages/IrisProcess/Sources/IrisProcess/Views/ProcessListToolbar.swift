@@ -45,15 +45,15 @@ struct ProcessListToolbar: View {
             }
             .buttonStyle(.plain)
 
-            // View mode toggle (List / Tree)
+            // View mode toggle (Monitor / History)
             Picker("", selection: $store.viewMode) {
                 ForEach(ProcessStore.ViewMode.allCases, id: \.self) { mode in
-                    Label(mode.rawValue, systemImage: mode == .list ? "list.bullet" : "sidebar.left")
+                    Label(mode.rawValue, systemImage: mode == .monitor ? "shield.lefthalf.filled" : "clock.arrow.circlepath")
                         .tag(mode)
                 }
             }
             .pickerStyle(.segmented)
-            .frame(width: 120)
+            .frame(width: 160)
 
             Spacer()
 

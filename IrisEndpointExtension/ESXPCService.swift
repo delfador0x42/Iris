@@ -159,8 +159,19 @@ extension ESXPCService: EndpointXPCProtocol {
     }
 
     func getRecentEvents(limit: Int, reply: @escaping ([Data]) -> Void) {
-        logger.debug("[XPC] getRecentEvents(\(limit)) — not implemented")
-        reply([])
+        guard let client = esClient else {
+            logger.warning("[XPC] getRecentEvents — no esClient available")
+            reply([])
+            return
+        }
+
+        let events = client.getRecentEvents(limit: limit)
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+
+        let data = events.compactMap { try? encoder.encode($0) }
+        logger.info("[XPC] getRecentEvents(\(limit)) → \(events.count) events, \(data.count) encoded")
+        reply(data)
     }
 
     func getStatus(reply: @escaping ([String: Any]) -> Void) {

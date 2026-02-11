@@ -20,12 +20,14 @@ public enum NetworkViewMode: String, CaseIterable {
     case list = "List"
     case map = "Map"
     case rules = "Rules"
+    case dns = "DNS"
 
     var icon: String {
         switch self {
         case .list: return "list.bullet"
         case .map: return "globe"
         case .rules: return "shield.lefthalf.filled"
+        case .dns: return "lock.shield.fill"
         }
     }
 }
@@ -61,15 +63,16 @@ public struct NetworkMonitorView: View {
                     viewMode: $viewMode
                 )
 
-                // Content based on state
-                if extensionManager.networkExtensionState != .installed {
+                // DNS tab has its own extension — bypass network extension checks
+                if viewMode == .dns {
+                    DNSTabView()
+                } else if extensionManager.networkExtensionState != .installed {
                     extensionSetupView
                 } else if !store.isConnected {
                     connectingView
                 } else if store.connections.isEmpty {
                     emptyView
                 } else {
-                    // Show list, map, or rules based on view mode
                     switch viewMode {
                     case .list:
                         connectionListView
@@ -77,6 +80,8 @@ public struct NetworkMonitorView: View {
                         WorldMapView(store: store)
                     case .rules:
                         RulesListView()
+                    case .dns:
+                        EmptyView() // handled above
                     }
                 }
             }

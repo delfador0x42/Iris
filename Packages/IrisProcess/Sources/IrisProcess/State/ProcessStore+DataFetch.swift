@@ -47,6 +47,14 @@ extension ProcessStore {
         // Single assignment → one didSet → one updateDisplayedProcesses()
         processes = snapshot
 
+        // Accumulate into session history
+        mergeIntoHistory(snapshot)
+
+        // Also fetch recent ES events for processes that spawned and exited between polls
+        if xpcConnection != nil {
+            Task { await self.fetchRecentEventsForHistory() }
+        }
+
         // Check man pages in background (don't block refresh)
         Task {
             await checkManPagesForProcesses()
@@ -129,6 +137,47 @@ extension ProcessStore {
             logger.warning("[FETCH] XPC getProcesses() TIMED OUT after 3s — falling back to local")
             isUsingEndpointSecurity = false
             await fetchProcessesLocally()
+        }
+    }
+
+    /// Fetch recent ES events and merge any new processes into history.
+    /// This catches processes that spawned AND exited between poll intervals.
+    func fetchRecentEventsForHistory() async {
+        guard let proxy = xpcConnection?.remoteObjectProxyWithErrorHandler({ _ in }) as? EndpointXPCProtocol else {
+            return
+        }
+
+        let dataArray: [Data] = await withCheckedContinuation { continuation in
+            proxy.getRecentEvents(limit: 500) { data in
+                continuation.resume(returning: data)
+            }
+        }
+
+        guard !dataArray.isEmpty else { return }
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        // ESProcessEvent has: eventType, process (with pid, ppid, path, name, etc.), timestamp
+        // We decode just the process field as ProcessInfo for history
+        var newEntries: [ProcessInfo] = []
+        for data in dataArray {
+            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let processJson = json["process"],
+                  let processData = try? JSONSerialization.data(withJSONObject: processJson),
+                  let info = try? decoder.decode(ProcessInfo.self, from: processData) else {
+                continue
+            }
+            let key = "\(info.pid):\(info.path)"
+            if !historySeenKeys.contains(key) {
+                historySeenKeys.insert(key)
+                newEntries.append(info)
+            }
+        }
+
+        if !newEntries.isEmpty {
+            logger.info("[HISTORY] Merged \(newEntries.count) events from ES history buffer")
+            processHistory.append(contentsOf: newEntries)
         }
     }
 
