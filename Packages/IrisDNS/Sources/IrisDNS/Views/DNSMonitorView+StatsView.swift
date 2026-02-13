@@ -5,7 +5,7 @@ extension DNSMonitorView {
     // MARK: - Stats Overview
 
     var statsView: some View {
-        ScrollView {
+        ThemedScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 // DoH status card
                 GroupBox {

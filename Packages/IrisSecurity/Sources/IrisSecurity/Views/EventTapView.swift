@@ -41,7 +41,7 @@ public struct EventTapView: View {
     }
 
     private var tapList: some View {
-        ScrollView {
+        ThemedScrollView {
             LazyVStack(alignment: .leading, spacing: 2) {
                 ForEach(taps) { tap in
                     EventTapRow(tap: tap)

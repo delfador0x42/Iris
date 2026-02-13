@@ -79,7 +79,7 @@ public struct SecurityHubView: View {
     }
 
     private var moduleGrid: some View {
-        ScrollView {
+        ThemedScrollView {
             LazyVGrid(
                 columns: [
                     GridItem(.flexible(), spacing: 12),

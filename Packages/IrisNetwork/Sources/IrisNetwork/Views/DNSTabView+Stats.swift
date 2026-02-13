@@ -3,7 +3,7 @@ import SwiftUI
 extension DNSTabView {
 
     var statsPane: some View {
-        ScrollView {
+        ThemedScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 // DoH status card
                 GroupBox {

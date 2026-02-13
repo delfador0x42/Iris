@@ -42,7 +42,7 @@ extension NetworkMonitorView {
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundColor(.red)
 
-                    ScrollView {
+                    ThemedScrollView {
                         Text(error)
                             .font(.system(size: 11, design: .monospaced))
                             .foregroundColor(.red.opacity(0.9))

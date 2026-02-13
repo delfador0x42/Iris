@@ -37,7 +37,7 @@ struct ProcessHistoryView: View {
             if filteredHistory.isEmpty {
                 emptyView
             } else {
-                ScrollView {
+                ThemedScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         ForEach(filteredHistory) { process in
                             HistoryRow(process: process, isLive: isLive(process), onSelect: { onSelect(process) })

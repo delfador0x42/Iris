@@ -58,7 +58,7 @@ public struct SupplyChainView: View {
     }
 
     private var sourceFilter: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        ThemedScrollView(.horizontal) {
             HStack(spacing: 8) {
                 FilterChip(label: "All", isSelected: selectedSource == nil) {
                     selectedSource = nil
@@ -77,7 +77,7 @@ public struct SupplyChainView: View {
     }
 
     private var findingsList: some View {
-        ScrollView {
+        ThemedScrollView {
             LazyVStack(alignment: .leading, spacing: 2) {
                 ForEach(filteredFindings) { finding in
                     SupplyChainDetailRow(finding: finding)

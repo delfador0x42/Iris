@@ -89,7 +89,7 @@ public struct PersistenceView: View {
     }
 
     private var itemList: some View {
-        ScrollView {
+        ThemedScrollView {
             LazyVStack(alignment: .leading, spacing: 1) {
                 ForEach(filteredItems) { item in
                     PersistenceItemRow(item: item)

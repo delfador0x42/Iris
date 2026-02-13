@@ -44,7 +44,7 @@ public struct DylibHijackView: View {
     }
 
     private var resultList: some View {
-        ScrollView {
+        ThemedScrollView {
             LazyVStack(alignment: .leading, spacing: 2) {
                 ForEach(hijacks) { hijack in
                     HijackRow(hijack: hijack)

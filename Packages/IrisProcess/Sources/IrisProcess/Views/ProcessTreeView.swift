@@ -7,166 +7,172 @@ struct ProcessTreeNode: Identifiable {
     var children: [ProcessTreeNode]?
 }
 
-/// Hierarchical process tree view with visual depth indentation
+/// Flattened entry for rendering — carries depth, lineage, and group info
+struct FlatTreeEntry {
+    let entryId: String            // Unique ForEach ID
+    let pid: Int32
+    let process: ProcessInfo
+    let depth: Int
+    let isLast: Bool               // Last sibling at this depth?
+    let ancestorIsLast: [Bool]     // For each ancestor, was it the last sibling?
+    let parentBundlePath: String?  // Bundle path prefix to strip for relative paths
+    let groupCount: Int            // 0 = expanded non-first, 1 = standalone, >1 = group header
+    let isGroupExpanded: Bool      // Chevron direction for group headers
+    let isNewRootGroup: Bool       // Draw separator above this entry
+}
+
+/// Hierarchical process tree — ps -axjf style with sibling grouping
 struct ProcessTreeView: View {
     let processes: [ProcessInfo]
     let onSelect: (ProcessInfo) -> Void
+    @State private var expandedGroups: Set<String> = []
 
     var body: some View {
         let tree = buildTree(from: processes)
         let flat = flattenTree(tree)
 
-        ScrollView {
+        ThemedScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(flat, id: \.pid) { entry in
-                    ProcessTreeRow(
-                        process: entry.process,
-                        depth: entry.depth,
-                        hasChildren: entry.hasChildren,
-                        onSelect: { onSelect(entry.process) }
-                    )
-                    Divider().background(Color.gray.opacity(0.15))
+                ForEach(flat, id: \.entryId) { entry in
+                    VStack(spacing: 0) {
+                        if entry.isNewRootGroup {
+                            Rectangle()
+                                .fill(Color.white.opacity(0.06))
+                                .frame(height: 1)
+                                .padding(.vertical, 4)
+                                .padding(.horizontal, 12)
+                        }
+                        ProcessTreeRow(
+                            entry: entry,
+                            onSelect: { onSelect(entry.process) },
+                            onToggleGroup: entry.groupCount > 1
+                                ? { toggleGroup(entry.process.path) } : nil
+                        )
+                    }
                 }
             }
             .padding(.vertical, 4)
         }
     }
 
-    /// Flatten tree into array with depth info for LazyVStack rendering
-    private func flattenTree(_ nodes: [ProcessTreeNode], depth: Int = 0) -> [FlatEntry] {
-        var result: [FlatEntry] = []
-        for node in nodes {
-            let kids = node.children ?? []
-            result.append(FlatEntry(
-                pid: node.process.pid,
-                process: node.process,
-                depth: depth,
-                hasChildren: !kids.isEmpty
-            ))
-            if !kids.isEmpty {
-                result.append(contentsOf: flattenTree(kids, depth: depth + 1))
+    private func toggleGroup(_ path: String) {
+        withAnimation(.easeInOut(duration: 0.15)) {
+            if expandedGroups.contains(path) {
+                expandedGroups.remove(path)
+            } else {
+                expandedGroups.insert(path)
             }
         }
-        return result
     }
 
-    /// Build process tree from flat list using ppid relationships
+    // MARK: - Tree Construction
+
     private func buildTree(from processes: [ProcessInfo]) -> [ProcessTreeNode] {
         let pidSet = Set(processes.map { $0.pid })
         let childrenByPpid = Dictionary(grouping: processes, by: { $0.ppid })
 
         func buildNode(_ process: ProcessInfo) -> ProcessTreeNode {
-            let kids = childrenByPpid[process.pid]?.map { buildNode($0) }
+            let kids = childrenByPpid[process.pid]?
+                .sorted { $0.name.caseInsensitiveCompare($1.name) == .orderedAscending }
+                .map { buildNode($0) }
             return ProcessTreeNode(
-                id: process.pid,
-                process: process,
+                id: process.pid, process: process,
                 children: kids?.isEmpty == true ? nil : kids
             )
         }
 
-        let roots = processes.filter { p in
-            p.ppid <= 1 || !pidSet.contains(p.ppid)
-        }
-
-        // Sort: processes with children first (so hierarchy is visible at top)
-        let sorted = roots.sorted { lhs, rhs in
-            let lhsKids = childrenByPpid[lhs.pid] != nil
-            let rhsKids = childrenByPpid[rhs.pid] != nil
-            if lhsKids != rhsKids { return lhsKids }
-            return lhs.name.caseInsensitiveCompare(rhs.name) == .orderedAscending
-        }
-        return sorted.map { buildNode($0) }
-    }
-
-    struct FlatEntry {
-        let pid: Int32
-        let process: ProcessInfo
-        let depth: Int
-        let hasChildren: Bool
-    }
-}
-
-/// Single row in the process tree with visual depth indentation
-private struct ProcessTreeRow: View {
-    let process: ProcessInfo
-    let depth: Int
-    let hasChildren: Bool
-    let onSelect: () -> Void
-    @State private var isHovered = false
-
-    var body: some View {
-        HStack(spacing: 4) {
-            treeIndent
-
-            Text("\(process.pid)")
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundColor(.gray)
-                .frame(width: 50, alignment: .trailing)
-
-            if process.isSuspicious {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundColor(.red)
-                    .font(.system(size: 10))
+        let roots = processes.filter { $0.ppid <= 1 || !pidSet.contains($0.ppid) }
+        return roots
+            .sorted { lhs, rhs in
+                let lk = childrenByPpid[lhs.pid] != nil
+                let rk = childrenByPpid[rhs.pid] != nil
+                if lk != rk { return lk }
+                return lhs.name.caseInsensitiveCompare(rhs.name) == .orderedAscending
             }
-
-            Text(process.displayName)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundColor(process.isSuspicious ? .red : .white)
-                .lineLimit(1)
-
-            Spacer()
-
-            if let res = process.resources {
-                Text(res.formattedCPU)
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundColor(.cyan)
-                    .frame(width: 60, alignment: .trailing)
-                Text(res.formattedMemory)
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundColor(.green)
-                    .frame(width: 70, alignment: .trailing)
-            }
-
-            signingBadge
-        }
-        .padding(.vertical, 4)
-        .padding(.horizontal, 8)
-        .background(isHovered ? Color.white.opacity(0.05) : Color.clear)
-        .contentShape(Rectangle())
-        .onTapGesture(perform: onSelect)
-        .onHover { isHovered = $0 }
+            .map { buildNode($0) }
     }
 
-    @ViewBuilder
-    private var treeIndent: some View {
-        if depth > 0 {
-            HStack(spacing: 0) {
-                ForEach(0..<(depth - 1), id: \.self) { _ in
-                    Text("│  ")
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundColor(.cyan.opacity(0.25))
+    // MARK: - Flattening with Sibling Grouping
+
+    private func flattenTree(
+        _ nodes: [ProcessTreeNode],
+        depth: Int = 0,
+        ancestorIsLast: [Bool] = [],
+        parentBundlePath: String? = nil,
+        isRootLevel: Bool = true
+    ) -> [FlatTreeEntry] {
+        var result: [FlatTreeEntry] = []
+        let groups = groupConsecutiveSiblings(nodes)
+
+        for (gi, group) in groups.enumerated() {
+            let isLastGroup = gi == groups.count - 1
+            let childBundlePath = parentBundlePath
+                ?? extractBundlePath(from: group.nodes[0].process.path)
+
+            if group.nodes.count == 1 {
+                let node = group.nodes[0]
+                result.append(FlatTreeEntry(
+                    entryId: "\(node.process.pid)", pid: node.process.pid,
+                    process: node.process, depth: depth,
+                    isLast: isLastGroup, ancestorIsLast: ancestorIsLast,
+                    parentBundlePath: parentBundlePath, groupCount: 1,
+                    isGroupExpanded: false, isNewRootGroup: isRootLevel && gi > 0
+                ))
+                if let kids = node.children, !kids.isEmpty {
+                    result += flattenTree(kids, depth: depth + 1,
+                        ancestorIsLast: ancestorIsLast + [isLastGroup],
+                        parentBundlePath: childBundlePath, isRootLevel: false)
                 }
-                Text("├─ ")
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundColor(.cyan.opacity(0.5))
-            }
-        }
-    }
-
-    private var signingBadge: some View {
-        Group {
-            if let cs = process.codeSigningInfo {
-                if cs.isAppleSigned {
-                    Image(systemName: "checkmark.seal.fill").foregroundColor(.green)
-                } else if cs.teamId != nil {
-                    Image(systemName: "checkmark.seal").foregroundColor(.blue)
-                } else {
-                    Image(systemName: "seal").foregroundColor(.orange)
+            } else if expandedGroups.contains(group.path) {
+                for (i, node) in group.nodes.enumerated() {
+                    let isLast = isLastGroup && i == group.nodes.count - 1
+                    result.append(FlatTreeEntry(
+                        entryId: "\(node.process.pid)", pid: node.process.pid,
+                        process: node.process, depth: depth,
+                        isLast: isLast, ancestorIsLast: ancestorIsLast,
+                        parentBundlePath: parentBundlePath,
+                        groupCount: i == 0 ? group.nodes.count : 0,
+                        isGroupExpanded: true,
+                        isNewRootGroup: isRootLevel && gi > 0 && i == 0
+                    ))
+                    if let kids = node.children, !kids.isEmpty {
+                        result += flattenTree(kids, depth: depth + 1,
+                            ancestorIsLast: ancestorIsLast + [isLast],
+                            parentBundlePath: childBundlePath, isRootLevel: false)
+                    }
                 }
             } else {
-                Image(systemName: "xmark.seal").foregroundColor(.red)
+                let node = group.nodes[0]
+                result.append(FlatTreeEntry(
+                    entryId: "\(node.process.pid)", pid: node.process.pid,
+                    process: node.process, depth: depth,
+                    isLast: isLastGroup, ancestorIsLast: ancestorIsLast,
+                    parentBundlePath: parentBundlePath,
+                    groupCount: group.nodes.count,
+                    isGroupExpanded: false,
+                    isNewRootGroup: isRootLevel && gi > 0
+                ))
             }
         }
-        .font(.system(size: 12))
+        return result
+    }
+
+    private func groupConsecutiveSiblings(
+        _ nodes: [ProcessTreeNode]
+    ) -> [(path: String, nodes: [ProcessTreeNode])] {
+        var groups: [(path: String, nodes: [ProcessTreeNode])] = []
+        for node in nodes {
+            if !groups.isEmpty && groups[groups.count - 1].path == node.process.path {
+                groups[groups.count - 1].nodes.append(node)
+            } else {
+                groups.append((path: node.process.path, nodes: [node]))
+            }
+        }
+        return groups
+    }
+
+    private func extractBundlePath(from path: String) -> String? {
+        guard let range = path.range(of: ".app/") else { return nil }
+        return String(path[...range.upperBound])
     }
 }

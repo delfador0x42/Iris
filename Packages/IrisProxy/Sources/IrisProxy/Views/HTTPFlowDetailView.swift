@@ -46,7 +46,7 @@ public struct HTTPFlowDetailView: View {
             Divider()
 
             // Tab content
-            ScrollView {
+            ThemedScrollView {
                 tabContent
                     .padding()
             }

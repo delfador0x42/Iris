@@ -6,7 +6,7 @@ struct DiskTreeView: View {
     @ObservedObject var store: DiskUsageStore
 
     var body: some View {
-        ScrollView {
+        ThemedScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
                 ForEach(root.children) { child in
                     DiskNodeRow(

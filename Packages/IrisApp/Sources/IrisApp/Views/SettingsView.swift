@@ -21,7 +21,7 @@ public struct SettingsView: View {
             )
             .ignoresSafeArea()
 
-            ScrollView {
+            ThemedScrollView {
                 VStack(alignment: .leading, spacing: 32) {
                     // Header
                     Text("Settings")

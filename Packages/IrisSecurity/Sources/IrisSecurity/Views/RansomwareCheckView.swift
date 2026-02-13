@@ -69,7 +69,7 @@ public struct RansomwareCheckView: View {
     }
 
     private var resultList: some View {
-        ScrollView {
+        ThemedScrollView {
             LazyVStack(alignment: .leading, spacing: 1) {
                 ForEach(Array(results.enumerated()), id: \.offset) { _, item in
                     HStack(spacing: 10) {

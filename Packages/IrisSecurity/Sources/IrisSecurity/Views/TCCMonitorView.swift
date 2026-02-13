@@ -56,7 +56,7 @@ public struct TCCMonitorView: View {
     }
 
     private var entryList: some View {
-        ScrollView {
+        ThemedScrollView {
             LazyVStack(alignment: .leading, spacing: 1) {
                 ForEach(filteredEntries) { entry in
                     TCCEntryRow(entry: entry)

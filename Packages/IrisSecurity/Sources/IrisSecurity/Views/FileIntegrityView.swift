@@ -65,7 +65,7 @@ public struct FileIntegrityView: View {
     }
 
     private var changesList: some View {
-        ScrollView {
+        ThemedScrollView {
             LazyVStack(alignment: .leading, spacing: 2) {
                 ForEach(changes) { change in
                     FSIntegrityRow(change: change)

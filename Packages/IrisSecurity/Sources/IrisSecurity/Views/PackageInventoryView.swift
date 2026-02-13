@@ -115,7 +115,7 @@ public struct PackageInventoryView: View {
     }
 
     private var packageList: some View {
-        ScrollView {
+        ThemedScrollView {
             LazyVStack(alignment: .leading, spacing: 1) {
                 ForEach(filteredPackages) { pkg in
                     HStack(spacing: 12) {

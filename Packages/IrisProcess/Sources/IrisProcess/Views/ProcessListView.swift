@@ -30,7 +30,7 @@ public struct ProcessListView: View {
                 } else {
                     switch store.viewMode {
                     case .monitor:
-                        ProcessMonitorView(store: store, onSelect: selectProcess)
+                        ProcessMonitorView(onSelect: selectProcess)
                     case .history:
                         ProcessHistoryView(store: store, onSelect: selectProcess)
                     }

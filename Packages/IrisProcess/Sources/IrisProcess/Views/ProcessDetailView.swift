@@ -14,7 +14,7 @@ struct ProcessDetailView: View {
             Color(red: 0.05, green: 0.07, blue: 0.1)
                 .ignoresSafeArea()
 
-            ScrollView {
+            ThemedScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     // Header
                     HStack {
@@ -157,7 +157,7 @@ struct ProcessDetailView: View {
                 }
 
                 if showManPage {
-                    ScrollView {
+                    ThemedScrollView {
                         Text(content)
                             .font(.system(size: 11, design: .monospaced))
                             .foregroundColor(.gray)

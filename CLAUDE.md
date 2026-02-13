@@ -216,17 +216,19 @@ iris/
 - Private frameworks ARE accessible and can be used
 - References: `references/program_examples/` has airport, mitmproxy, WARP binaries
 
-## Current Development State (2026-02-10)
+## Current Development State (2026-02-12)
 
-All 5 targets build (including CodeSign). 11 packages, 4 system extensions, ~297 Swift files / ~37.5K lines.
+All 5 targets build (including CodeSign). 11 packages, 4 system extensions, 297 Swift files / 37.5K lines.
 
 **All features working:** Network filter + firewall rules, proxy MITM, WiFi, disk, satellite, process monitoring, certificates, DNS, security scanning. All packages and extensions in Xcode project.
 
-**Process Monitor (2026-02-10):** Two-view system via Monitor/History tabs. Monitor view: HSplitView with suspicious processes (left, live 2s refresh) + parent-child tree (right, 30s snapshot). History view: chronological timeline of all processes seen this session, with live/exited status. ES extension records EXEC/FORK/EXIT events in a 5000-entry circular buffer; app fetches via `getRecentEvents()` XPC to catch short-lived processes between polls.
+**File size distribution:** 1 file >300 (shader, exempted), 19 in 251-300 (acceptable), 76 in 151-250 (sweet spot), 154 in 51-150, 47 under 50. Zero generic file names, zero dead code.
 
-**DNS Tab (2026-02-10):** DNS monitoring is a tab in Network Monitor (`NetworkViewMode.dns`), not a standalone view. Uses its own extension status (separate from network filter). Home screen DNS button is a stub.
+**Process Monitor:** Two-view system via Monitor/History tabs. Monitor view: HSplitView with suspicious processes (left, live 2s refresh) + parent-child tree (right, 30s snapshot). History view: chronological timeline of all processes seen this session, with live/exited status. ES extension records EXEC/FORK/EXIT events in a 5000-entry circular buffer; app fetches via `getRecentEvents()` XPC to catch short-lived processes between polls.
 
-**Firewall (2026-02-10):** Process dedup by signing identity (`identityKey`), SecurityRule CRUD via XPC, rule persistence (JSON in ApplicationSupport), inline allow/block in UI, connection conversation view with timestamped CaptureSegments.
+**DNS Tab:** DNS monitoring is a tab in Network Monitor (`NetworkViewMode.dns`), not a standalone view. Uses its own extension status (separate from network filter). Home screen DNS button is a stub.
+
+**Firewall:** Process dedup by signing identity (`identityKey`), SecurityRule CRUD via XPC, rule persistence (JSON in ApplicationSupport), inline allow/block in UI, connection conversation view with timestamped CaptureSegments.
 
 **IrisSecurity (62 files, ~9K lines):** 20+ scanners, evidence-based scoring (PersistenceScanner), IPSW baseline structure (baseline-25C56.json — empty, needs data). ProcessEnumeration shared helper. SigningVerifier with Team ID + hardened runtime. ProcessAnomaly factories (.filesystem(), .forProcess()). All scanners wired to views. Services/ is flat (33 files) — scanner names are descriptive.
 

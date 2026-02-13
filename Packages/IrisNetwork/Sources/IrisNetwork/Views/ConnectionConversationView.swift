@@ -147,7 +147,7 @@ struct ConnectionConversationView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             ScrollViewReader { proxy in
-                ScrollView {
+                ThemedScrollView {
                     LazyVStack(alignment: .leading, spacing: 2) {
                         ForEach(Array(segments.enumerated()), id: \.offset) { index, segment in
                             segmentRow(segment: segment)

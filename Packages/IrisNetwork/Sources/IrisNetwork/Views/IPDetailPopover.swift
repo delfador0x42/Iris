@@ -12,7 +12,7 @@ struct IPDetailPopover: View {
     var connection: NetworkConnection { aggregated.representative }
 
     var body: some View {
-        ScrollView {
+        ThemedScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 // Header with IP and hostname
                 headerSection

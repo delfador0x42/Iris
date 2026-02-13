@@ -53,7 +53,7 @@ public struct AVMonitorView: View {
     }
 
     private var eventList: some View {
-        ScrollView {
+        ThemedScrollView {
             LazyVStack(alignment: .leading, spacing: 1) {
                 ForEach(monitor.events) { event in
                     AVEventRow(event: event)

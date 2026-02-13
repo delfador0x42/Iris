@@ -38,7 +38,7 @@ extension HTTPFlowDetailView {
     }
 
     func bodyPreviewView(_ preview: String) -> some View {
-        ScrollView(.horizontal, showsIndicators: true) {
+        ThemedScrollView(.horizontal) {
             Text(preview)
                 .font(.system(size: 11, design: .monospaced))
                 .textSelection(.enabled)

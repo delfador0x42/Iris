@@ -20,7 +20,7 @@ public struct SecurityDashboardView: View {
             if store.isLoading && store.checks.isEmpty {
                 loadingView
             } else if let grade = store.grade {
-                ScrollView {
+                ThemedScrollView {
                     VStack(spacing: 24) {
                         gradeHeader(grade)
                         statsBar

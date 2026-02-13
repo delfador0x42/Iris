@@ -12,7 +12,7 @@ struct DNSQueryDetailView: View {
     let query: DNSQueryRecord
 
     var body: some View {
-        ScrollView {
+        ThemedScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 // Header
                 queryHeader

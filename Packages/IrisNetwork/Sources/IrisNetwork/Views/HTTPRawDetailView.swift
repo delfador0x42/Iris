@@ -96,7 +96,7 @@ struct HTTPRawDetailView: View {
         if isLoading {
             loadingView
         } else {
-            ScrollView {
+            ThemedScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     switch selectedTab {
                     case 0: rawDataView(data: rawOutbound, label: "outbound", limit: $outboundDisplayLimit)

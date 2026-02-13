@@ -132,7 +132,7 @@ public struct NetworkMonitorView: View {
     // MARK: - Connection List View
 
     private var connectionListView: some View {
-        ScrollView {
+        ThemedScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
                 // Column headers
                 connectionHeaderRow

@@ -86,7 +86,7 @@ public struct ThreatScanView: View {
     }
 
     private var findingsList: some View {
-        ScrollView {
+        ThemedScrollView {
             LazyVStack(alignment: .leading, spacing: 2) {
                 if !filteredAnomalies.isEmpty {
                     sectionHeader("Process & System Anomalies", count: filteredAnomalies.count)

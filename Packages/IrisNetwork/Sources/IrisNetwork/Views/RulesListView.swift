@@ -103,7 +103,7 @@ struct RulesListView: View {
     // MARK: - Rules List
 
     private var rulesList: some View {
-        ScrollView {
+        ThemedScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
                 ForEach(groupedRules, id: \.key) { group in
                     ruleGroupHeader(group.key, count: group.rules.count)

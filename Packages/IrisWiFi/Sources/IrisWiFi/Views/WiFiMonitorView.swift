@@ -24,7 +24,7 @@ public struct WiFiMonitorView: View {
             )
             .ignoresSafeArea()
 
-            ScrollView {
+            ThemedScrollView {
                 VStack(spacing: 20) {
                     // Header with power toggle
                     headerSection

@@ -1,46 +1,78 @@
 import SwiftUI
 
 /// Split view: suspicious processes (left) + process tree snapshot (right)
+///
+/// Does NOT observe ProcessStore directly — uses independent timers to poll data.
+/// This prevents HSplitView body re-evaluation on every 2s store refresh,
+/// which was causing visual glitching (the entire split view re-laid out).
 struct ProcessMonitorView: View {
-    @ObservedObject var store: ProcessStore
     let onSelect: (ProcessInfo) -> Void
 
     @State private var treeSnapshot: [ProcessInfo] = []
     @State private var treeLastUpdate: Date?
     @State private var treeTimer: Timer?
     @State private var cachedSuspicious: [ProcessInfo] = []
+    @State private var cachedPidSet: Set<Int32> = []
+    @State private var suspiciousTimer: Timer?
 
     private let treeRefreshInterval: TimeInterval = 30
 
     var body: some View {
         HSplitView {
             suspiciousPane
-                .frame(minWidth: 300)
+                .frame(minWidth: 250, maxWidth: 400)
 
             treePaneWrapper
-                .frame(minWidth: 400)
+                .frame(minWidth: 500)
         }
-        .onAppear { refreshTreeSnapshot() ; startTreeTimer() ; updateSuspiciousCache() }
-        .onDisappear { stopTreeTimer() }
-        .onChange(of: store.displayedProcesses) { _ in updateSuspiciousCache() }
+        .onAppear { startMonitoring() }
+        .onDisappear { stopMonitoring() }
     }
 
-    /// Only update suspicious cache when the PID set changes.
+    // MARK: - Monitoring Lifecycle
+
+    private func startMonitoring() {
+        updateSuspiciousCache()
+        refreshTreeSnapshot()
+        suspiciousTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { _ in
+            Task { @MainActor in updateSuspiciousCache() }
+        }
+        treeTimer = Timer.scheduledTimer(withTimeInterval: treeRefreshInterval, repeats: true) { _ in
+            Task { @MainActor in refreshTreeSnapshot() }
+        }
+    }
+
+    private func stopMonitoring() {
+        suspiciousTimer?.invalidate()
+        suspiciousTimer = nil
+        treeTimer?.invalidate()
+        treeTimer = nil
+    }
+
+    /// Only update suspicious cache when the PID SET changes.
+    /// Uses Set comparison so severity-driven re-sorts don't trigger rebuilds.
     /// ProcessInfo.id is a random UUID regenerated each fetch — without this guard,
-    /// SwiftUI sees a "new" array every 2s and rebuilds all rows (the blink).
+    /// SwiftUI sees a "new" array every 2s and rebuilds all rows.
     private func updateSuspiciousCache() {
+        let store = ProcessStore.shared
         let fresh = store.displayedProcesses
             .filter { $0.isSuspicious }
             .sorted { ($0.highestSeverity?.rawValue ?? 0) > ($1.highestSeverity?.rawValue ?? 0) }
-        guard fresh.map(\.pid) != cachedSuspicious.map(\.pid) else { return }
+        let freshPids = Set(fresh.map(\.pid))
+        guard freshPids != cachedPidSet else { return }
+        cachedPidSet = freshPids
         cachedSuspicious = fresh
+    }
+
+    private func refreshTreeSnapshot() {
+        treeSnapshot = ProcessStore.shared.processes
+        treeLastUpdate = Date()
     }
 
     // MARK: - Suspicious Pane (Left)
 
     private var suspiciousPane: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Pane header
             HStack {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundColor(.red)
@@ -73,7 +105,7 @@ struct ProcessMonitorView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                ScrollView {
+                ThemedScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         ForEach(cachedSuspicious, id: \.pid) { process in
                             SuspiciousProcessRow(process: process, onSelect: { onSelect(process) })
@@ -89,7 +121,6 @@ struct ProcessMonitorView: View {
 
     private var treePaneWrapper: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Pane header
             HStack {
                 Image(systemName: "sidebar.left")
                     .foregroundColor(.cyan)
@@ -131,26 +162,6 @@ struct ProcessMonitorView: View {
             }
         }
     }
-
-    // MARK: - Tree Snapshot Timer
-
-    private func refreshTreeSnapshot() {
-        treeSnapshot = store.processes
-        treeLastUpdate = Date()
-    }
-
-    private func startTreeTimer() {
-        treeTimer = Timer.scheduledTimer(withTimeInterval: treeRefreshInterval, repeats: true) { _ in
-            Task { @MainActor in
-                refreshTreeSnapshot()
-            }
-        }
-    }
-
-    private func stopTreeTimer() {
-        treeTimer?.invalidate()
-        treeTimer = nil
-    }
 }
 
 // MARK: - Suspicious Process Row
@@ -178,7 +189,6 @@ private struct SuspiciousProcessRow: View {
                 signingBadge
             }
 
-            // Suspicion reasons
             HStack(spacing: 6) {
                 Spacer().frame(width: 50)
                 ForEach(process.suspicionReasons, id: \.self) { reason in
