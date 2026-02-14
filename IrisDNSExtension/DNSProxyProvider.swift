@@ -23,6 +23,10 @@ class DNSProxyProvider: NEDNSProxyProvider {
     let queriesLock = NSLock()
     static let maxCapturedQueries = 10000
 
+    /// Monotonically increasing counter for delta XPC protocol.
+    /// Protected by queriesLock — always increment under lock.
+    var nextSequenceNumber: UInt64 = 1
+
     /// Stats protected by statsLock for thread-safe access from data path
     private var _totalQueries: Int = 0
     private var _failedQueries: Int = 0
@@ -110,6 +114,17 @@ class DNSProxyProvider: NEDNSProxyProvider {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         return queries.compactMap { try? encoder.encode($0) }
+    }
+
+    func getQueriesSince(_ sinceSeq: UInt64, limit: Int) -> (UInt64, [Data]) {
+        queriesLock.lock()
+        let currentSeq = nextSequenceNumber - 1
+        let changed = capturedQueries.filter { $0.sequenceNumber > sinceSeq }.suffix(limit)
+        queriesLock.unlock()
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = changed.compactMap { try? encoder.encode($0) }
+        return (currentSeq, data)
     }
 
     func clearQueries() {

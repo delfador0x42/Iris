@@ -39,7 +39,8 @@ struct ProcessHistoryView: View {
             } else {
                 ThemedScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(filteredHistory) { process in
+                        // Use composite key for identity — PID alone can be reused across process lifetimes
+                        ForEach(filteredHistory, id: \.historyId) { process in
                             HistoryRow(process: process, isLive: isLive(process), onSelect: { onSelect(process) })
                             Divider().background(Color.gray.opacity(0.15))
                         }
@@ -86,9 +87,9 @@ struct ProcessHistoryView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    /// Check if a historical process is still running in the live list
+    /// Check if a historical process is still running in the live list — O(1) set lookup
     private func isLive(_ process: ProcessInfo) -> Bool {
-        store.processes.contains { $0.pid == process.pid && $0.path == process.path }
+        store.livePidPaths.contains("\(process.pid):\(process.path)")
     }
 }
 

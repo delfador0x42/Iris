@@ -44,9 +44,15 @@ public enum SuspicionSeverity: Int, Comparable, Sendable {
 
 /// Represents a process captured by Endpoint Security
 public struct ProcessInfo: Identifiable, Sendable, Codable, Equatable {
-    public let id: UUID
+    /// Stable identity: PID is unique among live processes at any point in time.
+    /// History views should use a composite key (pid + timestamp) for ForEach.
+    public var id: Int32 { pid }
     public let pid: Int32
     public let ppid: Int32
+    /// The PID of the process "responsible" for this one (macOS responsibility chain).
+    /// For app helpers/XPC services, this points to the parent application.
+    /// 0 means unknown or same as pid.
+    public let responsiblePid: Int32
     public let path: String
     public let name: String
     public let arguments: [String]
@@ -60,9 +66,9 @@ public struct ProcessInfo: Identifiable, Sendable, Codable, Equatable {
     public var resources: ProcessResourceInfo?
 
     public init(
-        id: UUID = UUID(),
         pid: Int32,
         ppid: Int32,
+        responsiblePid: Int32 = 0,
         path: String,
         name: String,
         arguments: [String] = [],
@@ -73,9 +79,9 @@ public struct ProcessInfo: Identifiable, Sendable, Codable, Equatable {
         hasManPage: Bool? = nil,
         resources: ProcessResourceInfo? = nil
     ) {
-        self.id = id
         self.pid = pid
         self.ppid = ppid
+        self.responsiblePid = responsiblePid
         self.path = path
         self.name = name
         self.arguments = arguments
@@ -121,6 +127,20 @@ public struct ProcessInfo: Identifiable, Sendable, Codable, Equatable {
                 return "Unsigned"
             }
         }
+
+        // MARK: - Decoded Flag Properties
+
+        /// CS_RUNTIME (0x10000) — hardened runtime enabled
+        public var isHardenedRuntime: Bool { flags & 0x10000 != 0 }
+
+        /// CS_GET_TASK_ALLOW (0x4) — process is debuggable
+        public var isDebuggable: Bool { flags & 0x4 != 0 }
+
+        /// CS_RESTRICT (0x800) — restricted process
+        public var isRestricted: Bool { flags & 0x800 != 0 }
+
+        /// CS_LINKER_SIGNED (0x20000) — linker signed (dyld, not codesign)
+        public var isLinkerSigned: Bool { flags & 0x20000 != 0 }
     }
 
     /// Bundle name extracted from path if available
@@ -136,6 +156,12 @@ public struct ProcessInfo: Identifiable, Sendable, Codable, Equatable {
     /// Display name (bundle name or process name)
     public var displayName: String {
         bundleName ?? name
+    }
+
+    /// Composite identity for history views where PID reuse is possible.
+    /// Combines pid + timestamp to create a unique key per process sighting.
+    public var historyId: String {
+        "\(pid):\(timestamp.timeIntervalSince1970)"
     }
 
     // MARK: - Suspicion Detection
@@ -164,9 +190,10 @@ public struct ProcessInfo: Identifiable, Sendable, Codable, Equatable {
 
     // MARK: - CodingKeys
 
-    /// Exclude ephemeral properties from Codable — they're computed app-side
+    /// Exclude ephemeral properties from Codable — they're computed app-side.
+    /// `id` is excluded because it's computed from `pid`.
     enum CodingKeys: String, CodingKey {
-        case id, pid, ppid, path, name, arguments, userId, groupId
+        case pid, ppid, responsiblePid, path, name, arguments, userId, groupId
         case codeSigningInfo, timestamp
     }
 
@@ -183,15 +210,21 @@ public struct ProcessInfo: Identifiable, Sendable, Codable, Equatable {
 
     /// Cache for file existence checks. Binaries don't disappear often —
     /// checking 620 paths via stat() every 2s is wasteful. TTL: 10 seconds.
+    private static let fileExistsCacheLock = NSLock()
     private static var fileExistsCache: [String: (exists: Bool, checkedAt: Date)] = [:]
 
     private static func cachedFileExists(atPath path: String) -> Bool {
+        fileExistsCacheLock.lock()
         if let cached = fileExistsCache[path],
            Date().timeIntervalSince(cached.checkedAt) < 10 {
+            fileExistsCacheLock.unlock()
             return cached.exists
         }
+        fileExistsCacheLock.unlock()
         let exists = FileManager.default.fileExists(atPath: path)
+        fileExistsCacheLock.lock()
         fileExistsCache[path] = (exists, Date())
+        fileExistsCacheLock.unlock()
         return exists
     }
 

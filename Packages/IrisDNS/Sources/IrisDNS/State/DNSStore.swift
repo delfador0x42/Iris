@@ -67,6 +67,14 @@ public final class DNSStore: ObservableObject {
     var refreshTimer: Timer?
     var cancellables = Set<AnyCancellable>()
 
+    /// Last seen sequence number from the DNS extension.
+    /// Used for delta XPC protocol — only fetch queries newer than this.
+    var lastSeenSequence: UInt64 = 0
+
+    /// Pre-computed lowercase search fields, keyed by query UUID.
+    /// Built once when queries change (in didSet), not per-keystroke.
+    var searchIndex: [UUID: SearchEntry] = [:]
+
     // MARK: - Singleton
 
     public static let shared = DNSStore()

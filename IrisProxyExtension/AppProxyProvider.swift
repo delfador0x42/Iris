@@ -2,7 +2,8 @@
 //  AppProxyProvider.swift
 //  IrisProxyExtension
 //
-//  NEAppProxyProvider subclass that intercepts TCP flows for HTTP/HTTPS inspection.
+//  NETransparentProxyProvider that selectively intercepts HTTP/HTTPS flows.
+//  Returning false from handleNewFlow passes the flow to the OS directly (zero overhead).
 //
 
 import Foundation
@@ -10,8 +11,11 @@ import Network
 import NetworkExtension
 import os.log
 
-/// App Proxy Provider that intercepts network flows for HTTP/HTTPS inspection.
-class AppProxyProvider: NEAppProxyProvider {
+/// Transparent proxy that selectively intercepts HTTP/HTTPS TCP flows.
+/// Port 80 (HTTP) and 443 (HTTPS) are intercepted for MITM inspection.
+/// All other TCP flows and all UDP flows return false — the OS handles them
+/// directly with zero overhead (unlike NEAppProxyProvider where false = reject).
+class AppProxyProvider: NETransparentProxyProvider {
 
     private let logger = Logger(subsystem: "com.wudan.iris.proxy", category: "AppProxyProvider")
 
@@ -25,33 +29,47 @@ class AppProxyProvider: NEAppProxyProvider {
     private var activeFlows: [UUID: NEAppProxyTCPFlow] = [:]
     private let flowsLock = NSLock()
 
-    /// Active UDP flows (tracked for cleanup)
-    private var activeUDPFlows: [UUID: NEAppProxyUDPFlow] = [:]
-
     /// Whether the proxy is currently active
     private var isActive = false
 
-    /// Max duration for UDP relay (5 minutes)
-    private static let udpRelayTimeout: UInt64 = 300_000_000_000
+    /// Ports we intercept for inspection
+    private static let interceptedPorts: Set<Int> = [80, 443]
 
     // MARK: - Lifecycle
 
     override func startProxy(options: [String: Any]? = nil) async throws {
-        logger.info("Starting proxy extension...")
+        logger.info("Starting transparent proxy extension...")
         xpcService.provider = self
         xpcService.start()
         flowHandler = FlowHandler(provider: self)
+
+        // Configure NETransparentProxyNetworkSettings — tells the system which
+        // flows to route to this extension. Without this, no flows arrive.
+        // Direction MUST be .outbound per Apple docs.
+        let settings = NETransparentProxyNetworkSettings(tunnelRemoteAddress: "127.0.0.1")
+        settings.includedNetworkRules = [
+            NENetworkRule(
+                remoteNetwork: nil,
+                remotePrefix: 0,
+                localNetwork: nil,
+                localPrefix: 0,
+                protocol: .any,
+                direction: .outbound
+            )
+        ]
+        try await setTunnelNetworkSettings(settings)
+
         isActive = true
-        logger.info("Proxy extension started successfully")
+        logger.info("Transparent proxy extension started successfully")
     }
 
     override func stopProxy(with reason: NEProviderStopReason) async {
-        logger.info("Stopping proxy extension with reason: \(String(describing: reason))")
+        logger.info("Stopping transparent proxy extension with reason: \(String(describing: reason))")
         isActive = false
         closeAndRemoveAllFlows()
         xpcService.stop()
         flowHandler = nil
-        logger.info("Proxy extension stopped")
+        logger.info("Transparent proxy extension stopped")
     }
 
     /// Closes all active flows under lock. Extracted from async stopProxy
@@ -63,11 +81,6 @@ class AppProxyProvider: NEAppProxyProvider {
             flow.closeWriteWithError(nil)
         }
         activeFlows.removeAll()
-        for (_, flow) in activeUDPFlows {
-            flow.closeReadWithError(nil)
-            flow.closeWriteWithError(nil)
-        }
-        activeUDPFlows.removeAll()
         flowsLock.unlock()
     }
 
@@ -78,12 +91,13 @@ class AppProxyProvider: NEAppProxyProvider {
             logger.warning("Received flow while proxy is inactive")
             return false
         }
+
+        // Only intercept TCP flows on HTTP/HTTPS ports
         if let tcpFlow = flow as? NEAppProxyTCPFlow {
             return handleTCPFlow(tcpFlow)
-        } else if let udpFlow = flow as? NEAppProxyUDPFlow {
-            return handleUDPFlow(udpFlow)
         }
-        logger.warning("Unknown flow type received")
+
+        // UDP flows: return false — OS handles directly, zero overhead
         return false
     }
 
@@ -93,13 +107,20 @@ class AppProxyProvider: NEAppProxyProvider {
             return false
         }
 
+        let port = Int(remoteEndpoint.port) ?? 0
+
+        // Only intercept HTTP (80) and HTTPS (443)
+        // Returning false passes the flow to the OS directly — zero overhead
+        guard Self.interceptedPorts.contains(port) else {
+            return false
+        }
+
         let flowId = UUID()
         let host = remoteEndpoint.hostname
-        let port = Int(remoteEndpoint.port) ?? 0
         let processPath = flow.metaData.sourceAppSigningIdentifier
         let processName = processPath.components(separatedBy: ".").last ?? processPath
 
-        logger.info("New TCP flow: \(flowId) -> \(host):\(port)")
+        logger.info("Intercepting TCP flow: \(flowId) -> \(host):\(port)")
 
         flowsLock.lock()
         activeFlows[flowId] = flow
@@ -123,66 +144,6 @@ class AppProxyProvider: NEAppProxyProvider {
         return true
     }
 
-    private func handleUDPFlow(_ flow: NEAppProxyUDPFlow) -> Bool {
-        let flowId = UUID()
-        logger.debug("UDP flow \(flowId) received, passing through")
-
-        flowsLock.lock()
-        activeUDPFlows[flowId] = flow
-        flowsLock.unlock()
-
-        flow.open(withLocalEndpoint: nil) { [weak self] error in
-            if let error = error {
-                self?.logger.error("Failed to open UDP flow: \(error.localizedDescription)")
-                self?.removeUDPFlow(flowId)
-                return
-            }
-            self?.relayUDPFlow(flow, flowId: flowId)
-        }
-        return true
-    }
-
-    private func relayUDPFlow(_ flow: NEAppProxyUDPFlow, flowId: UUID) {
-        let closedFlag = AtomicFlag()
-
-        // Schedule cleanup after timeout
-        Task {
-            try? await Task.sleep(nanoseconds: Self.udpRelayTimeout)
-            _ = closedFlag.trySet()
-            flow.closeReadWithError(nil)
-            flow.closeWriteWithError(nil)
-            removeUDPFlow(flowId)
-        }
-
-        func readLoop() {
-            if closedFlag.isSet { return }
-
-            flow.readDatagrams { [weak self] datagrams, endpoints, error in
-                if error != nil {
-                    self?.removeUDPFlow(flowId)
-                    return
-                }
-                guard let datagrams = datagrams, let endpoints = endpoints else {
-                    self?.removeUDPFlow(flowId)
-                    return
-                }
-                let count = min(datagrams.count, endpoints.count)
-                guard count > 0 else {
-                    self?.removeUDPFlow(flowId)
-                    return
-                }
-                flow.writeDatagrams(
-                    Array(datagrams.prefix(count)),
-                    sentBy: Array(endpoints.prefix(count))
-                ) { writeError in
-                    if writeError == nil { readLoop() }
-                    else { self?.removeUDPFlow(flowId) }
-                }
-            }
-        }
-        readLoop()
-    }
-
     // MARK: - Flow Management
 
     func removeFlow(_ flowId: UUID) {
@@ -194,15 +155,9 @@ class AppProxyProvider: NEAppProxyProvider {
         flowsLock.unlock()
     }
 
-    private func removeUDPFlow(_ flowId: UUID) {
-        flowsLock.lock()
-        activeUDPFlows.removeValue(forKey: flowId)
-        flowsLock.unlock()
-    }
-
     func activeFlowCount() -> Int {
         flowsLock.lock()
-        let count = activeFlows.count + activeUDPFlows.count
+        let count = activeFlows.count
         flowsLock.unlock()
         return count
     }

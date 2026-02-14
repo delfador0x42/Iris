@@ -13,12 +13,16 @@ import os.log
 
 extension ProxyXPCService {
 
-    /// Adds a captured flow.
+    /// Adds a captured flow with a sequence number for delta tracking.
     func addFlow(_ flow: ProxyCapturedFlow) {
         flowsLock.lock()
         defer { flowsLock.unlock() }
 
-        capturedFlows.append(flow)
+        var stamped = flow
+        stamped.sequenceNumber = nextSequenceNumber
+        nextSequenceNumber += 1
+
+        capturedFlows.append(stamped)
 
         // Trim if over limit
         if capturedFlows.count > maxFlows {
@@ -26,16 +30,19 @@ extension ProxyXPCService {
         }
 
         // Notify connected clients
-        notifyFlowUpdate(flow)
+        notifyFlowUpdate(stamped)
     }
 
     /// Updates an existing flow (e.g., when response arrives).
+    /// Bumps the sequence number so delta fetch picks up the update.
     func updateFlow(_ flowId: UUID, response: ProxyCapturedResponse) {
         flowsLock.lock()
         defer { flowsLock.unlock() }
 
         if let index = capturedFlows.firstIndex(where: { $0.id == flowId }) {
             capturedFlows[index].response = response
+            capturedFlows[index].sequenceNumber = nextSequenceNumber
+            nextSequenceNumber += 1
             notifyFlowUpdate(capturedFlows[index])
         }
     }

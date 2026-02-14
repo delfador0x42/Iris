@@ -158,6 +158,8 @@ final class ScrollBridge {
     }
 }
 
+
+
 /// Invisible NSView placed inside the ScrollView content to find the backing NSScrollView.
 struct ScrollBridgeFinder: NSViewRepresentable {
     @Binding var bridge: ScrollBridge?
@@ -184,3 +186,14 @@ struct ScrollBridgeFinder: NSViewRepresentable {
         }
     }
 }
+
+
+
+
+
+
+
+
+
+
+

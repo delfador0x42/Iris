@@ -12,7 +12,16 @@ public final class ProcessStore: ObservableObject {
 
     // MARK: - Published State
 
-    @Published public internal(set) var processes: [ProcessInfo] = [] { didSet { updateDisplayedProcesses() } }
+    @Published public internal(set) var processes: [ProcessInfo] = [] {
+        didSet {
+            updateDisplayedProcesses()
+            livePidPaths = Set(processes.map { "\($0.pid):\($0.path)" })
+        }
+    }
+
+    /// O(1) lookup set for checking if a (pid, path) pair is currently live.
+    /// Updated in processes didSet — avoids O(N) scan per history row.
+    @Published public internal(set) var livePidPaths: Set<String> = []
     @Published public internal(set) var processHistory: [ProcessInfo] = []
     @Published public internal(set) var isLoading = false
     @Published public internal(set) var lastUpdate: Date?

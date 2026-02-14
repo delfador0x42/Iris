@@ -39,6 +39,7 @@ public struct NetworkMonitorView: View {
     @State var expandedProcesses: Set<String> = []
     @State var viewMode: NetworkViewMode = .list
     @State var conversationConnection: NetworkConnection?
+    @State var plaintextConnection: NetworkConnection?
 
     public init() {}
 
@@ -105,6 +106,25 @@ public struct NetworkMonitorView: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: conversationConnection != nil)
+        .overlay {
+            if let conn = plaintextConnection {
+                ZStack {
+                    Color.black.opacity(0.5)
+                        .ignoresSafeArea()
+                        .onTapGesture { plaintextConnection = nil }
+
+                    PlaintextTrafficView(
+                        connection: conn,
+                        onDismiss: { plaintextConnection = nil }
+                    )
+                    .frame(width: 900, height: 650)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .shadow(color: .black.opacity(0.5), radius: 20)
+                }
+                .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: plaintextConnection != nil)
         .environmentObject(store)
         .onAppear {
             // Set callback for when extension becomes ready (after user approval)
@@ -151,6 +171,9 @@ public struct NetworkMonitorView: View {
                         },
                         onViewTraffic: { connection in
                             conversationConnection = connection
+                        },
+                        onViewPlaintext: { connection in
+                            plaintextConnection = connection
                         }
                     )
                 }

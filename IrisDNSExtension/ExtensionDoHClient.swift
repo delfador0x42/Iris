@@ -88,9 +88,17 @@ final class ExtensionDoHClient: @unchecked Sendable {
         return (serverURL, fallbackURL)
     }
 
+    /// Result of a DNS query, including whether encryption (DoH) was used.
+    struct QueryResult {
+        let data: Data
+        let isEncrypted: Bool
+    }
+
     /// Sends a DNS wire format query via DoH and returns the wire format response.
     /// Falls back to direct DNS (UDP port 53) if all DoH servers are unreachable.
-    func query(_ queryData: Data) async throws -> Data {
+    /// The `isEncrypted` flag indicates whether the query was resolved via DoH (true)
+    /// or fell back to plaintext UDP DNS (false).
+    func query(_ queryData: Data) async throws -> QueryResult {
         let (primary, fallback) = getServerURLs()
 
         var request = URLRequest(url: primary)
@@ -117,17 +125,16 @@ final class ExtensionDoHClient: @unchecked Sendable {
                 throw DoHClientError.emptyResponse
             }
 
-            return data
+            return QueryResult(data: data, isEncrypted: true)
 
         } catch let error as DoHClientError {
-            // DoH failed — try direct DNS as last resort
             do {
-                return try await directDNSFallback(queryData)
+                let data = try await directDNSFallback(queryData)
+                return QueryResult(data: data, isEncrypted: false)
             } catch {
                 throw error
             }
         } catch {
-            // Network error — try DoH fallback, then direct DNS
             if let fallback = fallback {
                 do {
                     return try await queryFallback(queryData, url: fallback)
@@ -136,7 +143,8 @@ final class ExtensionDoHClient: @unchecked Sendable {
                 }
             }
             do {
-                return try await directDNSFallback(queryData)
+                let data = try await directDNSFallback(queryData)
+                return QueryResult(data: data, isEncrypted: false)
             } catch {
                 // All resolution paths exhausted
             }
@@ -144,8 +152,8 @@ final class ExtensionDoHClient: @unchecked Sendable {
         }
     }
 
-    /// Queries the fallback server.
-    private func queryFallback(_ queryData: Data, url: URL) async throws -> Data {
+    /// Queries the fallback DoH server (still encrypted).
+    private func queryFallback(_ queryData: Data, url: URL) async throws -> QueryResult {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/dns-message", forHTTPHeaderField: "Content-Type")
@@ -160,7 +168,7 @@ final class ExtensionDoHClient: @unchecked Sendable {
             throw DoHClientError.fallbackFailed
         }
 
-        return data
+        return QueryResult(data: data, isEncrypted: true)
     }
 
     /// Last-resort fallback: send raw DNS query via UDP to 8.8.8.8:53.

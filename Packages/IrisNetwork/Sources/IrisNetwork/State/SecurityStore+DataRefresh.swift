@@ -125,11 +125,15 @@ extension SecurityStore {
 
         guard !needsEnrichment.isEmpty else { return }
 
-        // Enrich in background, then merge results
+        // Enrich in background, then merge results.
+        // Capture current generation to avoid applying stale enrichment to a newer connection set.
+        enrichmentGeneration += 1
+        let currentGeneration = enrichmentGeneration
         Task { [weak self] in
             let results = await IPEnrichmentService.shared.batchEnrich(Array(needsEnrichment))
             guard !results.isEmpty else { return }
-            await self?.applyEnrichmentResults(results)
+            guard let self, self.enrichmentGeneration == currentGeneration else { return }
+            self.applyEnrichmentResults(results)
         }
     }
 

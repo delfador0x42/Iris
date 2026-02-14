@@ -90,6 +90,19 @@ struct NetworkMonitorHeaderView: View {
 
             Spacer()
 
+            Button {
+                store.clearConnections()
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "trash")
+                    Text("Clear")
+                }
+                .font(.system(size: 11))
+                .foregroundColor(.gray)
+            }
+            .buttonStyle(.plain)
+            .help("Clear all connections and start fresh")
+
             if let lastUpdate = store.lastUpdate {
                 VStack(alignment: .trailing, spacing: 2) {
                     Text("Last update")

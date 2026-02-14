@@ -43,6 +43,9 @@ struct ProcessDetailView: View {
                         DetailRow(label: "Name", value: process.name)
                         DetailRow(label: "PID", value: String(process.pid))
                         DetailRow(label: "Parent PID", value: String(process.ppid))
+                        if process.responsiblePid > 0 {
+                            DetailRow(label: "Responsible PID", value: String(process.responsiblePid))
+                        }
                         DetailRow(label: "Path", value: process.path)
                         DetailRow(label: "User ID", value: String(process.userId))
                         DetailRow(label: "Group ID", value: String(process.groupId))
@@ -67,6 +70,10 @@ struct ProcessDetailView: View {
                             DetailRow(label: "Signing ID", value: csInfo.signingId ?? "None")
                             DetailRow(label: "Platform Binary", value: csInfo.isPlatformBinary ? "Yes" : "No")
                             DetailRow(label: "Apple Signed", value: csInfo.isAppleSigned ? "Yes" : "No")
+                            DetailRow(label: "Hardened Runtime", value: csInfo.isHardenedRuntime ? "Yes" : "No")
+                            DetailRow(label: "Debuggable", value: csInfo.isDebuggable ? "Yes" : "No")
+                            DetailRow(label: "Restricted", value: csInfo.isRestricted ? "Yes" : "No")
+                            DetailRow(label: "Linker Signed", value: csInfo.isLinkerSigned ? "Yes" : "No")
                             DetailRow(label: "Flags", value: "0x\(String(csInfo.flags, radix: 16))")
                         }
                     }
@@ -235,7 +242,8 @@ struct ProcessDetailView: View {
         }
     }
 
-    /// Walk ppid chain up from this process to the root
+    /// Walk ppid/responsiblePid chain up from this process to the root.
+    /// Uses responsiblePid when ppid is launchd (pid 1) to show the true parent app.
     private func buildAncestorChain() -> [ProcessInfo] {
         let allProcesses = ProcessStore.shared.processes
         let byPid = Dictionary(allProcesses.map { ($0.pid, $0) }, uniquingKeysWith: { a, _ in a })
@@ -244,7 +252,17 @@ struct ProcessDetailView: View {
         var current = process
         var visited: Set<Int32> = [process.pid]
 
-        while current.ppid > 1, let parent = byPid[current.ppid], !visited.contains(parent.pid) {
+        while true {
+            // Prefer ppid if it's a real parent (not launchd)
+            let nextPid: Int32
+            if current.ppid > 1 {
+                nextPid = current.ppid
+            } else if current.responsiblePid > 1 && current.responsiblePid != current.pid {
+                nextPid = current.responsiblePid
+            } else {
+                break
+            }
+            guard let parent = byPid[nextPid], !visited.contains(parent.pid) else { break }
             visited.insert(parent.pid)
             chain.append(parent)
             current = parent

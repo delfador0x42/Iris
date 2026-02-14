@@ -57,23 +57,24 @@ extension DNSProxyProvider {
         logger.debug("DNS query: \(queryInfo.domain) (\(queryInfo.type))")
 
         do {
-            let responseData = try await dohClient.query(datagram)
-            guard responseData.count <= 65535 else {
-                logger.warning("DNS response oversized: \(responseData.count) bytes, dropping")
+            let result = try await dohClient.query(datagram)
+            guard result.data.count <= 65535 else {
+                logger.warning("DNS response oversized: \(result.data.count) bytes, dropping")
                 return
             }
             let elapsed = (CFAbsoluteTimeGetCurrent() - startTime) * 1000
             addLatency(elapsed)
-            let responseInfo = parseDNSResponseInfo(responseData)
+            let responseInfo = parseDNSResponseInfo(result.data)
 
             recordQuery(
                 domain: queryInfo.domain, type: queryInfo.type,
                 processName: flow.metaData.sourceAppSigningIdentifier.components(separatedBy: ".").last,
                 responseCode: responseInfo.responseCode,
-                answers: responseInfo.answers, ttl: responseInfo.ttl, latencyMs: elapsed
+                answers: responseInfo.answers, ttl: responseInfo.ttl,
+                latencyMs: elapsed, isEncrypted: result.isEncrypted
             )
 
-            flow.writeDatagrams([responseData], sentBy: [originalEndpoint]) { error in
+            flow.writeDatagrams([result.data], sentBy: [originalEndpoint]) { error in
                 if let error = error {
                     Logger(subsystem: "com.wudan.iris.dns", category: "DNSProxyProvider")
                         .error("Failed to write DNS response: \(error.localizedDescription)")
@@ -86,7 +87,8 @@ extension DNSProxyProvider {
                 domain: queryInfo.domain, type: queryInfo.type,
                 processName: flow.metaData.sourceAppSigningIdentifier.components(separatedBy: ".").last,
                 responseCode: "SERVFAIL", answers: [], ttl: nil,
-                latencyMs: (CFAbsoluteTimeGetCurrent() - startTime) * 1000
+                latencyMs: (CFAbsoluteTimeGetCurrent() - startTime) * 1000,
+                isEncrypted: false
             )
             if let servfailResponse = buildServfailResponse(for: datagram) {
                 flow.writeDatagrams([servfailResponse], sentBy: [originalEndpoint]) { _ in }
@@ -148,28 +150,28 @@ extension DNSProxyProvider {
         logger.debug("TCP DNS query: \(queryInfo.domain) (\(queryInfo.type))")
 
         do {
-            let responseData = try await dohClient.query(datagram)
-            // TCP DNS max message size is 65535 (2-byte length prefix)
-            guard responseData.count <= 65535 else {
-                logger.warning("TCP DNS response oversized: \(responseData.count) bytes, dropping")
+            let result = try await dohClient.query(datagram)
+            guard result.data.count <= 65535 else {
+                logger.warning("TCP DNS response oversized: \(result.data.count) bytes, dropping")
                 return
             }
             let elapsed = (CFAbsoluteTimeGetCurrent() - startTime) * 1000
             addLatency(elapsed)
-            let responseInfo = parseDNSResponseInfo(responseData)
+            let responseInfo = parseDNSResponseInfo(result.data)
 
             recordQuery(
                 domain: queryInfo.domain, type: queryInfo.type,
                 processName: flow.metaData.sourceAppSigningIdentifier.components(separatedBy: ".").last,
                 responseCode: responseInfo.responseCode,
-                answers: responseInfo.answers, ttl: responseInfo.ttl, latencyMs: elapsed
+                answers: responseInfo.answers, ttl: responseInfo.ttl,
+                latencyMs: elapsed, isEncrypted: result.isEncrypted
             )
 
             var tcpResponse = Data()
-            let length = UInt16(responseData.count)
+            let length = UInt16(result.data.count)
             tcpResponse.append(UInt8(length >> 8))
             tcpResponse.append(UInt8(length & 0xFF))
-            tcpResponse.append(responseData)
+            tcpResponse.append(result.data)
 
             await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
                 flow.write(tcpResponse) { _ in continuation.resume() }
@@ -181,7 +183,8 @@ extension DNSProxyProvider {
                 domain: queryInfo.domain, type: queryInfo.type,
                 processName: flow.metaData.sourceAppSigningIdentifier.components(separatedBy: ".").last,
                 responseCode: "SERVFAIL", answers: [], ttl: nil,
-                latencyMs: (CFAbsoluteTimeGetCurrent() - startTime) * 1000
+                latencyMs: (CFAbsoluteTimeGetCurrent() - startTime) * 1000,
+                isEncrypted: false
             )
             if let servfailResponse = buildServfailResponse(for: datagram) {
                 var tcpResponse = Data()

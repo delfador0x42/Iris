@@ -84,13 +84,19 @@ class ESClient {
         let muteResult = es_mute_process(esClient, &selfToken)
         logger.info("[ES] es_mute_process(self PID \(getpid())): \(muteResult == ES_RETURN_SUCCESS ? "OK" : "FAILED")")
 
+        // Mute high-noise system paths to reduce event volume.
+        // These are OS daemons that spawn/fork frequently but are never suspicious.
+        muteNoisyPaths(esClient)
+
         let events: [es_event_type_t] = [
             ES_EVENT_TYPE_NOTIFY_EXEC,
             ES_EVENT_TYPE_NOTIFY_FORK,
             ES_EVENT_TYPE_NOTIFY_EXIT,
+            ES_EVENT_TYPE_NOTIFY_SIGNAL,
+            ES_EVENT_TYPE_NOTIFY_CS_INVALIDATED,
         ]
 
-        logger.info("[ES] Subscribing to \(events.count) event types (EXEC, FORK, EXIT)...")
+        logger.info("[ES] Subscribing to \(events.count) event types (EXEC, FORK, EXIT, SIGNAL, CS_INVALIDATED)...")
         let subResult = es_subscribe(esClient, events, UInt32(events.count))
         guard subResult == ES_RETURN_SUCCESS else {
             logger.error("[ES] es_subscribe FAILED — deleting client")
@@ -105,6 +111,27 @@ class ESClient {
         isRunning = true
         startupError = nil
         logger.info("[ES] Endpoint Security client fully started — isRunning=true, processTable has \(self.processTable.count) entries")
+    }
+
+    /// Mute known high-noise system paths to reduce event volume.
+    /// These executables spawn/fork frequently as part of normal OS operation.
+    /// They're still captured in the initial seed, just not re-reported on every exec.
+    private func muteNoisyPaths(_ client: OpaquePointer) {
+        let noisyPaths = [
+            "/usr/libexec/xpcproxy",
+            "/usr/libexec/runningboardd",
+            "/usr/sbin/cfprefsd",
+            "/usr/libexec/trustd",
+            "/usr/libexec/securityd",
+            "/usr/libexec/opendirectoryd",
+        ]
+        for path in noisyPaths {
+            let result = es_mute_path_literal(client, path)
+            if result == ES_RETURN_SUCCESS {
+                logger.debug("[ES] Muted path: \(path)")
+            }
+        }
+        logger.info("[ES] Muted \(noisyPaths.count) noisy system paths")
     }
 
     func stop() {
@@ -156,9 +183,11 @@ class ESClient {
             let child = message.pointee.event.fork.child.pointee
             let childPid = audit_token_to_pid(child.audit_token)
             let parentPid = child.ppid
+            let rpid = audit_token_to_pid(child.responsible_audit_token)
+            let responsiblePid = (rpid > 0 && rpid != childPid) ? rpid : 0
 
             let stub = ESProcessInfo(
-                id: UUID(), pid: childPid, ppid: parentPid,
+                pid: childPid, ppid: parentPid, responsiblePid: responsiblePid,
                 path: esStringToSwift(child.executable.pointee.path),
                 name: URL(fileURLWithPath: esStringToSwift(child.executable.pointee.path)).lastPathComponent,
                 arguments: [],
@@ -184,13 +213,28 @@ class ESClient {
             let exitingProcess = processTable.removeValue(forKey: pid)
             processLock.unlock()
 
-            // Record the exit event with the process info (if we had it)
             if let info = exitingProcess {
                 recordEvent(.exit, process: info)
             }
 
             exitCount += 1
             logger.debug("[ES] EXIT: PID \(pid)")
+
+        case ES_EVENT_TYPE_NOTIFY_SIGNAL:
+            let target = message.pointee.event.signal.target.pointee
+            let targetPid = audit_token_to_pid(target.audit_token)
+            let sig = message.pointee.event.signal.sig
+            // Only log interesting signals: SIGKILL(9), SIGTERM(15), SIGSTOP(17)
+            if sig == 9 || sig == 15 || sig == 17 {
+                let sourcePid = audit_token_to_pid(message.pointee.process.pointee.audit_token)
+                logger.info("[ES] SIGNAL: PID \(sourcePid) sent signal \(sig) to PID \(targetPid)")
+            }
+
+        case ES_EVENT_TYPE_NOTIFY_CS_INVALIDATED:
+            let proc = message.pointee.process.pointee
+            let pid = audit_token_to_pid(proc.audit_token)
+            let path = esStringToSwift(proc.executable.pointee.path)
+            logger.warning("[ES] CS_INVALIDATED: PID \(pid) (\(path)) — code signature invalidated")
 
         default:
             break
@@ -243,9 +287,12 @@ class ESClient {
             let uid = proc.kp_eproc.e_ucred.cr_uid
             let gid = proc.kp_eproc.e_pcred.p_rgid
             let csInfo = getCodeSigningInfoForPath(path)
+            let rpid = es_responsibility_get_pid_responsible_for_pid(pid)
+            let responsiblePid: Int32 = (rpid > 0 && rpid != pid) ? rpid : 0
 
             processTable[pid] = ESProcessInfo(
-                id: UUID(), pid: pid, ppid: ppid, path: path, name: name,
+                pid: pid, ppid: ppid, responsiblePid: responsiblePid,
+                path: path, name: name,
                 arguments: [], userId: uid, groupId: gid,
                 codeSigningInfo: csInfo, timestamp: Date()
             )

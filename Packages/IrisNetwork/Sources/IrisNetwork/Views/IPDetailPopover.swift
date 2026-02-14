@@ -5,6 +5,7 @@ import AppKit
 struct IPDetailPopover: View {
     let aggregated: AggregatedConnection
     var onViewTraffic: ((NetworkConnection) -> Void)?
+    var onViewPlaintext: ((NetworkConnection) -> Void)?
     @EnvironmentObject private var store: SecurityStore
     @Environment(\.dismiss) private var dismiss
     @State var showHTTPRawDetail = false
@@ -38,6 +39,27 @@ struct IPDetailPopover: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(.cyan.opacity(0.8))
+                }
+
+                // View Plaintext button (only for HTTP/HTTPS ports)
+                if onViewPlaintext != nil && (connection.remotePort == 80 || connection.remotePort == 443) {
+                    Button {
+                        dismiss()
+                        onViewPlaintext?(connection)
+                    } label: {
+                        HStack {
+                            Image(systemName: "lock.open")
+                            Text("View Plaintext")
+                            Spacer()
+                            Text("Decrypted via proxy")
+                                .font(.system(size: 10))
+                                .foregroundColor(.secondary)
+                            Image(systemName: "arrow.up.right.square")
+                        }
+                        .font(.system(size: 13, weight: .medium))
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.green.opacity(0.7))
                 }
 
                 // Firewall actions

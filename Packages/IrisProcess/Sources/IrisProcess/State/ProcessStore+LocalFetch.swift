@@ -2,6 +2,12 @@ import Foundation
 import os.log
 import Security
 
+/// macOS private API: returns the PID of the process "responsible" for the given PID.
+/// For app helpers/XPC services, this is the parent application (e.g. Brave for its helpers).
+/// Lives in the dyld shared cache (formerly libquarantine.dylib).
+@_silgen_name("responsibility_get_pid_responsible_for_pid")
+private func responsibility_get_pid_responsible_for_pid(_ pid: pid_t) -> pid_t
+
 // MARK: - Local BSD/sysctl Process Enumeration & Code Signing
 
 @MainActor
@@ -62,6 +68,10 @@ extension ProcessStore {
         // Use uid for gid as fallback (cr_gid not available in this struct)
         let gid = kinfo.kp_eproc.e_pcred.p_rgid
 
+        // Get responsible PID via macOS responsibility chain
+        let rpid = responsibility_get_pid_responsible_for_pid(pid)
+        let responsiblePid: Int32 = (rpid > 0 && rpid != pid) ? rpid : 0
+
         // Get code signing info
         let codeSigningInfo = getCodeSigningInfo(forPath: path)
 
@@ -70,6 +80,7 @@ extension ProcessStore {
         return ProcessInfo(
             pid: pid,
             ppid: ppid,
+            responsiblePid: responsiblePid,
             path: path,
             name: name,
             arguments: arguments,

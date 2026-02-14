@@ -115,15 +115,16 @@ extension ExtensionManager {
         }
     }
 
-    /// Check proxy extension status by trying XPC connection
+    /// Check proxy extension status via NETransparentProxyManager
     public func checkProxyExtensionStatus() async {
-        let reachable = await pingXPCService(
-            machServiceName: "99HGW2AR62.com.wudan.iris.proxy.xpc",
-            protocol: ProxyXPCProtocol.self
-        )
-        proxyExtensionState = reachable ? .installed : .notInstalled
+        let (isConfigured, isEnabled) = await TransparentProxyHelper.checkStatus()
+        if isConfigured && isEnabled {
+            proxyExtensionState = .installed
+        } else if proxyExtensionState == .unknown {
+            proxyExtensionState = .notInstalled
+        }
         let proxyDesc = proxyExtensionState.description
-        logger.info("[STATUS] Proxy: reachable=\(reachable) → \(proxyDesc)")
+        logger.info("[STATUS] Proxy: configured=\(isConfigured) enabled=\(isEnabled) → \(proxyDesc)")
     }
 
     /// Check DNS extension status via NEDNSProxyManager

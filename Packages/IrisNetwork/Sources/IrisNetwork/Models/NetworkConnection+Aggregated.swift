@@ -41,3 +41,7 @@ public struct AggregatedConnection: Identifiable {
     /// First connection used as representative (same IP = same enrichment data)
     public var representative: NetworkConnection { connections[0] }
 }
+
+
+
+

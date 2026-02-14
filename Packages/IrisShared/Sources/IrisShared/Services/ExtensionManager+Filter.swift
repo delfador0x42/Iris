@@ -51,6 +51,26 @@ extension ExtensionManager {
         return await DNSProxyHelper.checkStatus()
     }
 
+    // MARK: - Transparent Proxy Control
+
+    /// Enable the transparent proxy via NETransparentProxyManager
+    public func enableTransparentProxy() async {
+        let success = await TransparentProxyHelper.enableProxy()
+        if !success {
+            lastError = "Failed to enable transparent proxy"
+        }
+    }
+
+    /// Disable the transparent proxy
+    public func disableTransparentProxy() async {
+        await TransparentProxyHelper.disableProxy()
+    }
+
+    /// Completely remove the transparent proxy configuration
+    public func cleanTransparentProxyConfiguration() async {
+        await TransparentProxyHelper.cleanConfiguration()
+    }
+
     // MARK: - Full Disk Access
 
     /// Check if Full Disk Access is granted (required for Endpoint Security)

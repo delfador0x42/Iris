@@ -7,6 +7,7 @@ struct ProcessConnectionRow: View {
     let isExpanded: Bool
     let onToggle: () -> Void
     var onViewTraffic: ((NetworkConnection) -> Void)?
+    var onViewPlaintext: ((NetworkConnection) -> Void)?
     @EnvironmentObject private var store: SecurityStore
 
     /// Aggregate connections by remote IP for deduplication
@@ -159,7 +160,7 @@ struct ProcessConnectionRow: View {
             // Connection rows (when expanded) - deduplicated by IP
             if isExpanded {
                 ForEach(aggregatedConnections) { aggregated in
-                    ConnectionDetailRow(aggregated: aggregated, onViewTraffic: onViewTraffic)
+                    ConnectionDetailRow(aggregated: aggregated, onViewTraffic: onViewTraffic, onViewPlaintext: onViewPlaintext)
                 }
             }
         }

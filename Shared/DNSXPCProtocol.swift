@@ -5,6 +5,9 @@ import Foundation
 @objc public protocol DNSXPCProtocol {
     func getStatus(reply: @escaping ([String: Any]) -> Void)
     func getQueries(limit: Int, reply: @escaping ([Data]) -> Void)
+    /// Delta fetch: returns only queries with sequenceNumber > sinceSeq.
+    /// Reply includes the current max sequence number and the new queries.
+    func getQueriesSince(_ sinceSeq: UInt64, limit: Int, reply: @escaping (UInt64, [Data]) -> Void)
     func clearQueries(reply: @escaping (Bool) -> Void)
     func setEnabled(_ enabled: Bool, reply: @escaping (Bool) -> Void)
     func isEnabled(reply: @escaping (Bool) -> Void)
@@ -44,6 +47,8 @@ public struct DNSQueryRecord: Codable, Identifiable, Sendable, Equatable, Hashab
     public let latencyMs: Double?
     public let isBlocked: Bool
     public let isEncrypted: Bool
+    /// Monotonically increasing sequence number for delta XPC protocol
+    public var sequenceNumber: UInt64
 
     public init(
         id: UUID = UUID(),
@@ -56,7 +61,8 @@ public struct DNSQueryRecord: Codable, Identifiable, Sendable, Equatable, Hashab
         ttl: UInt32? = nil,
         latencyMs: Double? = nil,
         isBlocked: Bool = false,
-        isEncrypted: Bool = true
+        isEncrypted: Bool = true,
+        sequenceNumber: UInt64 = 0
     ) {
         self.id = id
         self.timestamp = timestamp
@@ -69,5 +75,6 @@ public struct DNSQueryRecord: Codable, Identifiable, Sendable, Equatable, Hashab
         self.latencyMs = latencyMs
         self.isBlocked = isBlocked
         self.isEncrypted = isEncrypted
+        self.sequenceNumber = sequenceNumber
     }
 }

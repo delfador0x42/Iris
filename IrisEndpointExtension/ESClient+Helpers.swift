@@ -2,6 +2,10 @@ import Foundation
 import EndpointSecurity
 import os.log
 
+/// macOS private API for process responsibility chain (dyld shared cache)
+@_silgen_name("responsibility_get_pid_responsible_for_pid")
+func es_responsibility_get_pid_responsible_for_pid(_ pid: pid_t) -> pid_t
+
 extension ESClient {
 
     // MARK: - Data Extraction
@@ -13,6 +17,8 @@ extension ESClient {
     ) -> ESProcessInfo {
         let pid = audit_token_to_pid(process.audit_token)
         let ppid = process.ppid
+        let rpid = audit_token_to_pid(process.responsible_audit_token)
+        let responsiblePid = (rpid > 0 && rpid != pid) ? rpid : 0
         let path = esStringToSwift(process.executable.pointee.path)
         let name = URL(fileURLWithPath: path).lastPathComponent
 
@@ -29,7 +35,8 @@ extension ESClient {
         let csInfo = extractCodeSigningInfo(from: process)
 
         return ESProcessInfo(
-            id: UUID(), pid: pid, ppid: ppid, path: path, name: name,
+            pid: pid, ppid: ppid, responsiblePid: responsiblePid,
+            path: path, name: name,
             arguments: arguments, userId: uid, groupId: gid,
             codeSigningInfo: csInfo, timestamp: Date()
         )

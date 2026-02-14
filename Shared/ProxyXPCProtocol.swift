@@ -5,6 +5,9 @@ import Foundation
 @objc public protocol ProxyXPCProtocol {
     func getStatus(reply: @escaping ([String: Any]) -> Void)
     func getFlows(reply: @escaping ([Data]) -> Void)
+    /// Delta fetch: returns only flows with sequenceNumber > sinceSeq.
+    /// Reply includes the current max sequence number and the changed flows.
+    func getFlowsSince(_ sinceSeq: UInt64, reply: @escaping (UInt64, [Data]) -> Void)
     func getFlow(_ flowId: String, reply: @escaping (Data?) -> Void)
     func clearFlows(reply: @escaping (Bool) -> Void)
     func setInterceptionEnabled(_ enabled: Bool, reply: @escaping (Bool) -> Void)
@@ -38,6 +41,9 @@ public struct ProxyCapturedFlow: Codable, Identifiable, Sendable, Equatable, Has
     public var error: String?
     public let processName: String?
     public let processId: Int?
+    /// Monotonically increasing sequence number for delta XPC protocol.
+    /// Bumped on both creation and update so delta fetch catches response arrivals.
+    public var sequenceNumber: UInt64
 
     public init(
         id: UUID = UUID(),
@@ -46,7 +52,8 @@ public struct ProxyCapturedFlow: Codable, Identifiable, Sendable, Equatable, Has
         response: ProxyCapturedResponse? = nil,
         error: String? = nil,
         processName: String? = nil,
-        processId: Int? = nil
+        processId: Int? = nil,
+        sequenceNumber: UInt64 = 0
     ) {
         self.id = id
         self.timestamp = timestamp
@@ -55,6 +62,7 @@ public struct ProxyCapturedFlow: Codable, Identifiable, Sendable, Equatable, Has
         self.error = error
         self.processName = processName
         self.processId = processId
+        self.sequenceNumber = sequenceNumber
     }
 
     public var isComplete: Bool {

@@ -102,16 +102,17 @@ extension ProxyStore {
         }
     }
 
-    /// Refreshes the captured flows.
+    /// Refreshes the captured flows using delta protocol.
+    /// First call fetches all flows; subsequent calls only fetch changes.
     public func refreshFlows() async {
         guard let proxy = getProxy() else { return }
 
         isLoading = true
 
         await withCheckedContinuation { continuation in
-            proxy.getFlows { [weak self] flowDataArray in
+            proxy.getFlowsSince(lastSeenSequence) { [weak self] newSeq, flowDataArray in
                 Task { @MainActor in
-                    self?.parseFlows(flowDataArray)
+                    self?.mergeFlows(flowDataArray, newSequence: newSeq)
                     self?.isLoading = false
                     continuation.resume()
                 }
@@ -130,6 +131,7 @@ extension ProxyStore {
                         self?.flows = []
                         self?.totalFlowCount = 0
                         self?.selectedFlow = nil
+                        self?.lastSeenSequence = 0
                     }
                     continuation.resume()
                 }
@@ -169,16 +171,30 @@ extension ProxyStore {
         } as? ProxyXPCProtocol
     }
 
-    func parseFlows(_ dataArray: [Data]) {
+    /// Merge delta flows into existing list. New flows are appended; updated flows replace by ID.
+    func mergeFlows(_ dataArray: [Data], newSequence: UInt64) {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
 
-        let parsedFlows = dataArray.compactMap { data -> ProxyCapturedFlow? in
-            try? decoder.decode(ProxyCapturedFlow.self, from: data)
+        let incoming = dataArray.compactMap { try? decoder.decode(ProxyCapturedFlow.self, from: $0) }
+
+        if lastSeenSequence == 0 {
+            // First fetch — replace everything
+            flows = incoming.sorted { $0.timestamp > $1.timestamp }
+        } else if !incoming.isEmpty {
+            // Delta merge: update existing or append new
+            var byId = Dictionary(flows.map { ($0.id, $0) }, uniquingKeysWith: { _, new in new })
+            for flow in incoming {
+                byId[flow.id] = flow
+            }
+            flows = byId.values.sorted { $0.timestamp > $1.timestamp }
+            // Trim to max
+            if flows.count > 10000 {
+                flows = Array(flows.prefix(10000))
+            }
         }
 
-        // Sort by timestamp (newest first)
-        flows = parsedFlows.sorted { $0.timestamp > $1.timestamp }
+        lastSeenSequence = newSequence
         totalFlowCount = flows.count
     }
 

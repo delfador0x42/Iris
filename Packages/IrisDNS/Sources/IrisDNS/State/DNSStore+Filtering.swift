@@ -19,17 +19,45 @@ extension DNSStore {
 
     // MARK: - Derived State
 
+    /// Pre-computed lowercase search index. Built once when queries change,
+    /// not per-keystroke. Keyed by query UUID.
+    struct SearchEntry {
+        let domain: String
+        let answers: [String]
+        let process: String?
+    }
+
+    /// Rebuild the search index when queries change. Called from queries didSet.
+    func rebuildSearchIndex() {
+        var index: [UUID: SearchEntry] = [:]
+        index.reserveCapacity(queries.count)
+        for q in queries {
+            index[q.id] = SearchEntry(
+                domain: q.domain.lowercased(),
+                answers: q.answers.map { $0.lowercased() },
+                process: q.processName?.lowercased()
+            )
+        }
+        searchIndex = index
+    }
+
     /// Recalculate filtered queries and top domains.
     /// Called when queries, typeFilter, or showBlockedOnly change.
     func updateFilteredQueries() {
+        // Rebuild index if stale (queries changed but index wasn't updated)
+        if searchIndex.count != queries.count {
+            rebuildSearchIndex()
+        }
+
         var result = queries
 
         if !searchQuery.isEmpty {
             let query = searchQuery.lowercased()
             result = result.filter { record in
-                record.domain.lowercased().contains(query) ||
-                record.answers.contains { $0.lowercased().contains(query) } ||
-                (record.processName?.lowercased().contains(query) ?? false)
+                guard let entry = searchIndex[record.id] else { return false }
+                return entry.domain.contains(query) ||
+                    entry.answers.contains { $0.contains(query) } ||
+                    (entry.process?.contains(query) ?? false)
             }
         }
 

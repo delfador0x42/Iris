@@ -92,7 +92,7 @@ struct ProcessTreeRow: View {
     // MARK: - Badges
 
     private var signingBadge: some View {
-        Group {
+        HStack(spacing: 3) {
             if let cs = entry.process.codeSigningInfo {
                 if cs.isAppleSigned {
                     Image(systemName: "checkmark.seal.fill").foregroundColor(.green)
@@ -100,6 +100,19 @@ struct ProcessTreeRow: View {
                     Image(systemName: "checkmark.seal").foregroundColor(.blue)
                 } else {
                     Image(systemName: "seal").foregroundColor(.orange)
+                }
+                // Show hardened runtime / debuggable indicators
+                if cs.isHardenedRuntime {
+                    Image(systemName: "lock.shield.fill")
+                        .foregroundColor(.green.opacity(0.6))
+                        .font(.system(size: 9))
+                        .help("Hardened Runtime")
+                }
+                if cs.isDebuggable {
+                    Image(systemName: "ant.fill")
+                        .foregroundColor(.yellow)
+                        .font(.system(size: 9))
+                        .help("Debuggable (get-task-allow)")
                 }
             } else {
                 Image(systemName: "xmark.seal").foregroundColor(.red)

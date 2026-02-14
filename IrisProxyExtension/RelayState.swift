@@ -16,6 +16,8 @@ final class RelayState: @unchecked Sendable {
     private var _responseBuffer = Data()
     private var _hasRequest = false
     private var _hasResponse = false
+    private var _requestCount = 0
+    private var _currentFlowId: UUID?
 
     /// Max buffer size per direction (16 MB) to prevent unbounded growth
     static let maxBufferSize = 16 * 1024 * 1024
@@ -74,15 +76,43 @@ final class RelayState: @unchecked Sendable {
         return body(_responseBuffer)
     }
 
-    func markRequestCaptured() {
+    /// The flow ID for the current request/response cycle (set when request is captured)
+    var currentFlowId: UUID? {
+        lock.lock()
+        defer { lock.unlock() }
+        return _currentFlowId
+    }
+
+    /// Number of requests captured on this connection (0-indexed)
+    var requestCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return _requestCount
+    }
+
+    func markRequestCaptured(flowId: UUID) {
         lock.lock()
         _hasRequest = true
+        _currentFlowId = flowId
         lock.unlock()
     }
 
     func markResponseCaptured() {
         lock.lock()
         _hasResponse = true
+        lock.unlock()
+    }
+
+    /// Reset parsing state for the next request on a keep-alive connection.
+    /// Called after a complete request/response cycle is captured.
+    func resetForNextRequest() {
+        lock.lock()
+        _hasRequest = false
+        _hasResponse = false
+        _requestBuffer.removeAll(keepingCapacity: true)
+        _responseBuffer.removeAll(keepingCapacity: true)
+        _requestCount += 1
+        _currentFlowId = nil
         lock.unlock()
     }
 }

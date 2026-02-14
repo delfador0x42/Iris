@@ -173,16 +173,20 @@ extension DNSProxyProvider {
 
     func recordQuery(
         domain: String, type: String, processName: String?,
-        responseCode: String, answers: [String], ttl: UInt32?, latencyMs: Double
+        responseCode: String, answers: [String], ttl: UInt32?,
+        latencyMs: Double, isEncrypted: Bool = true
     ) {
         let query = CapturedDNSQuery(
             id: UUID(), timestamp: Date(),
             domain: domain, recordType: type, processName: processName,
             responseCode: responseCode, answers: answers, ttl: ttl,
-            latencyMs: latencyMs, isBlocked: false, isEncrypted: true
+            latencyMs: latencyMs, isBlocked: false, isEncrypted: isEncrypted
         )
         queriesLock.lock()
-        capturedQueries.append(query)
+        var stamped = query
+        stamped.sequenceNumber = nextSequenceNumber
+        nextSequenceNumber += 1
+        capturedQueries.append(stamped)
         if capturedQueries.count > Self.maxCapturedQueries {
             capturedQueries.removeFirst(capturedQueries.count - Self.maxCapturedQueries)
         }
@@ -202,4 +206,5 @@ struct CapturedDNSQuery: Codable, Identifiable {
     let latencyMs: Double
     let isBlocked: Bool
     let isEncrypted: Bool
+    var sequenceNumber: UInt64 = 0
 }

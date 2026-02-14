@@ -10,15 +10,17 @@ struct ESProcessEvent: Codable {
         case exec
         case fork
         case exit
+        case signal
+        case csInvalidated
     }
 }
 
 /// Process info model from Endpoint Security events.
 /// Encoded via JSON over XPC to the main app.
 struct ESProcessInfo: Codable {
-    let id: UUID
     let pid: Int32
     let ppid: Int32
+    let responsiblePid: Int32
     let path: String
     let name: String
     let arguments: [String]

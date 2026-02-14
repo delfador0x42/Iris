@@ -54,6 +54,10 @@ public final class ProxyStore: ObservableObject {
     var refreshTimer: Timer?
     var cancellables = Set<AnyCancellable>()
 
+    /// Last seen sequence number from the proxy extension.
+    /// Used for delta XPC protocol — only fetch flows newer than this.
+    var lastSeenSequence: UInt64 = 0
+
     // MARK: - Singleton
 
     /// Shared instance for app-wide use.

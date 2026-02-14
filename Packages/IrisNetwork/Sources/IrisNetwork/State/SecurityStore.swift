@@ -39,6 +39,10 @@ public final class SecurityStore: ObservableObject {
     /// Optional data source for dependency injection (used in tests)
     let dataSource: (any NetworkDataSourceProtocol)?
 
+    /// Monotonic counter to detect stale enrichment results.
+    /// Incremented before each background enrichment batch, checked before applying.
+    var enrichmentGeneration: UInt64 = 0
+
     // MARK: - Derived State (updated when connections change)
 
     /// Unique processes with connections
@@ -100,6 +104,16 @@ public final class SecurityStore: ObservableObject {
         public var formattedBytesDown: String {
             NetworkConnection.formatBytes(totalBytesDown)
         }
+    }
+
+    // MARK: - Actions
+
+    /// Clears all connections and derived state. Next poll repopulates from extension.
+    public func clearConnections() {
+        connections.removeAll()
+        connectionsByProcess.removeAll()
+        updateDerivedState()
+        logger.info("Connections cleared")
     }
 
     // MARK: - Initialization

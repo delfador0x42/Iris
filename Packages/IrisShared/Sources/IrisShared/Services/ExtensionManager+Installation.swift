@@ -139,6 +139,7 @@ extension ExtensionManager {
             onEndpointExtensionReady?()
         case .proxy:
             proxyExtensionState = .installed
+            await enableTransparentProxy()
             onProxyExtensionReady?()
         case .dns:
             dnsExtensionState = .installed

@@ -8,6 +8,7 @@ public enum SecurityCategory: String, Sendable, Codable, CaseIterable {
     case authentication = "Authentication"
     case appSecurity = "App Security"
     case updates = "Updates"
+    case threats = "Active Threats"
 
     /// SF Symbol icon name for this category
     public var icon: String {
@@ -18,6 +19,7 @@ public enum SecurityCategory: String, Sendable, Codable, CaseIterable {
         case .authentication: return "person.badge.key.fill"
         case .appSecurity: return "app.badge.checkmark"
         case .updates: return "arrow.triangle.2.circlepath"
+        case .threats: return "exclamationmark.triangle.fill"
         }
     }
 }

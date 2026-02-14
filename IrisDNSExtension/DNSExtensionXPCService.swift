@@ -93,6 +93,11 @@ extension DNSExtensionXPCService: DNSXPCProtocol {
         reply(queries)
     }
 
+    func getQueriesSince(_ sinceSeq: UInt64, limit: Int, reply: @escaping (UInt64, [Data]) -> Void) {
+        let (currentSeq, data) = provider?.getQueriesSince(sinceSeq, limit: limit) ?? (0, [])
+        reply(currentSeq, data)
+    }
+
     func clearQueries(reply: @escaping (Bool) -> Void) {
         provider?.clearQueries()
         reply(true)

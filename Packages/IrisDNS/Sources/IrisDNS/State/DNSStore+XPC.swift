@@ -103,16 +103,17 @@ extension DNSStore {
         }
     }
 
-    /// Refreshes the captured DNS queries.
+    /// Refreshes the captured DNS queries using delta protocol.
+    /// First call fetches all queries; subsequent calls only fetch new ones.
     public func refreshQueries() async {
         guard let proxy = getDNSProxy() else { return }
 
         isLoading = true
 
         await withCheckedContinuation { continuation in
-            proxy.getQueries(limit: 1000) { [weak self] queryDataArray in
+            proxy.getQueriesSince(lastSeenSequence, limit: 10000) { [weak self] newSeq, queryDataArray in
                 Task { @MainActor in
-                    self?.parseQueries(queryDataArray)
+                    self?.mergeQueries(queryDataArray, newSequence: newSeq)
                     self?.isLoading = false
                     continuation.resume()
                 }
@@ -130,6 +131,7 @@ extension DNSStore {
                     if success {
                         self?.queries = []
                         self?.totalQueries = 0
+                        self?.lastSeenSequence = 0
                     }
                     continuation.resume()
                 }
@@ -185,15 +187,26 @@ extension DNSStore {
         } as? DNSXPCProtocol
     }
 
-    func parseQueries(_ dataArray: [Data]) {
+    /// Merge delta queries into existing list. DNS queries are append-only (no updates).
+    func mergeQueries(_ dataArray: [Data], newSequence: UInt64) {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
 
-        let parsed = dataArray.compactMap { data -> DNSQueryRecord? in
-            try? decoder.decode(DNSQueryRecord.self, from: data)
+        let incoming = dataArray.compactMap { try? decoder.decode(DNSQueryRecord.self, from: $0) }
+
+        if lastSeenSequence == 0 {
+            // First fetch — replace everything
+            queries = incoming.sorted { $0.timestamp > $1.timestamp }
+        } else if !incoming.isEmpty {
+            // Delta append: DNS queries are immutable, just prepend new ones
+            var merged = incoming + queries
+            if merged.count > 10000 {
+                merged = Array(merged.prefix(10000))
+            }
+            queries = merged.sorted { $0.timestamp > $1.timestamp }
         }
 
-        queries = parsed.sorted { $0.timestamp > $1.timestamp }
+        lastSeenSequence = newSequence
         totalQueries = queries.count
     }
 

@@ -27,6 +27,10 @@ class ProxyXPCService: NSObject {
     let flowsLock = NSLock()
     let maxFlows = 10000
 
+    /// Monotonically increasing counter for delta XPC protocol.
+    /// Protected by flowsLock — always increment under lock.
+    var nextSequenceNumber: UInt64 = 1
+
     /// Whether interception is enabled (guarded by interceptionLock)
     private var _interceptionEnabled = true
     let interceptionLock = NSLock()

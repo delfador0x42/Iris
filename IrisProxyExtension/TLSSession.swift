@@ -100,16 +100,23 @@ final class TLSSession {
     // MARK: - Close
 
     func close() {
-        // Run SSLClose on sslQueue to prevent racing with SSLRead/SSLWrite
+        // Run SSLClose on sslQueue to prevent racing with SSLRead/SSLWrite.
+        // retainedRef release MUST happen inside the sync block to prevent
+        // use-after-free: if release() deallocates self while another thread
+        // is suspended in SSLRead/SSLWrite, the callback would access freed memory.
+        // isClosed MUST be set inside the sync block to prevent double-release
+        // from concurrent close() calls.
         sslQueue.sync { [weak self] in
-            guard let self = self, let ctx = self.sslContext else { return }
-            SSLClose(ctx)
-            self.sslContext = nil
+            guard let self else { return }
+            guard !self.isClosed else { return }
+            self.isClosed = true
+            if let ctx = self.sslContext {
+                SSLClose(ctx)
+                self.sslContext = nil
+            }
+            self.retainedRef?.release()
+            self.retainedRef = nil
         }
-        isClosed = true
-
-        retainedRef?.release()
-        retainedRef = nil
 
         signalDataAvailable()
 

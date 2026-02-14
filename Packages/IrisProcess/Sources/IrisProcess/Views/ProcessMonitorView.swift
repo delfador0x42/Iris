@@ -11,6 +11,7 @@ struct ProcessMonitorView: View {
     @State private var treeSnapshot: [ProcessInfo] = []
     @State private var treeLastUpdate: Date?
     @State private var treeTimer: Timer?
+    @State private var treeSearchText: String = ""
     @State private var cachedSuspicious: [ProcessInfo] = []
     @State private var cachedPidSet: Set<Int32> = []
     @State private var suspiciousTimer: Timer?
@@ -51,8 +52,6 @@ struct ProcessMonitorView: View {
 
     /// Only update suspicious cache when the PID SET changes.
     /// Uses Set comparison so severity-driven re-sorts don't trigger rebuilds.
-    /// ProcessInfo.id is a random UUID regenerated each fetch — without this guard,
-    /// SwiftUI sees a "new" array every 2s and rebuilds all rows.
     private func updateSuspiciousCache() {
         let store = ProcessStore.shared
         let fresh = store.displayedProcesses
@@ -130,6 +129,22 @@ struct ProcessMonitorView: View {
 
                 Spacer()
 
+                // Search field for filtering the tree
+                HStack(spacing: 4) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(.gray)
+                        .font(.system(size: 10))
+                    TextField("Search...", text: $treeSearchText)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 11))
+                        .foregroundColor(.white)
+                        .frame(width: 120)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.white.opacity(0.08))
+                .cornerRadius(6)
+
                 if let lastUpdate = treeLastUpdate {
                     Text(lastUpdate, style: .time)
                         .font(.system(size: 10, design: .monospaced))
@@ -158,7 +173,7 @@ struct ProcessMonitorView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                ProcessTreeView(processes: treeSnapshot, onSelect: onSelect)
+                ProcessTreeView(processes: treeSnapshot, filterText: treeSearchText, onSelect: onSelect)
             }
         }
     }

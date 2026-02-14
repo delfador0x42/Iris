@@ -39,6 +39,20 @@ extension ProxyXPCService: ProxyXPCProtocol {
         reply(data)
     }
 
+    func getFlowsSince(_ sinceSeq: UInt64, reply: @escaping (UInt64, [Data]) -> Void) {
+        flowsLock.lock()
+        let currentSeq = nextSequenceNumber - 1
+        let changed = capturedFlows.filter { $0.sequenceNumber > sinceSeq }
+        flowsLock.unlock()
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = changed.compactMap { try? encoder.encode($0) }
+
+        logger.debug("XPC: getFlowsSince(\(sinceSeq)) → \(data.count) changed, seq=\(currentSeq)")
+        reply(currentSeq, data)
+    }
+
     func getFlow(_ flowId: String, reply: @escaping (Data?) -> Void) {
         logger.debug("XPC: getFlow(\(flowId))")
 
