@@ -8,8 +8,7 @@ import os.log
 extension KeychainManager {
 
     /// Saves the CA certificate to the Keychain.
-    /// - Parameter certificate: The SecCertificate to store
-    /// - Throws: KeychainError if storage fails
+    /// Uses data protection keychain with shared access group for cross-process access.
     public func saveCACertificate(_ certificate: SecCertificate) throws {
         logger.info("Saving CA certificate to Keychain")
 
@@ -20,7 +19,9 @@ extension KeychainManager {
             kSecClass as String: kSecClassCertificate,
             kSecValueRef as String: certificate,
             kSecAttrLabel as String: caCertificateLabel,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
+            kSecUseDataProtectionKeychain as String: true,
+            kSecAttrAccessGroup as String: keychainAccessGroup
         ]
 
         let status = SecItemAdd(query as CFDictionary, nil)
@@ -34,15 +35,15 @@ extension KeychainManager {
     }
 
     /// Loads the CA certificate from the Keychain.
-    /// - Returns: The SecCertificate if found, nil otherwise
-    /// - Throws: KeychainError if loading fails (except for not found)
     public func loadCACertificate() throws -> SecCertificate? {
         logger.debug("Loading CA certificate from Keychain")
 
         let query: [String: Any] = [
             kSecClass as String: kSecClassCertificate,
             kSecAttrLabel as String: caCertificateLabel,
-            kSecReturnRef as String: true
+            kSecReturnRef as String: true,
+            kSecUseDataProtectionKeychain as String: true,
+            kSecAttrAccessGroup as String: keychainAccessGroup
         ]
 
         var result: AnyObject?
@@ -69,13 +70,14 @@ extension KeychainManager {
     }
 
     /// Deletes the CA certificate from the Keychain.
-    /// - Throws: KeychainError if deletion fails
     public func deleteCACertificate() throws {
         logger.info("Deleting CA certificate from Keychain")
 
         let query: [String: Any] = [
             kSecClass as String: kSecClassCertificate,
-            kSecAttrLabel as String: caCertificateLabel
+            kSecAttrLabel as String: caCertificateLabel,
+            kSecUseDataProtectionKeychain as String: true,
+            kSecAttrAccessGroup as String: keychainAccessGroup
         ]
 
         let status = SecItemDelete(query as CFDictionary)
@@ -91,8 +93,6 @@ extension KeychainManager {
     // MARK: - System Trust
 
     /// Checks if the CA certificate is trusted in the System Keychain.
-    /// - Parameter certificate: The certificate to check
-    /// - Returns: True if the certificate is trusted
     public func isCACertificateTrusted(_ certificate: SecCertificate) -> Bool {
         var trust: SecTrust?
         let policy = SecPolicyCreateBasicX509()
@@ -114,23 +114,17 @@ extension KeychainManager {
     }
 
     /// Exports the CA certificate as DER data for user installation.
-    /// - Parameter certificate: The certificate to export
-    /// - Returns: DER-encoded certificate data
     public func exportCertificateForInstallation(_ certificate: SecCertificate) -> Data? {
         return SecCertificateCopyData(certificate) as Data?
     }
 
     /// Gets the file path where the CA certificate should be exported.
-    /// - Returns: URL to the export location
     public func getCertificateExportURL() -> URL {
         let downloadsURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first!
         return downloadsURL.appendingPathComponent("IrisProxyCA.cer")
     }
 
     /// Exports the CA certificate to a file for user installation.
-    /// - Parameter certificate: The certificate to export
-    /// - Returns: URL to the exported file
-    /// - Throws: Error if export fails
     public func exportCertificateToFile(_ certificate: SecCertificate) throws -> URL {
         guard let data = exportCertificateForInstallation(certificate) else {
             throw KeychainError.exportFailed("Failed to get certificate data")
@@ -144,7 +138,6 @@ extension KeychainManager {
     }
 
     /// Opens the certificate in Keychain Access for user installation.
-    /// - Parameter certificateURL: URL to the certificate file
     public func openCertificateInKeychainAccess(_ certificateURL: URL) {
         NSWorkspace.shared.open(certificateURL)
     }

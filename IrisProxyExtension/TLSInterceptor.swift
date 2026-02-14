@@ -17,71 +17,53 @@ final class TLSInterceptor: @unchecked Sendable {
 
     let logger = Logger(subsystem: "com.wudan.iris.proxy", category: "TLSInterceptor")
 
-    /// Shared CA private key (loaded from Keychain)
+    /// CA private key (set via XPC from main app — extension can't access keychain)
+    /// Access under caLock only.
     var caPrivateKey: SecKey?
 
-    /// Shared CA certificate
+    /// CA certificate (set via XPC from main app). Access under caLock only.
     var caCertificate: SecCertificate?
+
+    /// Lock protecting CA key+cert writes and reads (must be atomic pair)
+    let caLock = NSLock()
 
     /// Certificate cache to avoid regenerating certificates
     var certificateCache: [String: (identity: SecIdentity, certificate: SecCertificate)] = [:]
     let cacheLock = NSLock()
     let maxCacheSize = 1000
 
-    /// Whether interception is available (CA loaded)
+    /// Whether interception is available (CA loaded). Thread-safe.
     var isAvailable: Bool {
-        caPrivateKey != nil && caCertificate != nil
+        caLock.lock()
+        defer { caLock.unlock() }
+        return caPrivateKey != nil && caCertificate != nil
     }
 
-    init() {
-        loadCA()
-    }
-
-    /// Loads the CA certificate and private key from Keychain.
-    private func loadCA() {
-        logger.info("Loading CA certificate from Keychain...")
-
-        let keyQuery: [String: Any] = [
-            kSecClass as String: kSecClassKey,
-            kSecAttrApplicationTag as String: "Iris Proxy CA Private Key".data(using: .utf8)!,
+    /// Set the CA from raw data sent via XPC from the main app.
+    /// Extension runs as root and can't access secd/keychain — XPC is the only path.
+    func setCA(certData: Data, keyData: Data) -> Bool {
+        let keyAttributes: [String: Any] = [
             kSecAttrKeyType as String: kSecAttrKeyTypeRSA,
-            kSecAttrKeyClass as String: kSecAttrKeyClassPrivate,
-            kSecReturnRef as String: true
+            kSecAttrKeyClass as String: kSecAttrKeyClassPrivate
         ]
 
-        var keyResult: CFTypeRef?
-        let keyStatus = SecItemCopyMatching(keyQuery as CFDictionary, &keyResult)
-
-        if keyStatus == errSecSuccess, let ref = keyResult,
-           CFGetTypeID(ref) == SecKeyGetTypeID() {
-            caPrivateKey = (ref as! SecKey)
-            logger.info("Loaded CA private key from Keychain")
-        } else {
-            logger.warning("CA private key not found in Keychain (status: \(keyStatus))")
+        var error: Unmanaged<CFError>?
+        guard let privateKey = SecKeyCreateWithData(keyData as CFData, keyAttributes as CFDictionary, &error) else {
+            logger.error("Failed to create SecKey from XPC data: \(error?.takeRetainedValue().localizedDescription ?? "unknown")")
+            return false
         }
 
-        let certQuery: [String: Any] = [
-            kSecClass as String: kSecClassCertificate,
-            kSecAttrLabel as String: "Iris Proxy CA Certificate",
-            kSecReturnRef as String: true
-        ]
-
-        var certResult: CFTypeRef?
-        let certStatus = SecItemCopyMatching(certQuery as CFDictionary, &certResult)
-
-        if certStatus == errSecSuccess, let ref = certResult,
-           CFGetTypeID(ref) == SecCertificateGetTypeID() {
-            caCertificate = (ref as! SecCertificate)
-            logger.info("Loaded CA certificate from Keychain")
-        } else {
-            logger.warning("CA certificate not found in Keychain (status: \(certStatus))")
+        guard let certificate = SecCertificateCreateWithData(nil, certData as CFData) else {
+            logger.error("Failed to create SecCertificate from XPC data")
+            return false
         }
 
-        if isAvailable {
-            logger.info("TLS interception is available")
-        } else {
-            logger.warning("TLS interception is NOT available - CA not loaded")
-        }
+        caLock.lock()
+        self.caPrivateKey = privateKey
+        self.caCertificate = certificate
+        caLock.unlock()
+        logger.info("CA loaded via XPC — TLS interception is now available")
+        return true
     }
 
     // MARK: - Certificate Cache

@@ -34,3 +34,16 @@ logger.info("[MAIN] Entering dispatchMain() — extension will run until termina
 
 // Keep the extension running (XPC still serves even if ES failed)
 dispatchMain()
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -12,6 +12,10 @@ import Foundation
     func clearFlows(reply: @escaping (Bool) -> Void)
     func setInterceptionEnabled(_ enabled: Bool, reply: @escaping (Bool) -> Void)
     func isInterceptionEnabled(reply: @escaping (Bool) -> Void)
+    /// Send CA certificate and private key to the extension for TLS MITM.
+    /// The app (user process) generates the CA, then sends it via XPC to the
+    /// extension (root process) since they don't share keychains.
+    func setCA(_ certData: Data, keyData: Data, reply: @escaping (Bool) -> Void)
 }
 
 // MARK: - XPC Interface Helper

@@ -20,6 +20,11 @@ public final class KeychainManager: Sendable {
     /// Account name for Keychain items
     let accountName = "IrisProxyCA"
 
+    /// Shared keychain access group for cross-process access.
+    /// The proxy extension runs as root; the app runs as user.
+    /// Data protection keychain with shared access group bridges this gap.
+    let keychainAccessGroup = "99HGW2AR62.com.wudan.iris"
+
     public init() {}
 
     // MARK: - Cleanup

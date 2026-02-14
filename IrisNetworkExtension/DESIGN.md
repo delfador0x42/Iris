@@ -35,4 +35,4 @@ Any app → TCP/UDP connect
 - `FilterDataProvider+RuleEngine.swift` — Rule matching against flows
 - `FilterDataProvider+ConnectionTracking.swift` — Active connection state
 - `XPCService.swift` — Mach XPC listener, NetworkXPCProtocol conformance
-- `NetworkFilterHelper.swift` — NEFilterManager config (enable/disable/status)
+- `NetworkFilterManager.swift` — NEFilterManager config (enable/disable/status)

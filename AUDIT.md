@@ -25,8 +25,8 @@ SecurityAssessor.assess() only calls SystemSecurityChecks.runAll() (8 checks). 1
 | ProcessIntegrityChecker | T1055, T1574.006 | 25-30% | proc_regionfilename <1% |
 | CredentialAccessDetector | T1552, T1555 | 20% | Browser cookie FPs |
 | StealthScanner (9 techniques) | T1564, T1546, T1556, T1548 | 20% | Emond dead code |
-| NetworkAnomalyDetector | T1571, T1573, T1071 | 15% | BROKEN: needs lsof |
-| TCCMonitor | T1557, T1005 | 5% | BROKEN: needs FDA+SQLite |
+| NetworkAnomalyDetector | T1571, T1573, T1071 | 60% | FIXED: SecurityStore data + lsof fallback |
+| TCCMonitor | T1557, T1005 | 50% | FIXED: FDA+sqlite3 CLI, deny→allow detection |
 | SupplyChainAuditor | T1195 | 40% | Xcode plugin obsolete |
 | XPCServiceAuditor | T1559 | 40% | No known-good whitelist |
 | KextAnomalyDetector | T1547.006 | 40% | FIXED: macOS malware names |
@@ -39,8 +39,8 @@ SecurityAssessor.assess() only calls SystemSecurityChecks.runAll() (8 checks). 1
 ### Scanner Bugs
 
 **BROKEN (must rewrite):**
-1. **TCCMonitor** — SIP prevents TCC.db reads without FDA. sqlite3 schema outdated. **Fix: Use SQLite with FDA verification.** STATUS: OPEN
-2. **NetworkAnomalyDetector** — macOS netstat has no PIDs. beaconing dead code. **Fix: Use lsof -Pni.** STATUS: OPEN
+1. **TCCMonitor** — SIP prevents TCC.db reads without FDA. STATUS: FIXED (SIP disabled, FDA granted, timestamp bug fixed, deny→allow detection added)
+2. **NetworkAnomalyDetector** — macOS netstat has no PIDs. STATUS: FIXED (uses SecurityStore data from NEFilter, lsof fallback retained)
 3. **PersistenceMonitor** — Zero ES integration, polling-only. **Fix: Wire to ESClient events.** STATUS: OPEN
 
 **SIGNIFICANT (fix in place):**
@@ -104,7 +104,7 @@ SecurityAssessor.assess() only calls SystemSecurityChecks.runAll() (8 checks). 1
 **P12.** Certificate cache lookup/insert race. STATUS: FIXED (Session B1)
 **P13.** Port 443 hard-coded as only HTTPS. STATUS: OPEN
 **P14.** UDP flow relay fundamentally broken. STATUS: OPEN
-**P15.** Only first HTTP request/response captured per connection. STATUS: OPEN
+**P15.** Only first HTTP request/response captured per connection. STATUS: FIXED (message boundary tracking in RelayState)
 **P16.** RelayState request buffer grows without bound. STATUS: FIXED (Session B1)
 **P17.** receiveFromServer timeout double-resume. STATUS: OPEN
 **P18.** Passthrough relay doesn't close flow on server disconnect. STATUS: OPEN
@@ -117,7 +117,7 @@ SecurityAssessor.assess() only calls SystemSecurityChecks.runAll() (8 checks). 1
 **PROXY3.** No rate limiting on flow creation. STATUS: OPEN
 **PROXY4.** Flow leak on unhandled exceptions. STATUS: OPEN
 **PROXY5.** Keychain operations not atomic. STATUS: OPEN
-**PROXY6.** Only first request/response captured (=P15). STATUS: OPEN
+**PROXY6.** Only first request/response captured (=P15). STATUS: FIXED (message boundary tracking)
 **PROXY7.** Content-Length body extraction takes all remaining data. STATUS: OPEN
 
 ### Endpoint Security Extension
@@ -325,22 +325,22 @@ SecurityAssessor.assess() only calls SystemSecurityChecks.runAll() (8 checks). 1
 |---|-----------|-------|-------|--------|
 | 1 | PHANTOM THREAD — DNS Tunneling | T1071.004 | DNSThreatAnalyzer (entropy/frequency) | Data collected, analyzer not built |
 | 2 | GOLDEN BRIDGE — Supply Chain + Shell | T1195, T1059.004 | SupplyChainAuditor + ShellConfigAnalyzer | Scanners exist, no content analysis |
-| 3 | DEEP CURRENT — Encrypted C2 | T1573.002, T1571 | NetworkAnomalyDetector beaconing | Detector exists, needs wiring |
+| 3 | DEEP CURRENT — Encrypted C2 | T1573.002, T1571 | NetworkAnomalyDetector beaconing | FIXED: wired to SecurityStore data |
 | 4 | SILK ROAD — LOLBin Chain | T1059.002, T1218 | LOLBinDetector | FIXED: 44 LOLBins, 8-level ancestry |
 | 5 | CRYSTAL PALACE — Auth Plugin | T1547.002 | PersistenceScanner | Partial: directory scan, no auth.db |
 | 6 | SHADOW PUPPET — FinderSync Keylogger | T1056.001, T1547.015 | EventTapScanner | Tap detection works, no extension enum |
 | 7 | QUICKSILVER — Chunked HTTP Exfil | T1041, T1030 | NetworkConnection bytes | Data available, analysis not built |
 | 8 | ROOTKIT HOTEL — Kext Persistence | T1547.006 | PersistenceScanner + FIM | File detection works, runtime limited |
 | 9 | WHISPER NET — ICMP Covert Channel | T1095 | Architectural gap | NEFilter sees TCP/UDP only |
-| 10 | GLASS HOUSE — TCC Bypass | T1005, T1552.001 | TCCMonitor | Detector exists, needs FDA+SQLite fix |
+| 10 | GLASS HOUSE — TCC Bypass | T1005, T1552.001 | TCCMonitor | FIXED: reads both TCC.db, deny→allow detection |
 
 ---
 
 ## Priority Fix Order
 
 1. **P0**: Add IrisSecurity to pbxproj + wire HomeView → SecurityHubView
-2. **P0**: Rewrite NetworkAnomalyDetector (lsof -Pni, not netstat)
-3. **P0**: Rewrite TCCMonitor (SQLite with FDA, not CLI)
+2. ~~**P0**: Rewrite NetworkAnomalyDetector~~ STATUS: FIXED (SecurityStore data + lsof fallback)
+3. ~~**P0**: Rewrite TCCMonitor~~ STATUS: FIXED (FDA+sqlite3, timestamp fix, deny→allow detection)
 4. **P0**: Fix ProcessIntegrityChecker (task_info TASK_DYLD_INFO)
 5. **P1**: Add shell config content analysis to PersistenceScanner
 6. **P1**: Wire PersistenceMonitor to ES events

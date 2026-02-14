@@ -52,7 +52,7 @@ Packages: swift-nio (2.94.0+), swift-nio-ssl (2.36.0+), swift-nio-transport-serv
 - Records queries with domain, type, response code, answers, TTL, latency, process name
 - Communicates with app via XPC (DNSXPCProtocol)
 - **CRITICAL**: After system extension install, NEDNSProxyManager must be configured
-  - DNSProxyHelper.enableDNSProxy() is called automatically by ExtensionManager
+  - DNSProxyManager.enableDNSProxy() is called automatically by ExtensionManager
   - Without this step, DNS traffic will NOT be routed to the extension
 
 ### IrisDNS Package (App Side)
@@ -62,8 +62,8 @@ Packages: swift-nio (2.94.0+), swift-nio-ssl (2.36.0+), swift-nio-transport-serv
 - `DNSMonitorView`: HSplitView with query list + detail/stats panel
 - `DoHServerConfig`: Cloudflare, Cloudflare Family, Google, Quad9 with bootstrap IPs
 
-### DNSProxyHelper (in IrisShared)
-- Follows same pattern as NetworkFilterHelper
+### DNSProxyManager (in IrisShared)
+- Follows same pattern as NetworkFilterManager
 - Manages NEDNSProxyManager lifecycle (load/save/removeFromPreferences)
 - providerBundleIdentifier: "com.wudan.iris.dns.extension"
 - serverAddress: "1.1.1.1" (required by API even though we use DoH internally)

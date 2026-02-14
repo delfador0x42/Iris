@@ -16,11 +16,13 @@ class ESClient {
     var processTable: [pid_t: ESProcessInfo] = [:]
     let processLock = NSLock()
 
-    /// Circular event history buffer — retains all EXEC/FORK/EXIT events for the app's history view.
-    /// Bounded to prevent unbounded memory growth in long-running extension.
-    private var eventHistory: [ESProcessEvent] = []
+    /// Ring buffer for event history — O(1) insert, bounded memory.
+    /// Pre-allocated array with head index avoids O(n) removeFirst().
+    private var eventRing: [ESProcessEvent?]
+    private var eventRingHead = 0
+    private var eventRingCount = 0
     private let eventHistoryLock = NSLock()
-    private let maxEventHistory = 5000
+    let maxEventHistory = 5000
 
     /// Serial queue for processing ES events off the callback thread
     private let processingQueue = DispatchQueue(label: "com.wudan.iris.endpoint.processing")
@@ -41,6 +43,7 @@ class ESClient {
     var startupError: String?
 
     init() {
+        eventRing = [ESProcessEvent?](repeating: nil, count: maxEventHistory)
         logger.info("ESClient initialized")
     }
 
@@ -111,27 +114,6 @@ class ESClient {
         isRunning = true
         startupError = nil
         logger.info("[ES] Endpoint Security client fully started — isRunning=true, processTable has \(self.processTable.count) entries")
-    }
-
-    /// Mute known high-noise system paths to reduce event volume.
-    /// These executables spawn/fork frequently as part of normal OS operation.
-    /// They're still captured in the initial seed, just not re-reported on every exec.
-    private func muteNoisyPaths(_ client: OpaquePointer) {
-        let noisyPaths = [
-            "/usr/libexec/xpcproxy",
-            "/usr/libexec/runningboardd",
-            "/usr/sbin/cfprefsd",
-            "/usr/libexec/trustd",
-            "/usr/libexec/securityd",
-            "/usr/libexec/opendirectoryd",
-        ]
-        for path in noisyPaths {
-            let result = es_mute_path_literal(client, path)
-            if result == ES_RETURN_SUCCESS {
-                logger.debug("[ES] Muted path: \(path)")
-            }
-        }
-        logger.info("[ES] Muted \(noisyPaths.count) noisy system paths")
     }
 
     func stop() {
@@ -251,77 +233,35 @@ class ESClient {
         }
     }
 
-    // MARK: - Process Table Seeding
-
-    func seedProcessTable() {
-        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_ALL, 0]
-        var size: Int = 0
-
-        guard sysctl(&mib, 4, nil, &size, nil, 0) == 0, size > 0 else {
-            logger.warning("Failed to get process list size for seeding")
-            return
-        }
-
-        let count = size / MemoryLayout<kinfo_proc>.stride
-        var procList = [kinfo_proc](repeating: kinfo_proc(), count: count)
-
-        guard sysctl(&mib, 4, &procList, &size, nil, 0) == 0 else {
-            logger.warning("Failed to get process list for seeding")
-            return
-        }
-
-        let actualCount = size / MemoryLayout<kinfo_proc>.stride
-        var seeded = 0
-
-        processLock.lock()
-        for i in 0..<actualCount {
-            let proc = procList[i]
-            let pid = proc.kp_proc.p_pid
-            guard pid > 0 else { continue }
-
-            let path = getProcessPath(pid)
-            guard !path.isEmpty else { continue }
-
-            let name = URL(fileURLWithPath: path).lastPathComponent
-            let ppid = proc.kp_eproc.e_ppid
-            let uid = proc.kp_eproc.e_ucred.cr_uid
-            let gid = proc.kp_eproc.e_pcred.p_rgid
-            let csInfo = getCodeSigningInfoForPath(path)
-            let rpid = es_responsibility_get_pid_responsible_for_pid(pid)
-            let responsiblePid: Int32 = (rpid > 0 && rpid != pid) ? rpid : 0
-
-            processTable[pid] = ESProcessInfo(
-                pid: pid, ppid: ppid, responsiblePid: responsiblePid,
-                path: path, name: name,
-                arguments: [], userId: uid, groupId: gid,
-                codeSigningInfo: csInfo, timestamp: Date()
-            )
-            seeded += 1
-        }
-        processLock.unlock()
-
-        logger.info("Seeded process table with \(seeded) existing processes")
-    }
-
     // MARK: - Event History
 
-    /// Record a process event into the bounded circular buffer
-    private func recordEvent(_ type: ESProcessEvent.EventType, process: ESProcessInfo) {
+    /// Record a process event into the ring buffer — O(1) insert, no allocations.
+    func recordEvent(_ type: ESProcessEvent.EventType, process: ESProcessInfo) {
         let event = ESProcessEvent(eventType: type, process: process, timestamp: Date())
         eventHistoryLock.lock()
-        eventHistory.append(event)
-        // Trim oldest events if over capacity
-        if eventHistory.count > maxEventHistory {
-            eventHistory.removeFirst(eventHistory.count - maxEventHistory)
+        let writeIndex = (eventRingHead + eventRingCount) % maxEventHistory
+        eventRing[writeIndex] = event
+        if eventRingCount < maxEventHistory {
+            eventRingCount += 1
+        } else {
+            eventRingHead = (eventRingHead + 1) % maxEventHistory
         }
         eventHistoryLock.unlock()
     }
 
-    /// Get the most recent N events from the history buffer
+    /// Get the most recent N events from the ring buffer — O(n) read only.
     func getRecentEvents(limit: Int) -> [ESProcessEvent] {
         eventHistoryLock.lock()
-        let count = min(limit, eventHistory.count)
-        let events = Array(eventHistory.suffix(count))
+        let count = min(limit, eventRingCount)
+        var events: [ESProcessEvent] = []
+        events.reserveCapacity(count)
+        let start = (eventRingHead + eventRingCount - count) % maxEventHistory
+        for i in 0..<count {
+            let idx = (start + i) % maxEventHistory
+            if let event = eventRing[idx] {
+                events.append(event)
+            }
+        }
         eventHistoryLock.unlock()
         return events
     }

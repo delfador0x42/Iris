@@ -47,6 +47,9 @@ public struct SettingsView: View {
                     // Threat Intelligence Section
                     threatIntelligenceSection
 
+                    // Maintenance Section
+                    maintenanceSection
+
                     Spacer()
                 }
                 .padding(32)

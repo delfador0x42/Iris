@@ -116,6 +116,12 @@ public class ExtensionManager: NSObject, ObservableObject {
         dnsExtensionState.isReady
     }
 
+    /// Whether any extension is currently installing (disables reinstall button)
+    public var isAnyExtensionInstalling: Bool {
+        networkExtensionState == .installing || endpointExtensionState == .installing
+            || proxyExtensionState == .installing || dnsExtensionState == .installing
+    }
+
     /// Check if all extensions are ready
     public var areAllExtensionsReady: Bool {
         isNetworkExtensionReady && isEndpointExtensionReady

@@ -33,6 +33,7 @@ extension FlowHandler {
             group.addTask {
                 try? await Task.sleep(nanoseconds: UInt64(Self.maxRelayDuration * 1_000_000_000))
                 connection.cancel()
+                flow.closeReadWithError(nil)
                 flow.closeWriteWithError(nil)
             }
 
@@ -48,7 +49,10 @@ extension FlowHandler {
                     guard let data = result.data, !data.isEmpty else { break }
                     do {
                         try await Self.sendToServer(connection, data: data)
-                    } catch { break }
+                    } catch {
+                        flow.closeReadWithError(nil)
+                        break
+                    }
                 }
                 connection.cancel()
             }

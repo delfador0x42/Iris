@@ -155,6 +155,24 @@ extension ProxyStore {
         }
     }
 
+    // MARK: - CA Distribution
+
+    /// Send the CA certificate and private key to the proxy extension via XPC.
+    /// The app (user) and extension (root) run as different UIDs so they can't
+    /// share keychains. This sends the cert+key data directly over XPC.
+    public func sendCA(certData: Data, keyData: Data) async -> Bool {
+        guard let proxy = getProxy() else {
+            logger.error("Cannot send CA — not connected to proxy extension")
+            return false
+        }
+
+        return await withCheckedContinuation { continuation in
+            proxy.setCA(certData, keyData: keyData) { success in
+                continuation.resume(returning: success)
+            }
+        }
+    }
+
     // MARK: - Private Helpers
 
     func getProxy() -> ProxyXPCProtocol? {

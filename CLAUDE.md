@@ -8,6 +8,12 @@ xcodebuild -project Iris.xcodeproj -scheme Iris -configuration Debug build
 
 # Run tests
 xcodebuild test -scheme Iris -destination 'platform=macOS'
+
+# CLI control (app must be running)
+swift scripts/iris-ctl.swift status        # Dump app status to /tmp/iris-status.json
+swift scripts/iris-ctl.swift reinstall     # Clean reinstall all extensions
+swift scripts/iris-ctl.swift sendCA        # Resend CA to proxy extension
+swift scripts/iris-ctl.swift startProxy    # Enable transparent proxy
 ```
 
 The app requires System Extension approval in System Settings > Privacy & Security.
@@ -40,13 +46,13 @@ Also: CertificateStore (no XPC), SatelliteStore (no XPC), SecurityAssessmentStor
 | IrisProcess | Process monitoring via ES | `ProcessStore.swift`, `ProcessInfo.swift` |
 | IrisNetwork | Network monitoring + firewall rules | `SecurityStore.swift`, `SecurityRule.swift` |
 | IrisDisk | Disk usage scanning | `DiskUsageStore.swift`, `DiskScanner.swift` |
-| IrisSatellite | 3D satellite visualization | `SatelliteStore.swift`, `Renderer.swift` |
+| IrisSatellite | 3D satellite visualization | `SatelliteStore.swift`, `SatelliteView.swift` |
 | IrisCertificates | CA/leaf cert generation, keychain | `CertificateGenerator.swift`, `CertificateStore.swift` |
 | IrisWiFi | WiFi monitoring via CoreWLAN | `WiFiStore.swift`, `WiFiMonitorView.swift` |
 | IrisProxy | Proxy data models (shared types) | `ProxyStore.swift`, `ProxyMonitorView.swift` |
 | IrisDNS | DNS monitoring, DoH client, DNS models | `DNSStore.swift`, `DNSMonitorView.swift`, `DoHClient.swift` |
 | IrisSecurity | APT detection scanners, evidence model, security views | `SecurityAssessor.swift`, `ProcessAnomaly.swift` |
-| IrisApp | Main UI, home screen, settings | `HomeView.swift`, `SettingsView.swift` |
+| IrisApp | Main UI, home screen, settings, CLI handler | `HomeView.swift`, `SettingsView.swift`, `CLICommandHandler.swift` |
 
 ## Key Entry Points
 
@@ -64,6 +70,7 @@ Also: CertificateStore (no XPC), SatelliteStore (no XPC), SecurityAssessmentStor
 | Proxy flow handling | `AppProxyProvider.swift` → `FlowHandler` actor |
 | Security scans | `SecurityHubView.swift` → `ThreatScanView.swift` |
 | Main navigation | `HomeView.swift` (circular stone menu, 8 buttons) |
+| CLI remote control | `CLICommandHandler.swift` ← `scripts/iris-ctl.swift` |
 
 ## System Extensions
 
@@ -109,12 +116,18 @@ public final class FooStore: ObservableObject {
 - App → Extension: `NSXPCConnection` with Mach service name
 - Service names: `99HGW2AR62.com.wudan.iris.{network,endpoint,proxy,dns}.xpc`
 - Data format: JSON-encoded structs sent as `[Data]` arrays
-- Protocols defined in: `Packages/IrisShared/Sources/IrisShared/Protocols/`
+- Protocols defined in: `Shared/` (compiled into all 6 targets)
 - Extension side: `NSXPCListener(machServiceName:)` + delegate
 
 ### Model Requirements
 
 All models: `Identifiable, Sendable, Codable, Equatable`
+
+### File Splitting Pattern
+
+When a file exceeds ~250 lines, split using `FileName+Category.swift`:
+- Change `private` → `internal` for properties/methods accessed cross-file
+- Category name describes WHAT, not "Helpers": `+Formatting`, `+NetworkIO`, `+ProcessParsing`
 
 ## Entitlements
 
@@ -136,7 +149,7 @@ All entitlements files already include these NE provider types:
 7. **NEAppProxyTCPFlow gives raw bytes**: Can't use NWConnection TLS for client-facing side. TLSSession.swift bridges this via SSLSetIOFuncs callbacks.
 8. **No Package.swift files**: Packages are Xcode-managed local packages, not standalone SPM. Configure via Xcode project.
 9. **All packages compile into one module**: Cross-package `import IrisShared` fails — all packages compile into module `Iris`. Just use the types directly.
-10. **NEDNSProxyManager required**: After DNS extension activates, MUST configure NEDNSProxyManager or DNS traffic won't route to extension. DNSProxyHelper handles this.
+10. **NEDNSProxyManager required**: After DNS extension activates, MUST configure NEDNSProxyManager or DNS traffic won't route to extension. DNSProxyManager handles this.
 11. **DNS XPC app group**: Main app entitlements MUST include `$(TeamIdentifierPrefix)com.wudan.iris.dns.xpc` for DNS XPC to work.
 12. **DNS over TCP**: Uses 2-byte big-endian length prefix (RFC 1035 Section 4.2.2). Don't assume DNS is UDP-only.
 13. **SWIFT_APPROACHABLE_CONCURRENCY=YES**: Crashes compiler on IrisProxyExtension — set to NO for that target.
@@ -145,6 +158,10 @@ All entitlements files already include these NE provider types:
 16. **`import` at bottom of file**: Can crash Swift compiler — always put imports at top.
 17. **`for i in array.indices` + `await`**: If array is `@Published`, another task can replace it during suspension → index out of bounds. Fix: snapshot before loop, apply after.
 18. **Shared/ can't have DESIGN.md**: Xcode copies it into all extension bundles, causing duplicate output conflicts.
+19. **Reinstall chain**: `pendingOperation` must stay `.reinstallAfterCleanup` until DNS (final) completes, or the chain breaks after the first extension.
+20. **secd unreachable from extensions**: Extensions run as root, can't access security daemon. Use `SecKeychainCreate` (legacy file-based keychain in /tmp) for identity creation.
+21. **NE config persistence**: `cleanConfiguration()` is destructive — only use for clean reinstall, not on every `enableProxy()` call. Configs persist across app restarts.
+22. **OS log levels**: `.info` logs don't persist in unified log — use `.error` for diagnostics you need to read via `log show`.
 
 ## Don't Do This
 
@@ -153,6 +170,7 @@ All entitlements files already include these NE provider types:
 - **Don't put multiple views in one file** - Split into separate files
 - **Don't hardcode magic numbers** - Named constants with comments
 - **Don't use SSLCreateContext for new code** - It's deprecated, TLS 1.2 max
+- **Don't name split files `+Helpers`** - Use descriptive names: `+Formatting`, `+NetworkIO`, `+ProcessParsing`
 
 ## Testing
 
@@ -174,12 +192,16 @@ All entitlements files already include these NE provider types:
 ```
 iris/
 ├── Shared/                     # 11 files: XPC protocols, HTTPParser, DEREncoder, CaptureSegment, AtomicFlag (compiled into all 6 targets)
-├── IrisApp/                    # App entry point (IrisApp.swift)
+├── IrisApp/                    # App entry point + CLI handler
+│   ├── IrisApp.swift           # @main App struct, startup sequence (CA → proxy → sendCA)
+│   └── CLICommandHandler.swift # DistributedNotificationCenter command receiver
 ├── IrisNetworkExtension/       # Network filter extension (NEFilterDataProvider)
 ├── IrisEndpointExtension/      # Endpoint security extension (ESClient)
-├── IrisProxyExtension/         # App proxy extension (~19 files, +Category split pattern)
+│   ├── ESClient.swift          # ES client + O(1) ring buffer (+ProcessParsing, +Seeding)
+│   └── main.swift
+├── IrisProxyExtension/         # App proxy extension (~20 files, +Category split pattern)
 │   ├── AppProxyProvider.swift  # Flow interception entry point
-│   ├── FlowHandler.swift       # Routes to MITM, HTTP, or passthrough (+4 split files)
+│   ├── FlowHandler.swift       # Routes to MITM, HTTP, or passthrough (+NetworkIO, +HTTPRelay, +Passthrough, +MITMRelay)
 │   ├── TLSInterceptor.swift    # Per-host cert generation (+ASN1, +CertBuilder, +DERParsing)
 │   ├── TLSSession.swift        # SSLCreateContext wrapper (+Handshake, +IOCallbacks, +ReadWrite)
 │   ├── ProxyXPCService.swift   # XPC listener (+FlowManagement, +XPCProtocol)
@@ -190,16 +212,24 @@ iris/
 │   ├── ExtensionDoHClient.swift # Lightweight DoH client using IP addresses directly
 │   ├── DNSExtensionXPCService.swift # XPC service for app communication
 │   └── main.swift
+├── scripts/
+│   ├── iris-ctl.swift          # CLI controller — sends commands to running app
+│   ├── iris-logs.sh            # Stream extension logs with filters
+│   ├── iris-test-proxy.sh      # End-to-end MITM pipeline test
+│   ├── iris-diag.sh            # System diagnostics
+│   ├── session-context.sh      # SessionStart hook (git, extensions, proxy, CA)
+│   ├── verify-build.sh         # Stop hook (blocks if build fails)
+│   └── swift-format-hook.sh    # PostToolUse hook (auto-format + size guard)
 ├── Packages/
 │   ├── IrisShared/             # ExtensionManager, ExtensionTypes, XPC protocols, errors
-│   ├── IrisProcess/            # Process monitoring
-│   ├── IrisNetwork/            # Network monitor (SecurityStore, IPDetailPopover)
+│   ├── IrisProcess/            # Process monitoring (Monitor/History tabs, tree view)
+│   ├── IrisNetwork/            # Network monitor (SecurityStore, IPDetailPopover, firewall rules)
 │   ├── IrisDisk/               # Disk usage
 │   ├── IrisSatellite/          # 3D satellite (Metal)
-│   ├── IrisCertificates/       # CA + leaf cert generation
+│   ├── IrisCertificates/       # CA + leaf cert generation, KeychainManager
 │   ├── IrisWiFi/               # WiFi monitoring (CoreWLAN + system_profiler)
 │   ├── IrisProxy/              # Proxy UI (ProxyStore, ProxyMonitorView, HTTPFlowDetailView)
-│   ├── IrisSecurity/            # APT detection (20+ scanners, evidence model, views)
+│   ├── IrisSecurity/           # APT detection (20 scanners, evidence model, 15 views)
 │   ├── IrisDNS/                # DNS monitoring
 │   │   ├── Models/             # DNSMessage.swift, DNSQuery.swift
 │   │   ├── Services/           # DoHClient.swift, DNSMessageParser.swift
@@ -216,23 +246,29 @@ iris/
 - Private frameworks ARE accessible and can be used
 - References: `references/program_examples/` has airport, mitmproxy, WARP binaries
 
-## Current Development State (2026-02-12)
+## Current Development State (2026-02-14)
 
-All 5 targets build (including CodeSign). 11 packages, 4 system extensions, 297 Swift files / 37.5K lines.
+All 5 targets build (including CodeSign). 11 packages, 4 system extensions, 305 Swift files / 39.5K lines.
 
-**All features working:** Network filter + firewall rules, proxy MITM, WiFi, disk, satellite, process monitoring, certificates, DNS, security scanning. All packages and extensions in Xcode project.
+**All features working:** Network filter + firewall rules, proxy MITM, WiFi, disk, satellite, process monitoring, certificates, DNS, security scanning, CLI remote control. All packages and extensions in Xcode project.
 
-**File size distribution:** 1 file >300 (shader, exempted), 19 in 251-300 (acceptable), 76 in 151-250 (sweet spot), 154 in 51-150, 47 under 50. Zero generic file names, zero dead code.
+**File size distribution:** 1 file >300 (shader, exempted), 22 in 251-300 (acceptable), 79 in 151-250 (sweet spot), 158 in 51-150, 45 under 50. Zero generic file names, zero dead code.
 
-**Process Monitor:** Two-view system via Monitor/History tabs. Monitor view: HSplitView with suspicious processes (left, live 2s refresh) + parent-child tree (right, 30s snapshot). History view: chronological timeline of all processes seen this session, with live/exited status. ES extension records EXEC/FORK/EXIT events in a 5000-entry circular buffer; app fetches via `getRecentEvents()` XPC to catch short-lived processes between polls.
+**Process Monitor:** Two-view system via Monitor/History tabs. Monitor view: HSplitView with suspicious processes (left, live 2s refresh) + parent-child tree (right, 30s snapshot). History view: chronological timeline of all processes seen this session, with live/exited status. ES extension records EXEC/FORK/EXIT events in a 5000-entry O(1) ring buffer; app fetches via `getRecentEvents()` XPC to catch short-lived processes between polls.
 
 **DNS Tab:** DNS monitoring is a tab in Network Monitor (`NetworkViewMode.dns`), not a standalone view. Uses its own extension status (separate from network filter). Home screen DNS button is a stub.
 
 **Firewall:** Process dedup by signing identity (`identityKey`), SecurityRule CRUD via XPC, rule persistence (JSON in ApplicationSupport), inline allow/block in UI, connection conversation view with timestamped CaptureSegments.
 
-**IrisSecurity (62 files, ~9K lines):** 20+ scanners, evidence-based scoring (PersistenceScanner), IPSW baseline structure (baseline-25C56.json — empty, needs data). ProcessEnumeration shared helper. SigningVerifier with Team ID + hardened runtime. ProcessAnomaly factories (.filesystem(), .forProcess()). All scanners wired to views. Services/ is flat (33 files) — scanner names are descriptive.
+**IrisSecurity (62 files, ~9K lines):** 20 scanners, evidence-based scoring (PersistenceScanner), IPSW baseline structure (baseline-25C56.json, 50KB). ProcessEnumeration shared helper. SigningVerifier with Team ID + hardened runtime. ProcessAnomaly factories (.filesystem(), .forProcess()). All scanners wired to 15 views. Services/ is flat (33 files) — scanner names are descriptive.
 
-**Still broken (architectural):** TCCMonitor (SIP blocks TCC.db), NetworkAnomalyDetector (netstat has no PIDs on macOS), HTTP pipeline (only first request per connection captured).
+**CLI Toolchain:** `CLICommandHandler` in app listens for `DistributedNotificationCenter` commands. `scripts/iris-ctl.swift` sends commands and reads `/tmp/iris-status.json`. Supports: status, reinstall, startProxy, stopProxy, sendCA, checkExtensions.
+
+**Proxy MITM:** CA generated in app → sent to extension via XPC. Per-host certs via temp file-based keychain (`SecKeychainCreate` in /tmp). Thread-safe CA access via `caLock`. `TransparentProxyManager.ensureRunning()` reconnects on app launch. `enableProxy()` only called during installation.
+
+**Now working (SIP disabled):** TCCMonitor reads both user and system TCC.db via sqlite3 CLI, flags suspicious permission grants, wired to SecurityHubView. NetworkAnomalyDetector uses `lsof -i -P -n -F pcn` for PID-to-connection mapping (not netstat), detects C2 beaconing via coefficient of variation analysis.
+
+**Still broken (architectural):** HTTP pipeline (race condition in `resetForNextRequest()` — clears request buffer before next request data is preserved; needs body-boundary-aware parsing with Content-Length tracking).
 
 **Architecture is optimal:** NEFilterDataProvider + NEAppProxyProvider + NEDNSProxyProvider. NEPacketTunnelProvider was researched and rejected (see DESIGN_DECISIONS.md).
 

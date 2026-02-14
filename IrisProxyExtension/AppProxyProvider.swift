@@ -47,13 +47,15 @@ class AppProxyProvider: NETransparentProxyProvider {
         // flows to route to this extension. Without this, no flows arrive.
         // Direction MUST be .outbound per Apple docs.
         let settings = NETransparentProxyNetworkSettings(tunnelRemoteAddress: "127.0.0.1")
+        // Only route TCP flows to this extension. Using .any floods handleNewFlow()
+        // with UDP flows (all returning false), which is known to cause proxy disconnection.
         settings.includedNetworkRules = [
             NENetworkRule(
                 remoteNetwork: nil,
                 remotePrefix: 0,
                 localNetwork: nil,
                 localPrefix: 0,
-                protocol: .any,
+                protocol: .TCP,
                 direction: .outbound
             )
         ]
@@ -170,5 +172,12 @@ class AppProxyProvider: NETransparentProxyProvider {
             "activeFlows": activeFlowCount(),
             "version": "1.0.0"
         ]
+    }
+
+    /// Set CA certificate via XPC (app sends cert+key to extension).
+    func setCA(certData: Data, keyData: Data) -> Bool {
+        guard let flowHandler = flowHandler else { return false }
+        // tlsInterceptor is a let property on the actor; TLSInterceptor is @unchecked Sendable
+        return flowHandler.tlsInterceptor.setCA(certData: certData, keyData: keyData)
     }
 }

@@ -31,7 +31,7 @@ Any app → DNS lookup (A/AAAA/CNAME/...)
   Uses standard URLSession. DoT (port 853) is easily fingerprinted.
 - **TCP + UDP handling** — DNS over TCP uses a 2-byte length prefix per
   RFC 1035 4.2.2. The extension handles both transport types.
-- **NEDNSProxyManager auto-configuration** — DNSProxyHelper configures
+- **NEDNSProxyManager auto-configuration** — DNSProxyManager configures
   NEDNSProxyManager after the extension activates. This was a critical
   missing piece — the extension won't receive flows without it.
 - **Wire format preserved** — queries forwarded as raw bytes to DoH server
@@ -43,4 +43,4 @@ Any app → DNS lookup (A/AAAA/CNAME/...)
 - `DNSProxyProvider+Parsing.swift` — DNS wire format parsing helpers
 - `ExtensionDoHClient.swift` — Lightweight DoH client (IP-based, no DNS needed)
 - `DNSExtensionXPCService.swift` — Mach XPC listener, DNSXPCProtocol
-- DNSProxyHelper lives in `Packages/IrisShared/` (configures NEDNSProxyManager)
+- DNSProxyManager lives in `Packages/IrisShared/` (configures NEDNSProxyManager)

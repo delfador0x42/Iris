@@ -11,108 +11,139 @@ import Foundation
 
 /// Lock-protected reference type for shared relay state.
 final class RelayState: @unchecked Sendable {
-    private let lock = NSLock()
-    private var _requestBuffer = Data()
-    private var _responseBuffer = Data()
-    private var _hasRequest = false
-    private var _hasResponse = false
-    private var _requestCount = 0
-    private var _currentFlowId: UUID?
+  private let lock = NSLock()
+  private var _requestBuffer = Data()
+  private var _responseBuffer = Data()
+  private var _hasRequest = false
+  private var _hasResponse = false
+  private var _requestCount = 0
+  private var _currentFlowId: UUID?
+  private var _requestMessageSize: Int?
+  private var _responseMessageSize: Int?
 
-    /// Max buffer size per direction (16 MB) to prevent unbounded growth
-    static let maxBufferSize = 16 * 1024 * 1024
+  /// Max buffer size per direction (16 MB) to prevent unbounded growth
+  static let maxBufferSize = 16 * 1024 * 1024
 
-    var hasRequest: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return _hasRequest
+  var hasRequest: Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    return _hasRequest
+  }
+
+  var hasResponse: Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    return _hasResponse
+  }
+
+  func appendToRequestBuffer(_ data: Data) {
+    lock.lock()
+    if _requestBuffer.count < Self.maxBufferSize {
+      _requestBuffer.append(data)
     }
+    lock.unlock()
+  }
 
-    var hasResponse: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return _hasResponse
+  func appendToResponseBuffer(_ data: Data) {
+    lock.lock()
+    if _responseBuffer.count < Self.maxBufferSize {
+      _responseBuffer.append(data)
     }
+    lock.unlock()
+  }
 
-    func appendToRequestBuffer(_ data: Data) {
-        lock.lock()
-        if _requestBuffer.count < Self.maxBufferSize {
-            _requestBuffer.append(data)
-        }
-        lock.unlock()
-    }
+  func getRequestBuffer() -> Data {
+    lock.lock()
+    defer { lock.unlock() }
+    return _requestBuffer
+  }
 
-    func appendToResponseBuffer(_ data: Data) {
-        lock.lock()
-        if _responseBuffer.count < Self.maxBufferSize {
-            _responseBuffer.append(data)
-        }
-        lock.unlock()
-    }
+  func getResponseBuffer() -> Data {
+    lock.lock()
+    defer { lock.unlock() }
+    return _responseBuffer
+  }
 
-    func getRequestBuffer() -> Data {
-        lock.lock()
-        defer { lock.unlock() }
-        return _requestBuffer
-    }
+  /// Access request buffer under lock without copying
+  func withRequestBuffer<T>(_ body: (Data) -> T) -> T {
+    lock.lock()
+    defer { lock.unlock() }
+    return body(_requestBuffer)
+  }
 
-    func getResponseBuffer() -> Data {
-        lock.lock()
-        defer { lock.unlock() }
-        return _responseBuffer
-    }
+  /// Access response buffer under lock without copying
+  func withResponseBuffer<T>(_ body: (Data) -> T) -> T {
+    lock.lock()
+    defer { lock.unlock() }
+    return body(_responseBuffer)
+  }
 
-    /// Access request buffer under lock without copying
-    func withRequestBuffer<T>(_ body: (Data) -> T) -> T {
-        lock.lock()
-        defer { lock.unlock() }
-        return body(_requestBuffer)
-    }
+  /// The flow ID for the current request/response cycle (set when request is captured)
+  var currentFlowId: UUID? {
+    lock.lock()
+    defer { lock.unlock() }
+    return _currentFlowId
+  }
 
-    /// Access response buffer under lock without copying
-    func withResponseBuffer<T>(_ body: (Data) -> T) -> T {
-        lock.lock()
-        defer { lock.unlock() }
-        return body(_responseBuffer)
-    }
+  /// Number of requests captured on this connection (0-indexed)
+  var requestCount: Int {
+    lock.lock()
+    defer { lock.unlock() }
+    return _requestCount
+  }
 
-    /// The flow ID for the current request/response cycle (set when request is captured)
-    var currentFlowId: UUID? {
-        lock.lock()
-        defer { lock.unlock() }
-        return _currentFlowId
-    }
+  func markRequestCaptured(flowId: UUID) {
+    lock.lock()
+    _hasRequest = true
+    _currentFlowId = flowId
+    lock.unlock()
+  }
 
-    /// Number of requests captured on this connection (0-indexed)
-    var requestCount: Int {
-        lock.lock()
-        defer { lock.unlock() }
-        return _requestCount
-    }
+  func markResponseCaptured() {
+    lock.lock()
+    _hasResponse = true
+    lock.unlock()
+  }
 
-    func markRequestCaptured(flowId: UUID) {
-        lock.lock()
-        _hasRequest = true
-        _currentFlowId = flowId
-        lock.unlock()
-    }
+  /// Set the total byte size of the current request (headers + body).
+  /// Used to preserve leftover bytes for the next pipelined request.
+  func setRequestMessageSize(_ size: Int) {
+    lock.lock()
+    _requestMessageSize = size
+    lock.unlock()
+  }
 
-    func markResponseCaptured() {
-        lock.lock()
-        _hasResponse = true
-        lock.unlock()
-    }
+  /// Set the total byte size of the current response (headers + body).
+  func setResponseMessageSize(_ size: Int) {
+    lock.lock()
+    _responseMessageSize = size
+    lock.unlock()
+  }
 
-    /// Reset parsing state for the next request on a keep-alive connection.
-    /// Called after a complete request/response cycle is captured.
-    func resetForNextRequest() {
-        lock.lock()
-        _hasRequest = false
-        _hasResponse = false
-        _requestBuffer.removeAll(keepingCapacity: true)
-        _responseBuffer.removeAll(keepingCapacity: true)
-        _requestCount += 1
-        _currentFlowId = nil
-        lock.unlock()
+  /// Reset parsing state for the next request on a keep-alive connection.
+  /// Preserves any leftover data beyond the current message boundaries
+  /// (handles HTTP pipelining where the next request arrives before
+  /// the current response completes).
+  func resetForNextRequest() {
+    lock.lock()
+    // Preserve leftover request data beyond current message boundary
+    if let reqSize = _requestMessageSize, _requestBuffer.count > reqSize {
+      _requestBuffer = Data(_requestBuffer[reqSize...])
+    } else {
+      _requestBuffer.removeAll(keepingCapacity: true)
     }
+    // Preserve leftover response data beyond current message boundary
+    if let respSize = _responseMessageSize, _responseBuffer.count > respSize {
+      _responseBuffer = Data(_responseBuffer[respSize...])
+    } else {
+      _responseBuffer.removeAll(keepingCapacity: true)
+    }
+    _hasRequest = false
+    _hasResponse = false
+    _requestCount += 1
+    _currentFlowId = nil
+    _requestMessageSize = nil
+    _responseMessageSize = nil
+    lock.unlock()
+  }
 }

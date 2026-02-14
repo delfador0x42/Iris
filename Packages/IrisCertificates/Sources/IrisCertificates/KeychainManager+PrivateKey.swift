@@ -7,8 +7,8 @@ import os.log
 extension KeychainManager {
 
     /// Saves the CA private key to the Keychain.
-    /// - Parameter privateKey: The SecKey to store
-    /// - Throws: KeychainError if storage fails
+    /// Uses data protection keychain with shared access group so the proxy
+    /// extension (running as root) can read items stored by the app (running as user).
     public func saveCAPrivateKey(_ privateKey: SecKey) throws {
         logger.info("Saving CA private key to Keychain")
 
@@ -29,9 +29,10 @@ extension KeychainManager {
             kSecAttrKeyType as String: kSecAttrKeyTypeRSA,
             kSecAttrKeyClass as String: kSecAttrKeyClassPrivate,
             kSecAttrLabel as String: caPrivateKeyLabel,
-            kSecAttrService as String: serviceName,
             kSecValueData as String: keyData,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
+            kSecUseDataProtectionKeychain as String: true,
+            kSecAttrAccessGroup as String: keychainAccessGroup
         ]
 
         let status = SecItemAdd(query as CFDictionary, nil)
@@ -45,8 +46,6 @@ extension KeychainManager {
     }
 
     /// Loads the CA private key from the Keychain.
-    /// - Returns: The SecKey if found, nil otherwise
-    /// - Throws: KeychainError if loading fails (except for not found)
     public func loadCAPrivateKey() throws -> SecKey? {
         logger.debug("Loading CA private key from Keychain")
 
@@ -55,7 +54,9 @@ extension KeychainManager {
             kSecAttrApplicationTag as String: caPrivateKeyLabel.data(using: .utf8)!,
             kSecAttrKeyType as String: kSecAttrKeyTypeRSA,
             kSecAttrKeyClass as String: kSecAttrKeyClassPrivate,
-            kSecReturnData as String: true
+            kSecReturnData as String: true,
+            kSecUseDataProtectionKeychain as String: true,
+            kSecAttrAccessGroup as String: keychainAccessGroup
         ]
 
         var result: AnyObject?
@@ -76,7 +77,6 @@ extension KeychainManager {
             throw KeychainError.invalidDataFormat
         }
 
-        // Create SecKey from data
         let attributes: [String: Any] = [
             kSecAttrKeyType as String: kSecAttrKeyTypeRSA,
             kSecAttrKeyClass as String: kSecAttrKeyClassPrivate
@@ -94,7 +94,6 @@ extension KeychainManager {
     }
 
     /// Deletes the CA private key from the Keychain.
-    /// - Throws: KeychainError if deletion fails
     public func deleteCAPrivateKey() throws {
         logger.info("Deleting CA private key from Keychain")
 
@@ -102,7 +101,9 @@ extension KeychainManager {
             kSecClass as String: kSecClassKey,
             kSecAttrApplicationTag as String: caPrivateKeyLabel.data(using: .utf8)!,
             kSecAttrKeyType as String: kSecAttrKeyTypeRSA,
-            kSecAttrKeyClass as String: kSecAttrKeyClassPrivate
+            kSecAttrKeyClass as String: kSecAttrKeyClassPrivate,
+            kSecUseDataProtectionKeychain as String: true,
+            kSecAttrAccessGroup as String: keychainAccessGroup
         ]
 
         let status = SecItemDelete(query as CFDictionary)

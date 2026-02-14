@@ -96,4 +96,11 @@ extension ProxyXPCService: ProxyXPCProtocol {
         logger.debug("XPC: isInterceptionEnabled")
         reply(interceptionEnabled)
     }
+
+    func setCA(_ certData: Data, keyData: Data, reply: @escaping (Bool) -> Void) {
+        logger.info("XPC: setCA (cert: \(certData.count) bytes, key: \(keyData.count) bytes)")
+        let success = provider?.setCA(certData: certData, keyData: keyData) ?? false
+        logger.info("XPC: setCA result: \(success)")
+        reply(success)
+    }
 }

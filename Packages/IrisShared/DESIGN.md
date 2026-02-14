@@ -21,7 +21,7 @@ App → ExtensionManager.installExtension(.network)
   → OSSystemExtensionManager.submitRequest()
   → delegate callbacks: needsApproval / completed / failed
   → update @Published state
-  → on success: NetworkFilterHelper.enableFilter() / DNSProxyHelper.enable()
+  → on success: NetworkFilterManager.enableFilter() / DNSProxyManager.enable()
   → fire onNetworkExtensionReady callback → stores connect via XPC
 ```
 
@@ -44,6 +44,6 @@ App → ExtensionManager.installExtension(.network)
 - `Services/ExtensionManager+Delegate.swift` — OSSystemExtensionRequestDelegate
 - `Services/ExtensionManager+Filter.swift` — NE filter, DNS proxy, FDA, settings
 - `Services/ExtensionTypes.swift` — ExtensionType, ExtensionState, FilterState enums
-- `Services/NetworkFilterHelper.swift` — NEFilterManager configuration
-- `Services/DNSProxyHelper.swift` — NEDNSProxyManager configuration
+- `Services/NetworkFilterManager.swift` — NEFilterManager configuration
+- `Services/DNSProxyManager.swift` — NEDNSProxyManager configuration
 - `Errors/IrisError.swift` — Shared error types
