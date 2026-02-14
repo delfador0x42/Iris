@@ -174,7 +174,7 @@ private struct SuspiciousProcessRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
-                Text("\(process.pid)")
+                Text(String(process.pid))
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundColor(.red.opacity(0.7))
                     .frame(width: 50, alignment: .trailing)

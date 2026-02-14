@@ -11,7 +11,7 @@ struct ProcessTreeRow: View {
         HStack(spacing: 4) {
             treeIndent
 
-            Text("\(entry.process.pid)")
+            Text(String(entry.process.pid))
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundColor(.gray)
                 .frame(width: 50, alignment: .trailing)
@@ -65,15 +65,10 @@ struct ProcessTreeRow: View {
         entry.depth > 0 ? entry.process.name : entry.process.displayName
     }
 
-    /// Strip parent bundle prefix for children within same .app bundle
     private var pathDisplay: String {
-        var displayPath = entry.process.path
-        if let prefix = entry.parentBundlePath, displayPath.hasPrefix(prefix) {
-            displayPath = String(displayPath.dropFirst(prefix.count))
-        }
         let args = entry.process.arguments.dropFirst()
-        if args.isEmpty { return displayPath }
-        return displayPath + " " + args.joined(separator: " ")
+        if args.isEmpty { return entry.process.path }
+        return entry.process.path + " " + args.joined(separator: " ")
     }
 
     // MARK: - Tree Characters (ps -axjf style)

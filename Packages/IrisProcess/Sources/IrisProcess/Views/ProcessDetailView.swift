@@ -35,14 +35,17 @@ struct ProcessDetailView: View {
                     }
                     .padding(.bottom, 10)
 
+                    // Process lineage (spawn chain)
+                    processLineage
+
                     // Basic info
                     DetailSection(title: "Process Information") {
                         DetailRow(label: "Name", value: process.name)
-                        DetailRow(label: "PID", value: "\(process.pid)")
-                        DetailRow(label: "Parent PID", value: "\(process.ppid)")
+                        DetailRow(label: "PID", value: String(process.pid))
+                        DetailRow(label: "Parent PID", value: String(process.ppid))
                         DetailRow(label: "Path", value: process.path)
-                        DetailRow(label: "User ID", value: "\(process.userId)")
-                        DetailRow(label: "Group ID", value: "\(process.groupId)")
+                        DetailRow(label: "User ID", value: String(process.userId))
+                        DetailRow(label: "Group ID", value: String(process.groupId))
                         DetailRow(label: "Has Man Page", value: manPageStatusText)
                     }
 
@@ -51,8 +54,8 @@ struct ProcessDetailView: View {
                         DetailSection(title: "Resources") {
                             DetailRow(label: "CPU Usage", value: res.formattedCPU)
                             DetailRow(label: "Memory (RSS)", value: res.formattedMemory)
-                            DetailRow(label: "Threads", value: "\(res.threadCount)")
-                            DetailRow(label: "Open Files", value: "\(res.openFileCount)")
+                            DetailRow(label: "Threads", value: String(res.threadCount))
+                            DetailRow(label: "Open Files", value: String(res.openFileCount))
                         }
                     }
 
@@ -187,6 +190,67 @@ struct ProcessDetailView: View {
         isLoadingManPage = true
         manPageContent = await ManPageStore.shared.getManPage(for: process.name)
         isLoadingManPage = false
+    }
+
+    // MARK: - Process Lineage
+
+    @ViewBuilder
+    private var processLineage: some View {
+        let chain = buildAncestorChain()
+        if chain.count > 1 {
+            DetailSection(title: "Process Lineage") {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(chain.indices, id: \.self) { i in
+                        let ancestor = chain[i]
+                        let isTarget = ancestor.pid == process.pid
+                        HStack(spacing: 4) {
+                            // Tree indent
+                            if i > 0 {
+                                HStack(spacing: 0) {
+                                    ForEach(0..<(i - 1), id: \.self) { _ in
+                                        Text("   ")
+                                            .font(.system(size: 11, design: .monospaced))
+                                    }
+                                    Text(i == chain.count - 1 ? "└─ " : "├─ ")
+                                        .font(.system(size: 11, design: .monospaced))
+                                        .foregroundColor(.cyan.opacity(0.4))
+                                }
+                            }
+                            Text(String(ancestor.pid))
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundColor(.gray)
+                            Text(ancestor.name)
+                                .font(.system(size: 12, weight: isTarget ? .bold : .regular))
+                                .foregroundColor(isTarget ? .cyan : .white)
+                            if isTarget {
+                                Text("(this)")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.cyan.opacity(0.6))
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Walk ppid chain up from this process to the root
+    private func buildAncestorChain() -> [ProcessInfo] {
+        let allProcesses = ProcessStore.shared.processes
+        let byPid = Dictionary(allProcesses.map { ($0.pid, $0) }, uniquingKeysWith: { a, _ in a })
+
+        var chain: [ProcessInfo] = [process]
+        var current = process
+        var visited: Set<Int32> = [process.pid]
+
+        while current.ppid > 1, let parent = byPid[current.ppid], !visited.contains(parent.pid) {
+            visited.insert(parent.pid)
+            chain.append(parent)
+            current = parent
+        }
+
+        return chain.reversed()
     }
 
     private func severityColor(_ severity: SuspicionSeverity) -> Color {

@@ -115,7 +115,7 @@ private struct HistoryRow: View {
                 .frame(width: 80, alignment: .leading)
 
             // PID
-            Text("\(process.pid)")
+            Text(String(process.pid))
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundColor(rowColor)
                 .frame(width: 60, alignment: .leading)

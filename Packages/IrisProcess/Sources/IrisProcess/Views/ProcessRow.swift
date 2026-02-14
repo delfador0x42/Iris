@@ -9,7 +9,7 @@ struct ProcessRow: View {
     var body: some View {
         HStack(spacing: 0) {
             // PID
-            Text("\(process.pid)")
+            Text(String(process.pid))
                 .font(.system(size: 12, design: .monospaced))
                 .foregroundColor(rowColor)
                 .frame(width: 70, alignment: .leading)

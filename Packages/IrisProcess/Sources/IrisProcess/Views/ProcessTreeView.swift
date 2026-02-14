@@ -29,26 +29,17 @@ struct ProcessTreeView: View {
 
     var body: some View {
         let tree = buildTree(from: processes)
-        let flat = flattenTree(tree)
+        let flat = flattenTree(tree, depth: 1)
 
         ThemedScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
                 ForEach(flat, id: \.entryId) { entry in
-                    VStack(spacing: 0) {
-                        if entry.isNewRootGroup {
-                            Rectangle()
-                                .fill(Color.white.opacity(0.06))
-                                .frame(height: 1)
-                                .padding(.vertical, 4)
-                                .padding(.horizontal, 12)
-                        }
-                        ProcessTreeRow(
-                            entry: entry,
-                            onSelect: { onSelect(entry.process) },
-                            onToggleGroup: entry.groupCount > 1
-                                ? { toggleGroup(entry.process.path) } : nil
-                        )
-                    }
+                    ProcessTreeRow(
+                        entry: entry,
+                        onSelect: { onSelect(entry.process) },
+                        onToggleGroup: entry.groupCount > 1
+                            ? { toggleGroup(entry.process.path) } : nil
+                    )
                 }
             }
             .padding(.vertical, 4)
@@ -68,8 +59,11 @@ struct ProcessTreeView: View {
     // MARK: - Tree Construction
 
     private func buildTree(from processes: [ProcessInfo]) -> [ProcessTreeNode] {
-        let pidSet = Set(processes.map { $0.pid })
-        let childrenByPpid = Dictionary(grouping: processes, by: { $0.ppid })
+        // Skip kernel_task (pid 0) and launchd (pid 1) — their children become roots.
+        // macOS spawns nearly everything via launchd, so keeping it adds a useless wrapper.
+        let visible = processes.filter { $0.pid > 1 }
+        let pidSet = Set(visible.map { $0.pid })
+        let childrenByPpid = Dictionary(grouping: visible, by: { $0.ppid })
 
         func buildNode(_ process: ProcessInfo) -> ProcessTreeNode {
             let kids = childrenByPpid[process.pid]?
@@ -81,7 +75,7 @@ struct ProcessTreeView: View {
             )
         }
 
-        let roots = processes.filter { $0.ppid <= 1 || !pidSet.contains($0.ppid) }
+        let roots = visible.filter { !pidSet.contains($0.ppid) }
         return roots
             .sorted { lhs, rhs in
                 let lk = childrenByPpid[lhs.pid] != nil
