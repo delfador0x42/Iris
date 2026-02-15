@@ -38,6 +38,55 @@ struct ESProcessInfo: Codable {
     }
 }
 
+// MARK: - Security Events (file access, privilege, injection, system changes)
+
+/// Categories of security-relevant events beyond process lifecycle
+enum SecurityEventType: String, Codable {
+    // File operations
+    case fileOpen, fileWrite, fileUnlink, fileRename, fileSetExtattr
+    // Privilege escalation
+    case setuid, setgid, sudo
+    // Code injection
+    case remoteThreadCreate, getTask, ptrace
+    // System changes
+    case kextLoad, mount, tccModify, xpcConnect, btmLaunchItemAdd
+    // Authentication
+    case sshLogin, xprotectMalwareDetected
+}
+
+/// A security event captured by Endpoint Security.
+/// Separate from process lifecycle events to avoid noise drowning out
+/// important detections. Uses sequence numbers for delta XPC fetch.
+struct ESSecurityEvent: Codable, Identifiable {
+    let id: UUID
+    let eventType: SecurityEventType
+    let process: ESProcessInfo
+    let timestamp: Date
+    let targetPath: String?
+    let targetProcess: ESProcessInfo?
+    let detail: String?
+    var sequenceNumber: UInt64
+
+    init(
+        eventType: SecurityEventType,
+        process: ESProcessInfo,
+        timestamp: Date = Date(),
+        targetPath: String? = nil,
+        targetProcess: ESProcessInfo? = nil,
+        detail: String? = nil,
+        sequenceNumber: UInt64 = 0
+    ) {
+        self.id = UUID()
+        self.eventType = eventType
+        self.process = process
+        self.timestamp = timestamp
+        self.targetPath = targetPath
+        self.targetProcess = targetProcess
+        self.detail = detail
+        self.sequenceNumber = sequenceNumber
+    }
+}
+
 // MARK: - Error Types
 
 enum ESClientError: Error, LocalizedError {

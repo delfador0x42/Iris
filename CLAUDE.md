@@ -51,7 +51,7 @@ Also: CertificateStore (no XPC), SatelliteStore (no XPC), SecurityAssessmentStor
 | IrisWiFi | WiFi monitoring via CoreWLAN | `WiFiStore.swift`, `WiFiMonitorView.swift` |
 | IrisProxy | Proxy data models (shared types) | `ProxyStore.swift`, `ProxyMonitorView.swift` |
 | IrisDNS | DNS monitoring, DoH client, DNS models | `DNSStore.swift`, `DNSMonitorView.swift`, `DoHClient.swift` |
-| IrisSecurity | APT detection scanners, evidence model, security views | `SecurityAssessor.swift`, `ProcessAnomaly.swift` |
+| IrisSecurity | 49 scanners, detection engine, 9 rule modules, threat intel, security views | `SecurityAssessor.swift`, `DetectionEngine.swift`, `RuleLoader.swift` |
 | IrisApp | Main UI, home screen, settings, CLI handler | `HomeView.swift`, `SettingsView.swift`, `CLICommandHandler.swift` |
 
 ## Key Entry Points
@@ -197,7 +197,7 @@ iris/
 │   └── CLICommandHandler.swift # DistributedNotificationCenter command receiver
 ├── IrisNetworkExtension/       # Network filter extension (NEFilterDataProvider)
 ├── IrisEndpointExtension/      # Endpoint security extension (ESClient)
-│   ├── ESClient.swift          # ES client + O(1) ring buffer (+ProcessParsing, +Seeding)
+│   ├── ESClient.swift          # ES client, 23 event types (+ProcessLifecycle, +ProcessParsing, +Seeding, +FileEvents, +SecurityEvents, +Muting, +RingBuffer)
 │   └── main.swift
 ├── IrisProxyExtension/         # App proxy extension (~20 files, +Category split pattern)
 │   ├── AppProxyProvider.swift  # Flow interception entry point
@@ -229,7 +229,7 @@ iris/
 │   ├── IrisCertificates/       # CA + leaf cert generation, KeychainManager
 │   ├── IrisWiFi/               # WiFi monitoring (CoreWLAN + system_profiler)
 │   ├── IrisProxy/              # Proxy UI (ProxyStore, ProxyMonitorView, HTTPFlowDetailView)
-│   ├── IrisSecurity/           # APT detection (20 scanners, evidence model, 15 views)
+│   ├── IrisSecurity/           # APT detection (35 scanners, detection engine, rules, threat intel, 15+ views)
 │   ├── IrisDNS/                # DNS monitoring
 │   │   ├── Models/             # DNSMessage.swift, DNSQuery.swift
 │   │   ├── Services/           # DoHClient.swift, DNSMessageParser.swift
@@ -248,27 +248,25 @@ iris/
 
 ## Current Development State (2026-02-14)
 
-All 5 targets build (including CodeSign). 11 packages, 4 system extensions, 305 Swift files / 39.5K lines.
+All 5 targets build (including CodeSign). 11 packages, 4 system extensions, 394 Swift files / 49K lines.
 
-**All features working:** Network filter + firewall rules, proxy MITM, WiFi, disk, satellite, process monitoring, certificates, DNS, security scanning, CLI remote control. All packages and extensions in Xcode project.
+**All features working:** Network filter + firewall rules, proxy MITM (with HTTP pipelining support), WiFi, disk, satellite, process monitoring, certificates, DNS, security scanning + real-time detection engine, CLI remote control. All packages and extensions in Xcode project.
 
-**File size distribution:** 1 file >300 (shader, exempted), 22 in 251-300 (acceptable), 79 in 151-250 (sweet spot), 158 in 51-150, 45 under 50. Zero generic file names, zero dead code.
+**File size distribution:** 1 file >300 (shader, exempted), 21 in 251-300 (acceptable), 84 in 151-250 (sweet spot), 198 in 51-150, 47 under 50. Zero generic file names, zero dead code.
 
-**Process Monitor:** Two-view system via Monitor/History tabs. Monitor view: HSplitView with suspicious processes (left, live 2s refresh) + parent-child tree (right, 30s snapshot). History view: chronological timeline of all processes seen this session, with live/exited status. ES extension records EXEC/FORK/EXIT events in a 5000-entry O(1) ring buffer; app fetches via `getRecentEvents()` XPC to catch short-lived processes between polls.
+**Process Monitor:** Two-view system via Monitor/History tabs. Monitor view: HSplitView with suspicious processes (left, live 2s refresh) + parent-child tree (right, 30s snapshot). History view: chronological timeline of all processes seen this session, with live/exited status. ES extension subscribes to 23 event types (process lifecycle + file + privilege + injection + system + auth), dual ring buffer (5000 process events + 10000 security events), app fetches via `getRecentEvents()` and `getSecurityEventsSince()` XPC.
 
 **DNS Tab:** DNS monitoring is a tab in Network Monitor (`NetworkViewMode.dns`), not a standalone view. Uses its own extension status (separate from network filter). Home screen DNS button is a stub.
 
 **Firewall:** Process dedup by signing identity (`identityKey`), SecurityRule CRUD via XPC, rule persistence (JSON in ApplicationSupport), inline allow/block in UI, connection conversation view with timestamped CaptureSegments.
 
-**IrisSecurity (62 files, ~9K lines):** 20 scanners, evidence-based scoring (PersistenceScanner), IPSW baseline structure (baseline-25C56.json, 50KB). ProcessEnumeration shared helper. SigningVerifier with Team ID + hardened runtime. ProcessAnomaly factories (.filesystem(), .forProcess()). All scanners wired to 15 views. Services/ is flat (33 files) — scanner names are descriptive.
+**IrisSecurity (119 files, ~14K lines):** 49 scanners covering all 12 hunt-script categories (process, network, filesystem, kernel, firmware, identity, IPC, persistence, memory, logs, hardware), real-time detection engine (DetectionEngine + SecurityEventBus + AlertStore), 9 rule modules (CredentialTheft, Persistence, C2, Evasion, Injection, Exfiltration, APT, Correlation), multi-event correlation rules, threat intel database (48 persistence labels, 35 C2 domains, 35 targeted paths, 30 masquerade processes). Evidence-based scoring (PersistenceScanner), IPSW baseline structure (baseline-25C56.json, 50KB). ProcessEnumeration shared helper. SigningVerifier with Team ID + hardened runtime. ProcessAnomaly factories (.filesystem(), .forProcess()). All 49 scanners wired via SecurityAssessor async let. Services/ is flat — scanner names are descriptive.
 
 **CLI Toolchain:** `CLICommandHandler` in app listens for `DistributedNotificationCenter` commands. `scripts/iris-ctl.swift` sends commands and reads `/tmp/iris-status.json`. Supports: status, reinstall, startProxy, stopProxy, sendCA, checkExtensions.
 
-**Proxy MITM:** CA generated in app → sent to extension via XPC. Per-host certs via temp file-based keychain (`SecKeychainCreate` in /tmp). Thread-safe CA access via `caLock`. `TransparentProxyManager.ensureRunning()` reconnects on app launch. `enableProxy()` only called during installation.
+**Proxy MITM:** CA generated in app → sent to extension via XPC. Per-host certs via temp file-based keychain (`SecKeychainCreate` in /tmp). Thread-safe CA access via `caLock`. `TransparentProxyManager.ensureRunning()` reconnects on app launch. `enableProxy()` only called during installation. HTTP pipeline fix: response body completeness tracking (Content-Length + chunked) before resetting for next request.
 
-**Now working (SIP disabled):** TCCMonitor reads both user and system TCC.db via sqlite3 CLI, flags suspicious permission grants, wired to SecurityHubView. NetworkAnomalyDetector uses `lsof -i -P -n -F pcn` for PID-to-connection mapping (not netstat), detects C2 beaconing via coefficient of variation analysis.
-
-**Still broken (architectural):** HTTP pipeline (race condition in `resetForNextRequest()` — clears request buffer before next request data is preserved; needs body-boundary-aware parsing with Content-Length tracking).
+**Now working (SIP disabled):** TCCMonitor reads both user and system TCC.db via sqlite3 CLI, flags suspicious permission grants, wired to SecurityHubView. NetworkAnomalyDetector uses structured NEFilter connection data for PID-to-connection mapping, detects C2 beaconing via coefficient of variation analysis.
 
 **Architecture is optimal:** NEFilterDataProvider + NEAppProxyProvider + NEDNSProxyProvider. NEPacketTunnelProvider was researched and rejected (see DESIGN_DECISIONS.md).
 

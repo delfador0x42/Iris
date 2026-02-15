@@ -13,6 +13,12 @@ import Foundation
 
     func getRecentEvents(limit: Int, reply: @escaping ([Data]) -> Void)
 
+    // MARK: - Security Events
+
+    /// Delta fetch: returns security events with sequenceNumber > sinceSeq.
+    /// Reply includes the current max sequence number and the new events as JSON Data.
+    func getSecurityEventsSince(_ sinceSeq: UInt64, limit: Int, reply: @escaping (UInt64, [Data]) -> Void)
+
     // MARK: - Extension Control
 
     func getStatus(reply: @escaping ([String: Any]) -> Void)

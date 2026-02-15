@@ -174,6 +174,22 @@ extension ESXPCService: EndpointXPCProtocol {
         reply(data)
     }
 
+    func getSecurityEventsSince(_ sinceSeq: UInt64, limit: Int, reply: @escaping (UInt64, [Data]) -> Void) {
+        guard let client = esClient else {
+            logger.warning("[XPC] getSecurityEventsSince — no esClient available")
+            reply(0, [])
+            return
+        }
+
+        let (maxSeq, events) = client.getSecurityEventsSince(sinceSeq, limit: limit)
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+
+        let data = events.compactMap { try? encoder.encode($0) }
+        logger.info("[XPC] getSecurityEventsSince(\(sinceSeq)) → seq=\(maxSeq) events=\(data.count)")
+        reply(maxSeq, data)
+    }
+
     func getStatus(reply: @escaping ([String: Any]) -> Void) {
         let isRunning = esClient?.isRunning ?? false
         let processCount = esClient?.getTrackedProcesses().count ?? 0

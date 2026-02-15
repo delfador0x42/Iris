@@ -47,6 +47,23 @@ extension ProxyXPCService {
     }
   }
 
+  /// Marks a flow as completed with final byte counts.
+  /// Used by passthrough (TCP) and UDP relays when the connection closes.
+  func completeFlow(_ flowId: UUID, bytesIn: Int64, bytesOut: Int64, error: String?) {
+    flowsLock.lock()
+    defer { flowsLock.unlock() }
+
+    if let index = capturedFlows.firstIndex(where: { $0.id == flowId }) {
+      capturedFlows[index].bytesIn = bytesIn
+      capturedFlows[index].bytesOut = bytesOut
+      capturedFlows[index].endTimestamp = Date()
+      if let error = error { capturedFlows[index].error = error }
+      capturedFlows[index].sequenceNumber = nextSequenceNumber
+      nextSequenceNumber += 1
+      notifyFlowUpdate(capturedFlows[index])
+    }
+  }
+
   /// Notifies connected clients about a flow update.
   func notifyFlowUpdate(_ flow: ProxyCapturedFlow) {
     // TODO: Implement push notifications to connected clients

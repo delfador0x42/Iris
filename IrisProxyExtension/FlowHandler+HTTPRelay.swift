@@ -64,7 +64,9 @@ extension FlowHandler {
               // Each request on a keep-alive connection gets its own flow ID
               let currentFlowId = state.requestCount == 0 ? flowId : UUID()
               let capturedFlow = ProxyCapturedFlow(
-                id: currentFlowId, request: capturedRequest, processName: processName)
+                id: currentFlowId, flowType: isSecure ? .https : .http,
+                host: host, port: port,
+                request: capturedRequest, processName: processName)
               state.markRequestCaptured(flowId: currentFlowId)
               xpcService?.addFlow(capturedFlow)
               self.logger.info("Captured: \(request.method) \(url) from \(processName)")
@@ -84,6 +86,7 @@ extension FlowHandler {
       // Server → Client
       group.addTask { [weak self] in
         guard let self = self else { return }
+        var parsedResponseHeaders: HTTPParser.ParsedResponse?
         while true {
           do {
             let serverData = try await Self.receiveFromServer(serverConnection)
@@ -91,8 +94,42 @@ extension FlowHandler {
 
             state.appendToResponseBuffer(serverData)
 
-            if state.hasRequest && !state.hasResponse {
-              if let response = state.withResponseBuffer({ HTTPParser.parseResponse(from: $0) }) {
+            // Step 1: Parse response headers (once per request/response cycle)
+            if state.hasRequest && !state.hasResponse && parsedResponseHeaders == nil {
+              parsedResponseHeaders = state.withResponseBuffer({
+                HTTPParser.parseResponse(from: $0)
+              })
+              if let response = parsedResponseHeaders {
+                // Set message size based on body type
+                let noBody = response.statusCode == 204 || response.statusCode == 304
+                if noBody {
+                  state.setResponseMessageSize(response.headerEndIndex)
+                  state.markResponseBodyComplete(actualSize: response.headerEndIndex)
+                } else if let contentLength = response.contentLength {
+                  state.setResponseMessageSize(response.headerEndIndex + contentLength)
+                }
+                // Chunked: size unknown until terminal chunk — tracked in step 2
+              }
+            }
+
+            // Step 2: Check if response body is fully received
+            if let response = parsedResponseHeaders, !state.hasResponse {
+              let bodyComplete: Bool
+              if response.isChunked {
+                // Walk chunked encoding to find terminal 0-length chunk
+                bodyComplete = state.withResponseBuffer { buf in
+                  let bodyData = Data(buf.dropFirst(response.headerEndIndex))
+                  return HTTPParser.isChunkedBodyComplete(bodyData)
+                }
+                if bodyComplete {
+                  let actualSize = state.withResponseBuffer({ $0.count })
+                  state.markResponseBodyComplete(actualSize: actualSize)
+                }
+              } else {
+                bodyComplete = state.isResponseComplete()
+              }
+
+              if bodyComplete {
                 let elapsed = CFAbsoluteTimeGetCurrent() - startTime
                 let body = state.withResponseBuffer {
                   Self.extractResponseBody(from: $0, response: response)
@@ -102,14 +139,11 @@ extension FlowHandler {
                   httpVersion: response.httpVersion,
                   headers: response.headers, body: body, duration: elapsed
                 )
-                // Track response message boundary for leftover preservation
-                let respBodySize = response.contentLength ?? 0
-                state.setResponseMessageSize(response.headerEndIndex + respBodySize)
                 let updateId = state.currentFlowId ?? flowId
                 state.markResponseCaptured()
                 xpcService?.updateFlow(updateId, response: capturedResponse)
-                // Reset for next request on keep-alive connections
                 state.resetForNextRequest()
+                parsedResponseHeaders = nil
               }
             }
 

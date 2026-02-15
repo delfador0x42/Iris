@@ -2,8 +2,9 @@
 //  AppProxyProvider.swift
 //  IrisProxyExtension
 //
-//  NETransparentProxyProvider that selectively intercepts HTTP/HTTPS flows.
-//  Returning false from handleNewFlow passes the flow to the OS directly (zero overhead).
+//  NETransparentProxyProvider that intercepts ALL outbound TCP and UDP flows.
+//  HTTP/HTTPS flows get MITM inspection. All other flows get passthrough relay
+//  with metadata capture. Returning true claims the flow — we MUST proxy it.
 //
 
 import Foundation
@@ -11,173 +12,205 @@ import Network
 import NetworkExtension
 import os.log
 
-/// Transparent proxy that selectively intercepts HTTP/HTTPS TCP flows.
-/// Port 80 (HTTP) and 443 (HTTPS) are intercepted for MITM inspection.
-/// All other TCP flows and all UDP flows return false — the OS handles them
-/// directly with zero overhead (unlike NEAppProxyProvider where false = reject).
+/// Transparent proxy that intercepts all outbound network traffic.
+/// TCP port 80/443: HTTP parsing + MITM. All other TCP: passthrough relay.
+/// UDP: datagram relay. All flows get metadata captured for the proxy monitor.
 class AppProxyProvider: NETransparentProxyProvider {
 
-    private let logger = Logger(subsystem: "com.wudan.iris.proxy", category: "AppProxyProvider")
+  private let logger = Logger(subsystem: "com.wudan.iris.proxy", category: "AppProxyProvider")
 
-    /// XPC service for communication with the main app
-    let xpcService = ProxyXPCService()
+  /// XPC service for communication with the main app
+  let xpcService = ProxyXPCService()
 
-    /// HTTP flow handler for processing intercepted connections
-    private var flowHandler: FlowHandler?
+  /// Flow handler for processing intercepted connections
+  private var flowHandler: FlowHandler?
 
-    /// Active TCP flows being handled
-    private var activeFlows: [UUID: NEAppProxyTCPFlow] = [:]
-    private let flowsLock = NSLock()
+  /// Active TCP flows being handled
+  private var activeFlows: [UUID: NEAppProxyTCPFlow] = [:]
+  private let flowsLock = NSLock()
 
-    /// Whether the proxy is currently active
-    private var isActive = false
+  /// Active UDP flows being handled
+  private var activeUDPFlows: [UUID: NEAppProxyUDPFlow] = [:]
+  private let udpFlowsLock = NSLock()
 
-    /// Ports we intercept for inspection
-    private static let interceptedPorts: Set<Int> = [80, 443]
+  /// Whether the proxy is currently active
+  private var isActive = false
 
-    // MARK: - Lifecycle
+  // MARK: - Lifecycle
 
-    override func startProxy(options: [String: Any]? = nil) async throws {
-        logger.info("Starting transparent proxy extension...")
-        xpcService.provider = self
-        xpcService.start()
-        flowHandler = FlowHandler(provider: self)
+  override func startProxy(options: [String: Any]? = nil) async throws {
+    logger.info("Starting transparent proxy extension...")
+    xpcService.provider = self
+    xpcService.start()
+    flowHandler = FlowHandler(provider: self)
 
-        // Configure NETransparentProxyNetworkSettings — tells the system which
-        // flows to route to this extension. Without this, no flows arrive.
-        // Direction MUST be .outbound per Apple docs.
-        let settings = NETransparentProxyNetworkSettings(tunnelRemoteAddress: "127.0.0.1")
-        // Only route TCP flows to this extension. Using .any floods handleNewFlow()
-        // with UDP flows (all returning false), which is known to cause proxy disconnection.
-        settings.includedNetworkRules = [
-            NENetworkRule(
-                remoteNetwork: nil,
-                remotePrefix: 0,
-                localNetwork: nil,
-                localPrefix: 0,
-                protocol: .TCP,
-                direction: .outbound
-            )
-        ]
-        try await setTunnelNetworkSettings(settings)
+    // Route ALL outbound TCP and UDP to this extension.
+    let settings = NETransparentProxyNetworkSettings(tunnelRemoteAddress: "127.0.0.1")
+    settings.includedNetworkRules = [
+      NENetworkRule(
+        remoteNetwork: nil, remotePrefix: 0,
+        localNetwork: nil, localPrefix: 0,
+        protocol: .TCP, direction: .outbound
+      ),
+      NENetworkRule(
+        remoteNetwork: nil, remotePrefix: 0,
+        localNetwork: nil, localPrefix: 0,
+        protocol: .UDP, direction: .outbound
+      ),
+    ]
+    try await setTunnelNetworkSettings(settings)
 
-        isActive = true
-        logger.info("Transparent proxy extension started successfully")
+    isActive = true
+    logger.info("Transparent proxy started — intercepting all TCP + UDP")
+  }
+
+  override func stopProxy(with reason: NEProviderStopReason) async {
+    logger.info("Stopping transparent proxy: \(String(describing: reason))")
+    isActive = false
+    closeAndRemoveAllFlows()
+    xpcService.stop()
+    flowHandler = nil
+    logger.info("Transparent proxy stopped")
+  }
+
+  /// Closes all active flows under lock.
+  private func closeAndRemoveAllFlows() {
+    flowsLock.lock()
+    for (_, flow) in activeFlows {
+      flow.closeReadWithError(nil)
+      flow.closeWriteWithError(nil)
+    }
+    activeFlows.removeAll()
+    flowsLock.unlock()
+
+    udpFlowsLock.lock()
+    for (_, flow) in activeUDPFlows {
+      flow.closeReadWithError(nil)
+      flow.closeWriteWithError(nil)
+    }
+    activeUDPFlows.removeAll()
+    udpFlowsLock.unlock()
+  }
+
+  // MARK: - Flow Handling
+
+  override func handleNewFlow(_ flow: NEAppProxyFlow) -> Bool {
+    guard isActive else { return false }
+
+    if let tcpFlow = flow as? NEAppProxyTCPFlow {
+      return handleTCPFlow(tcpFlow)
+    }
+    if let udpFlow = flow as? NEAppProxyUDPFlow {
+      return handleUDPFlow(udpFlow)
+    }
+    return false
+  }
+
+  // MARK: - TCP
+
+  private func handleTCPFlow(_ flow: NEAppProxyTCPFlow) -> Bool {
+    guard let remoteEndpoint = flow.remoteEndpoint as? NWHostEndpoint else {
+      logger.error("TCP flow has no remote endpoint")
+      return false
     }
 
-    override func stopProxy(with reason: NEProviderStopReason) async {
-        logger.info("Stopping transparent proxy extension with reason: \(String(describing: reason))")
-        isActive = false
-        closeAndRemoveAllFlows()
-        xpcService.stop()
-        flowHandler = nil
-        logger.info("Transparent proxy extension stopped")
+    let port = Int(remoteEndpoint.port) ?? 0
+    let flowId = UUID()
+    let host = remoteEndpoint.hostname
+    let processPath = flow.metaData.sourceAppSigningIdentifier
+    let processName = processPath.components(separatedBy: ".").last ?? processPath
+
+    flowsLock.lock()
+    activeFlows[flowId] = flow
+    flowsLock.unlock()
+
+    flow.open(withLocalEndpoint: nil) { [weak self] error in
+      guard let self = self else { return }
+      if let error = error {
+        self.logger.error("Failed to open TCP flow \(flowId): \(error.localizedDescription)")
+        self.removeFlow(flowId)
+        return
+      }
+      Task {
+        await self.flowHandler?.handleFlow(
+          flowId: flowId, flow: flow,
+          host: host, port: port,
+          processName: processName
+        )
+      }
     }
+    return true
+  }
 
-    /// Closes all active flows under lock. Extracted from async stopProxy
-    /// to avoid NSLock.lock() in async context (Swift 6 breaking).
-    private func closeAndRemoveAllFlows() {
-        flowsLock.lock()
-        for (_, flow) in activeFlows {
-            flow.closeReadWithError(nil)
-            flow.closeWriteWithError(nil)
-        }
-        activeFlows.removeAll()
-        flowsLock.unlock()
+  // MARK: - UDP
+
+  private func handleUDPFlow(_ flow: NEAppProxyUDPFlow) -> Bool {
+    let flowId = UUID()
+    let processPath = flow.metaData.sourceAppSigningIdentifier
+    let processName = processPath.components(separatedBy: ".").last ?? processPath
+
+    udpFlowsLock.lock()
+    activeUDPFlows[flowId] = flow
+    udpFlowsLock.unlock()
+
+    flow.open(withLocalEndpoint: nil) { [weak self] error in
+      guard let self = self else { return }
+      if let error = error {
+        self.logger.error("Failed to open UDP flow \(flowId): \(error.localizedDescription)")
+        self.removeUDPFlow(flowId)
+        return
+      }
+      Task {
+        await self.flowHandler?.handleUDPFlow(
+          flowId: flowId, flow: flow, processName: processName
+        )
+      }
     }
+    return true
+  }
 
-    // MARK: - Flow Handling
+  // MARK: - Flow Management
 
-    override func handleNewFlow(_ flow: NEAppProxyFlow) -> Bool {
-        guard isActive else {
-            logger.warning("Received flow while proxy is inactive")
-            return false
-        }
-
-        // Only intercept TCP flows on HTTP/HTTPS ports
-        if let tcpFlow = flow as? NEAppProxyTCPFlow {
-            return handleTCPFlow(tcpFlow)
-        }
-
-        // UDP flows: return false — OS handles directly, zero overhead
-        return false
+  func removeFlow(_ flowId: UUID) {
+    flowsLock.lock()
+    if let flow = activeFlows.removeValue(forKey: flowId) {
+      flow.closeReadWithError(nil)
+      flow.closeWriteWithError(nil)
     }
+    flowsLock.unlock()
+  }
 
-    private func handleTCPFlow(_ flow: NEAppProxyTCPFlow) -> Bool {
-        guard let remoteEndpoint = flow.remoteEndpoint as? NWHostEndpoint else {
-            logger.error("TCP flow has no remote endpoint")
-            return false
-        }
-
-        let port = Int(remoteEndpoint.port) ?? 0
-
-        // Only intercept HTTP (80) and HTTPS (443)
-        // Returning false passes the flow to the OS directly — zero overhead
-        guard Self.interceptedPorts.contains(port) else {
-            return false
-        }
-
-        let flowId = UUID()
-        let host = remoteEndpoint.hostname
-        let processPath = flow.metaData.sourceAppSigningIdentifier
-        let processName = processPath.components(separatedBy: ".").last ?? processPath
-
-        logger.info("Intercepting TCP flow: \(flowId) -> \(host):\(port)")
-
-        flowsLock.lock()
-        activeFlows[flowId] = flow
-        flowsLock.unlock()
-
-        flow.open(withLocalEndpoint: nil) { [weak self] error in
-            guard let self = self else { return }
-            if let error = error {
-                self.logger.error("Failed to open flow \(flowId): \(error.localizedDescription)")
-                self.removeFlow(flowId)
-                return
-            }
-            Task {
-                await self.flowHandler?.handleFlow(
-                    flowId: flowId, flow: flow,
-                    host: host, port: port,
-                    processName: processName
-                )
-            }
-        }
-        return true
+  func removeUDPFlow(_ flowId: UUID) {
+    udpFlowsLock.lock()
+    if let flow = activeUDPFlows.removeValue(forKey: flowId) {
+      flow.closeReadWithError(nil)
+      flow.closeWriteWithError(nil)
     }
+    udpFlowsLock.unlock()
+  }
 
-    // MARK: - Flow Management
+  func activeFlowCount() -> Int {
+    flowsLock.lock()
+    let tcp = activeFlows.count
+    flowsLock.unlock()
+    udpFlowsLock.lock()
+    let udp = activeUDPFlows.count
+    udpFlowsLock.unlock()
+    return tcp + udp
+  }
 
-    func removeFlow(_ flowId: UUID) {
-        flowsLock.lock()
-        if let flow = activeFlows.removeValue(forKey: flowId) {
-            flow.closeReadWithError(nil)
-            flow.closeWriteWithError(nil)
-        }
-        flowsLock.unlock()
-    }
+  // MARK: - XPC Interface
 
-    func activeFlowCount() -> Int {
-        flowsLock.lock()
-        let count = activeFlows.count
-        flowsLock.unlock()
-        return count
-    }
+  func getStatus() -> [String: Any] {
+    return [
+      "isActive": isActive,
+      "activeFlows": activeFlowCount(),
+      "version": "2.0.0",
+    ]
+  }
 
-    // MARK: - XPC Interface
-
-    func getStatus() -> [String: Any] {
-        return [
-            "isActive": isActive,
-            "activeFlows": activeFlowCount(),
-            "version": "1.0.0"
-        ]
-    }
-
-    /// Set CA certificate via XPC (app sends cert+key to extension).
-    func setCA(certData: Data, keyData: Data) -> Bool {
-        guard let flowHandler = flowHandler else { return false }
-        // tlsInterceptor is a let property on the actor; TLSInterceptor is @unchecked Sendable
-        return flowHandler.tlsInterceptor.setCA(certData: certData, keyData: keyData)
-    }
+  func setCA(certData: Data, keyData: Data) -> Bool {
+    guard let flowHandler = flowHandler else { return false }
+    return flowHandler.tlsInterceptor.setCA(certData: certData, keyData: keyData)
+  }
 }

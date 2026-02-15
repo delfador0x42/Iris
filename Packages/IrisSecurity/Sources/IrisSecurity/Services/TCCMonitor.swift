@@ -118,24 +118,22 @@ public actor TCCMonitor {
     return allEntries
   }
 
-  /// Read TCC entries by running sqlite3 (we don't link SQLite directly)
+  /// Read TCC entries via native SQLite C API (no shell-out).
   private func readTCCEntries(path: String) async -> [TCCEntry] {
-    // Query the TCC database using sqlite3 CLI
-    let query =
-      "SELECT service, client, client_type, auth_value, auth_reason, indirect_object_identifier, last_modified FROM access;"
-    let output = await runCommand("/usr/bin/sqlite3", args: ["-separator", "|", path, query])
+    guard let db = SQLiteReader(path: path) else { return [] }
+    let rows = db.query(
+      "SELECT service, client, client_type, auth_value, auth_reason, indirect_object_identifier, last_modified FROM access;")
 
-    return output.split(separator: "\n").compactMap { line in
-      let parts = line.split(separator: "|", omittingEmptySubsequences: false)
-      guard parts.count >= 5 else { return nil }
+    return rows.compactMap { row in
+      guard row.count >= 5 else { return nil }
 
-      let service = String(parts[0])
-      let client = String(parts[1])
-      let clientType = Int(parts[2]) ?? 0
-      let authValue = Int(parts[3]) ?? 0
-      let authReason = Int(parts[4]) ?? 0
-      let indirect = parts.count > 5 && !parts[5].isEmpty
-      let lastMod: Date? = parts.count > 6 ? dateFromTimestamp(String(parts[6])) : nil
+      let service = row[0] ?? ""
+      let client = row[1] ?? ""
+      let clientType = Int(row[2] ?? "") ?? 0
+      let authValue = Int(row[3] ?? "") ?? 0
+      let authReason = Int(row[4] ?? "") ?? 0
+      let indirect = row.count > 5 && row[5] != nil && !row[5]!.isEmpty
+      let lastMod: Date? = row.count > 6 ? dateFromTimestamp(row[6] ?? "") : nil
 
       // Determine suspicion
       var suspicious = false
@@ -205,24 +203,6 @@ public actor TCCMonitor {
     return nil
   }
 
-  private func runCommand(_ path: String, args: [String]) async -> String {
-    await withCheckedContinuation { continuation in
-      let process = Process()
-      let pipe = Pipe()
-      process.executableURL = URL(fileURLWithPath: path)
-      process.arguments = args
-      process.standardOutput = pipe
-      process.standardError = FileHandle.nullDevice
-      do {
-        try process.run()
-        process.waitUntilExit()
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        continuation.resume(returning: String(data: data, encoding: .utf8) ?? "")
-      } catch {
-        continuation.resume(returning: "")
-      }
-    }
-  }
 }
 
 /// A detected change to the TCC database

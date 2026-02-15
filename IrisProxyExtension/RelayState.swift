@@ -20,6 +20,8 @@ final class RelayState: @unchecked Sendable {
   private var _currentFlowId: UUID?
   private var _requestMessageSize: Int?
   private var _responseMessageSize: Int?
+  /// Whether the response body is fully received (for keep-alive boundary tracking)
+  private var _responseBodyComplete = false
 
   /// Max buffer size per direction (16 MB) to prevent unbounded growth
   static let maxBufferSize = 16 * 1024 * 1024
@@ -120,6 +122,29 @@ final class RelayState: @unchecked Sendable {
     lock.unlock()
   }
 
+  /// Check if the response body is fully received based on Content-Length or chunked encoding.
+  /// Returns true if ready to reset for next request. Call this from the server→client task
+  /// before calling resetForNextRequest() to avoid premature buffer clearing.
+  func isResponseComplete() -> Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    if _responseBodyComplete { return true }
+    guard let respSize = _responseMessageSize else { return false }
+    if _responseBuffer.count >= respSize {
+      _responseBodyComplete = true
+      return true
+    }
+    return false
+  }
+
+  /// Mark response body as complete (for chunked encoding where size isn't known up front).
+  func markResponseBodyComplete(actualSize: Int) {
+    lock.lock()
+    _responseMessageSize = actualSize
+    _responseBodyComplete = true
+    lock.unlock()
+  }
+
   /// Reset parsing state for the next request on a keep-alive connection.
   /// Preserves any leftover data beyond the current message boundaries
   /// (handles HTTP pipelining where the next request arrives before
@@ -127,19 +152,26 @@ final class RelayState: @unchecked Sendable {
   func resetForNextRequest() {
     lock.lock()
     // Preserve leftover request data beyond current message boundary
-    if let reqSize = _requestMessageSize, _requestBuffer.count > reqSize {
-      _requestBuffer = Data(_requestBuffer[reqSize...])
-    } else {
-      _requestBuffer.removeAll(keepingCapacity: true)
+    if let reqSize = _requestMessageSize {
+      if _requestBuffer.count > reqSize {
+        _requestBuffer = Data(_requestBuffer[reqSize...])
+      } else {
+        _requestBuffer.removeAll(keepingCapacity: true)
+      }
     }
+    // If _requestMessageSize was never set, don't clear — data hasn't been parsed yet
+
     // Preserve leftover response data beyond current message boundary
-    if let respSize = _responseMessageSize, _responseBuffer.count > respSize {
-      _responseBuffer = Data(_responseBuffer[respSize...])
-    } else {
-      _responseBuffer.removeAll(keepingCapacity: true)
+    if let respSize = _responseMessageSize {
+      if _responseBuffer.count > respSize {
+        _responseBuffer = Data(_responseBuffer[respSize...])
+      } else {
+        _responseBuffer.removeAll(keepingCapacity: true)
+      }
     }
     _hasRequest = false
     _hasResponse = false
+    _responseBodyComplete = false
     _requestCount += 1
     _currentFlowId = nil
     _requestMessageSize = nil

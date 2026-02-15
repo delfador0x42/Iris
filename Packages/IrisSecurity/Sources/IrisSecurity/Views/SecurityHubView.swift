@@ -2,255 +2,210 @@ import SwiftUI
 
 /// Security command center — Tron-style brutalist interface.
 /// Entry point to all security scanning, monitoring, and auditing capabilities.
+/// Auto-runs full scan on appear with live streaming progress via ScanSession.
 public struct SecurityHubView: View {
-    @State private var selectedModule: SecurityModule?
+  @State private var selectedModule: SecurityModule?
+  @StateObject private var session = ScanSession()
+  @State private var showTiming = false
 
-    public init() {}
+  public init() {}
 
-    public var body: some View {
-        ZStack {
-            gridBackground
-            if let module = selectedModule {
-                VStack(spacing: 0) {
-                    // Inline back-to-grid button
-                    HStack {
-                        Button(action: {
-                            withAnimation(.easeInOut(duration: 0.2)) { selectedModule = nil }
-                        }) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "chevron.left")
-                                Text("Security")
-                            }
-                            .foregroundColor(.cyan)
-                            .font(.system(size: 13, weight: .medium))
-                        }
-                        .buttonStyle(.plain)
-                        Spacer()
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.top, 12)
-                    .padding(.bottom, 4)
+  public var body: some View {
+    ZStack {
+      gridBackground
+      if let module = selectedModule {
+        VStack(spacing: 0) {
+          backButton
+          moduleView(for: module)
+        }
+      } else {
+        VStack(spacing: 0) {
+          hubHeader
+          fullScanBanner
+          moduleGrid
+        }
+      }
+    }
+    .task { await autoScan() }
+  }
 
-                    moduleView(for: module)
-                }
-            } else {
-                VStack(spacing: 0) {
-                    hubHeader
-                    moduleGrid
-                }
+  // MARK: - Header
+
+  private var hubHeader: some View {
+    VStack(spacing: 8) {
+      HStack(spacing: 12) {
+        Image(systemName: "shield.lefthalf.filled")
+          .font(.system(size: 28))
+          .foregroundStyle(
+            LinearGradient(
+              colors: [Color.cyan, Color.cyan.opacity(0.5)],
+              startPoint: .top, endPoint: .bottom))
+        VStack(alignment: .leading, spacing: 2) {
+          Text("SECURITY")
+            .font(.system(size: 24, weight: .black, design: .monospaced))
+            .foregroundColor(.white).tracking(6)
+          Text("50 DETECTION ENGINES")
+            .font(.system(size: 10, weight: .medium, design: .monospaced))
+            .foregroundColor(.cyan.opacity(0.7)).tracking(2)
+        }
+        Spacer()
+      }
+      .padding(.horizontal, 24).padding(.top, 20)
+      Rectangle()
+        .fill(LinearGradient(
+          colors: [.clear, .cyan.opacity(0.3), .cyan.opacity(0.3), .clear],
+          startPoint: .leading, endPoint: .trailing))
+        .frame(height: 1)
+        .padding(.horizontal, 20).padding(.top, 4)
+    }
+  }
+
+  // MARK: - Full Scan Banner
+
+  private var fullScanBanner: some View {
+    VStack(spacing: 8) {
+      Button(action: { Task { await session.runScan() } }) {
+        HStack(spacing: 12) {
+          if session.isScanning {
+            ProgressView().controlSize(.small).tint(.cyan)
+            Text("Scanning \(session.completed)/\(session.total)...")
+              .font(.system(size: 12, weight: .medium, design: .monospaced))
+              .foregroundColor(.cyan)
+          } else if let r = session.scanResult {
+            Image(systemName: r.totalFindings == 0
+              ? "checkmark.shield.fill" : "exclamationmark.shield.fill")
+              .foregroundColor(r.totalFindings == 0 ? .green : .orange)
+            VStack(alignment: .leading, spacing: 2) {
+              Text(r.totalFindings == 0 ? "System Clean" : "\(r.totalFindings) findings")
+                .font(.system(size: 12, weight: .bold, design: .monospaced))
+                .foregroundColor(r.totalFindings == 0 ? .green : .orange)
+              Text("\(r.scannerCount) engines \u{00B7} \(String(format: "%.1f", r.scanDuration))s \u{00B7} \(timeAgo(r.timestamp))")
+                .font(.system(size: 9, design: .monospaced)).foregroundColor(.gray)
             }
+          } else {
+            Image(systemName: "play.fill").foregroundColor(.cyan)
+            Text("Run Full Scan")
+              .font(.system(size: 12, weight: .medium, design: .monospaced))
+              .foregroundColor(.cyan)
+          }
+          Spacer()
+          if !session.isScanning {
+            Image(systemName: "arrow.clockwise")
+              .font(.system(size: 12)).foregroundColor(.gray.opacity(0.5))
+          }
         }
-    }
+        .padding(12)
+        .background(
+          RoundedRectangle(cornerRadius: 8).fill(Color.cyan.opacity(0.05))
+            .overlay(RoundedRectangle(cornerRadius: 8)
+              .strokeBorder(Color.cyan.opacity(0.2), lineWidth: 1)))
+      }
+      .buttonStyle(.plain).disabled(session.isScanning)
 
-    private var hubHeader: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 12) {
-                Image(systemName: "shield.lefthalf.filled")
-                    .font(.system(size: 28))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [Color.cyan, Color.cyan.opacity(0.5)],
-                            startPoint: .top, endPoint: .bottom
-                        )
-                    )
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("SECURITY")
-                        .font(.system(size: 24, weight: .black, design: .monospaced))
-                        .foregroundColor(.white)
-                        .tracking(6)
-                    Text("20 DETECTION ENGINES")
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
-                        .foregroundColor(.cyan.opacity(0.7))
-                        .tracking(2)
-                }
-                Spacer()
-            }
-            .padding(.horizontal, 24).padding(.top, 20)
+      // Scanner status grid
+      if session.isScanning || session.scanResult != nil {
+        ScannerStatusGrid(session: session).padding(.horizontal, 4)
+      }
 
-            // Divider line
-            Rectangle()
-                .fill(LinearGradient(
-                    colors: [.clear, .cyan.opacity(0.3), .cyan.opacity(0.3), .clear],
-                    startPoint: .leading, endPoint: .trailing
-                ))
-                .frame(height: 1)
-                .padding(.horizontal, 20).padding(.top, 4)
+      // Timing toggle
+      if !session.scannerResults.isEmpty && !session.isScanning {
+        Button(action: { withAnimation { showTiming.toggle() } }) {
+          Text(showTiming ? "Hide timing" : "Show timing")
+            .font(.system(size: 9, design: .monospaced))
+            .foregroundColor(.gray.opacity(0.5))
+        }.buttonStyle(.plain)
+        if showTiming {
+          ScannerTimingView(results: session.scannerResults)
         }
+      }
     }
+    .padding(.horizontal, 20).padding(.top, 12)
+  }
 
-    private var moduleGrid: some View {
-        ThemedScrollView {
-            LazyVGrid(
-                columns: [
-                    GridItem(.flexible(), spacing: 12),
-                    GridItem(.flexible(), spacing: 12),
-                    GridItem(.flexible(), spacing: 12),
-                ],
-                spacing: 12
-            ) {
-                ForEach(SecurityModule.allCases) { module in
-                    ModuleCard(module: module) {
-                        selectedModule = module
-                    }
-                }
-            }
-            .padding(20)
+  // MARK: - Module Grid + Views
+
+  private var moduleGrid: some View {
+    ThemedScrollView {
+      LazyVGrid(
+        columns: [
+          GridItem(.flexible(), spacing: 12),
+          GridItem(.flexible(), spacing: 12),
+          GridItem(.flexible(), spacing: 12),
+        ], spacing: 12
+      ) {
+        ForEach(SecurityModule.allCases) { module in
+          ModuleCard(module: module) { selectedModule = module }
         }
+      }.padding(20)
     }
+  }
 
-    @ViewBuilder
-    private func moduleView(for module: SecurityModule) -> some View {
-        switch module {
-        case .threatScan: ThreatScanView()
-        case .persistence: PersistenceView()
-        case .eventTaps: EventTapView()
-        case .dylibHijack: DylibHijackView()
-        case .fileIntegrity: FileIntegrityView()
-        case .supplyChain: SupplyChainView()
-        case .securityPosture: SecurityDashboardView()
-        case .packageInventory: PackageInventoryView()
-        case .avMonitor: AVMonitorView()
-        case .tccPermissions: TCCMonitorView()
-        case .ransomware: RansomwareCheckView()
+  private var backButton: some View {
+    HStack {
+      Button(action: {
+        withAnimation(.easeInOut(duration: 0.2)) { selectedModule = nil }
+      }) {
+        HStack(spacing: 4) {
+          Image(systemName: "chevron.left")
+          Text("Security")
         }
+        .foregroundColor(.cyan).font(.system(size: 13, weight: .medium))
+      }.buttonStyle(.plain)
+      Spacer()
     }
+    .padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 4)
+  }
 
-    private var gridBackground: some View {
-        ZStack {
-            Color(red: 0.01, green: 0.02, blue: 0.04)
-            // Subtle grid pattern
-            Canvas { context, size in
-                let gridSpacing: CGFloat = 40
-                var path = Path()
-                // Vertical lines
-                var x: CGFloat = 0
-                while x < size.width {
-                    path.move(to: CGPoint(x: x, y: 0))
-                    path.addLine(to: CGPoint(x: x, y: size.height))
-                    x += gridSpacing
-                }
-                // Horizontal lines
-                var y: CGFloat = 0
-                while y < size.height {
-                    path.move(to: CGPoint(x: 0, y: y))
-                    path.addLine(to: CGPoint(x: size.width, y: y))
-                    y += gridSpacing
-                }
-                context.stroke(path, with: .color(.cyan.opacity(0.03)), lineWidth: 0.5)
-            }
-        }.ignoresSafeArea()
+  @ViewBuilder
+  private func moduleView(for module: SecurityModule) -> some View {
+    switch module {
+    case .liveDetection: DetectionView()
+    case .threatScan: ThreatScanView()
+    case .persistence: PersistenceView()
+    case .eventTaps: EventTapView()
+    case .dylibHijack: DylibHijackView()
+    case .fileIntegrity: FileIntegrityView()
+    case .supplyChain: SupplyChainView()
+    case .securityPosture: SecurityDashboardView()
+    case .packageInventory: PackageInventoryView()
+    case .avMonitor: AVMonitorView()
+    case .tccPermissions: TCCMonitorView()
+    case .ransomware: RansomwareCheckView()
     }
+  }
 
-}
+  // MARK: - Scan Logic
 
-// MARK: - Module Definition
+  private func autoScan() async {
+    await session.loadCached()
+    if session.scanResult == nil { await session.runScan() }
+  }
 
-enum SecurityModule: String, CaseIterable, Identifiable {
-    case threatScan = "Threat Scan"
-    case securityPosture = "Security Posture"
-    case persistence = "Persistence"
-    case eventTaps = "Event Taps"
-    case dylibHijack = "Dylib Hijack"
-    case fileIntegrity = "File Integrity"
-    case supplyChain = "Supply Chain"
-    case avMonitor = "AV Monitor"
-    case tccPermissions = "TCC Permissions"
-    case ransomware = "Ransomware Check"
-    case packageInventory = "Package Inventory"
+  private func timeAgo(_ date: Date) -> String {
+    let s = Int(Date().timeIntervalSince(date))
+    if s < 60 { return "just now" }
+    if s < 3600 { return "\(s / 60)m ago" }
+    return "\(s / 3600)h ago"
+  }
 
-    var id: String { rawValue }
+  // MARK: - Background
 
-    var icon: String {
-        switch self {
-        case .threatScan: return "exclamationmark.shield"
-        case .securityPosture: return "gauge.with.dots.needle.33percent"
-        case .persistence: return "arrow.clockwise.circle"
-        case .eventTaps: return "keyboard"
-        case .dylibHijack: return "link.badge.plus"
-        case .fileIntegrity: return "externaldrive.badge.checkmark"
-        case .supplyChain: return "shippingbox"
-        case .avMonitor: return "video.badge.waveform.fill"
-        case .tccPermissions: return "hand.raised.fill"
-        case .ransomware: return "lock.trianglebadge.exclamationmark"
-        case .packageInventory: return "archivebox"
+  private var gridBackground: some View {
+    ZStack {
+      Color(red: 0.01, green: 0.02, blue: 0.04)
+      Canvas { context, size in
+        let gs: CGFloat = 40
+        var path = Path()
+        stride(from: CGFloat(0), to: size.width, by: gs).forEach { x in
+          path.move(to: CGPoint(x: x, y: 0))
+          path.addLine(to: CGPoint(x: x, y: size.height))
         }
-    }
-
-    var subtitle: String {
-        switch self {
-        case .threatScan: return "15 engines \u{00B7} full sweep"
-        case .securityPosture: return "SIP \u{00B7} FileVault \u{00B7} grade"
-        case .persistence: return "13 locations \u{00B7} signing"
-        case .eventTaps: return "keylogger detection"
-        case .dylibHijack: return "Mach-O \u{00B7} rpath \u{00B7} weak"
-        case .fileIntegrity: return "SHA-256 baseline \u{00B7} diff"
-        case .supplyChain: return "brew \u{00B7} npm \u{00B7} pip \u{00B7} xcode"
-        case .avMonitor: return "mic \u{00B7} camera \u{00B7} realtime"
-        case .tccPermissions: return "FDA \u{00B7} screen \u{00B7} accessibility"
-        case .ransomware: return "entropy \u{00B7} chi-square \u{00B7} pi"
-        case .packageInventory: return "brew \u{00B7} app store \u{00B7} pkgutil"
+        stride(from: CGFloat(0), to: size.height, by: gs).forEach { y in
+          path.move(to: CGPoint(x: 0, y: y))
+          path.addLine(to: CGPoint(x: size.width, y: y))
         }
-    }
-
-    var accentColor: Color {
-        switch self {
-        case .threatScan: return .red
-        case .securityPosture: return .blue
-        case .persistence: return .orange
-        case .eventTaps: return .purple
-        case .dylibHijack: return .yellow
-        case .fileIntegrity: return .cyan
-        case .supplyChain: return .green
-        case .avMonitor: return .pink
-        case .tccPermissions: return .mint
-        case .ransomware: return Color(red: 0.8, green: 0.2, blue: 0.2)
-        case .packageInventory: return .indigo
-        }
-    }
-}
-
-// MARK: - Module Card
-
-struct ModuleCard: View {
-    let module: SecurityModule
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Image(systemName: module.icon)
-                        .font(.system(size: 20))
-                        .foregroundColor(module.accentColor)
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 10))
-                        .foregroundColor(.gray.opacity(0.5))
-                }
-
-                Text(module.rawValue)
-                    .font(.system(size: 14, weight: .bold, design: .monospaced))
-                    .foregroundColor(.white)
-
-                Text(module.subtitle)
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundColor(.gray)
-                    .lineLimit(1)
-            }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.white.opacity(0.03))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .strokeBorder(
-                                module.accentColor.opacity(0.15),
-                                lineWidth: 1
-                            )
-                    )
-            )
-        }
-        .buttonStyle(.plain)
-    }
+        context.stroke(path, with: .color(.cyan.opacity(0.03)), lineWidth: 0.5)
+      }
+    }.ignoresSafeArea()
+  }
 }

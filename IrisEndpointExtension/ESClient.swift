@@ -16,21 +16,29 @@ class ESClient {
     var processTable: [pid_t: ESProcessInfo] = [:]
     let processLock = NSLock()
 
-    /// Ring buffer for event history — O(1) insert, bounded memory.
-    /// Pre-allocated array with head index avoids O(n) removeFirst().
-    private var eventRing: [ESProcessEvent?]
-    private var eventRingHead = 0
-    private var eventRingCount = 0
-    private let eventHistoryLock = NSLock()
+    /// Ring buffer for process lifecycle events — O(1) insert, bounded memory.
+    var eventRing: [ESProcessEvent?]
+    var eventRingHead = 0
+    var eventRingCount = 0
+    let eventHistoryLock = NSLock()
     let maxEventHistory = 5000
+
+    /// Separate ring buffer for security events (file, privilege, injection).
+    /// Prevents high-volume file events from drowning out process lifecycle.
+    var securityRing: [ESSecurityEvent?]
+    var securityRingHead = 0
+    var securityRingCount = 0
+    let securityRingLock = NSLock()
+    let maxSecurityHistory = 10000
+    var securitySequence: UInt64 = 0
 
     /// Serial queue for processing ES events off the callback thread
     private let processingQueue = DispatchQueue(label: "com.wudan.iris.endpoint.processing")
 
     /// Event counters for periodic summary logging
-    private var execCount: Int = 0
-    private var forkCount: Int = 0
-    private var exitCount: Int = 0
+    var execCount: Int = 0
+    var forkCount: Int = 0
+    var exitCount: Int = 0
     private var lastSummaryTime = Date()
 
     /// XPC service for communication with main app
@@ -44,6 +52,7 @@ class ESClient {
 
     init() {
         eventRing = [ESProcessEvent?](repeating: nil, count: maxEventHistory)
+        securityRing = [ESSecurityEvent?](repeating: nil, count: maxSecurityHistory)
         logger.info("ESClient initialized")
     }
 
@@ -88,18 +97,42 @@ class ESClient {
         logger.info("[ES] es_mute_process(self PID \(getpid())): \(muteResult == ES_RETURN_SUCCESS ? "OK" : "FAILED")")
 
         // Mute high-noise system paths to reduce event volume.
-        // These are OS daemons that spawn/fork frequently but are never suspicious.
         muteNoisyPaths(esClient)
+        muteNoisyFileEventPaths(esClient)
 
         let events: [es_event_type_t] = [
+            // Process lifecycle (original 5)
             ES_EVENT_TYPE_NOTIFY_EXEC,
             ES_EVENT_TYPE_NOTIFY_FORK,
             ES_EVENT_TYPE_NOTIFY_EXIT,
             ES_EVENT_TYPE_NOTIFY_SIGNAL,
             ES_EVENT_TYPE_NOTIFY_CS_INVALIDATED,
+            // File operations (credential theft, TCC manipulation, ransomware)
+            ES_EVENT_TYPE_NOTIFY_OPEN,
+            ES_EVENT_TYPE_NOTIFY_WRITE,
+            ES_EVENT_TYPE_NOTIFY_UNLINK,
+            ES_EVENT_TYPE_NOTIFY_RENAME,
+            ES_EVENT_TYPE_NOTIFY_SETEXTATTR,
+            // Privilege escalation
+            ES_EVENT_TYPE_NOTIFY_SETUID,
+            ES_EVENT_TYPE_NOTIFY_SETGID,
+            ES_EVENT_TYPE_NOTIFY_SUDO,
+            // Code injection
+            ES_EVENT_TYPE_NOTIFY_REMOTE_THREAD_CREATE,
+            ES_EVENT_TYPE_NOTIFY_GET_TASK,
+            ES_EVENT_TYPE_NOTIFY_TRACE,
+            // System changes
+            ES_EVENT_TYPE_NOTIFY_KEXTLOAD,
+            ES_EVENT_TYPE_NOTIFY_MOUNT,
+            ES_EVENT_TYPE_NOTIFY_BTM_LAUNCH_ITEM_ADD,
+            ES_EVENT_TYPE_NOTIFY_XPC_CONNECT,
+            ES_EVENT_TYPE_NOTIFY_TCC_MODIFY,
+            // Authentication
+            ES_EVENT_TYPE_NOTIFY_OPENSSH_LOGIN,
+            ES_EVENT_TYPE_NOTIFY_XP_MALWARE_DETECTED,
         ]
 
-        logger.info("[ES] Subscribing to \(events.count) event types (EXEC, FORK, EXIT, SIGNAL, CS_INVALIDATED)...")
+        logger.info("[ES] Subscribing to \(events.count) event types...")
         let subResult = es_subscribe(esClient, events, UInt32(events.count))
         guard subResult == ES_RETURN_SUCCESS else {
             logger.error("[ES] es_subscribe FAILED — deleting client")
@@ -148,75 +181,40 @@ class ESClient {
     private func processEvent(_ message: UnsafePointer<es_message_t>) {
         switch message.pointee.event_type {
 
-        case ES_EVENT_TYPE_NOTIFY_EXEC:
-            let target = message.pointee.event.exec.target.pointee
-            let info = extractProcessInfo(from: target, event: message)
-            let pid = audit_token_to_pid(target.audit_token)
+        // Process lifecycle (handlers in ESClient+ProcessLifecycle.swift)
+        case ES_EVENT_TYPE_NOTIFY_EXEC: handleExec(message)
+        case ES_EVENT_TYPE_NOTIFY_FORK: handleFork(message)
+        case ES_EVENT_TYPE_NOTIFY_EXIT: handleExit(message)
+        case ES_EVENT_TYPE_NOTIFY_SIGNAL: handleSignal(message)
+        case ES_EVENT_TYPE_NOTIFY_CS_INVALIDATED: handleCSInvalidated(message)
 
-            processLock.lock()
-            processTable[pid] = info
-            processLock.unlock()
+        // File operations → security event ring buffer
+        case ES_EVENT_TYPE_NOTIFY_OPEN: handleFileOpen(message)
+        case ES_EVENT_TYPE_NOTIFY_WRITE: handleFileWrite(message)
+        case ES_EVENT_TYPE_NOTIFY_UNLINK: handleFileUnlink(message)
+        case ES_EVENT_TYPE_NOTIFY_RENAME: handleFileRename(message)
+        case ES_EVENT_TYPE_NOTIFY_SETEXTATTR: handleSetExtattr(message)
 
-            recordEvent(.exec, process: info)
-            execCount += 1
-            logger.debug("[ES] EXEC: \(info.name) (PID \(pid))")
+        // Privilege escalation
+        case ES_EVENT_TYPE_NOTIFY_SETUID: handleSetuid(message)
+        case ES_EVENT_TYPE_NOTIFY_SETGID: handleSetgid(message)
+        case ES_EVENT_TYPE_NOTIFY_SUDO: handleSudo(message)
 
-        case ES_EVENT_TYPE_NOTIFY_FORK:
-            let child = message.pointee.event.fork.child.pointee
-            let childPid = audit_token_to_pid(child.audit_token)
-            let parentPid = child.ppid
-            let rpid = audit_token_to_pid(child.responsible_audit_token)
-            let responsiblePid = (rpid > 0 && rpid != childPid) ? rpid : 0
+        // Code injection
+        case ES_EVENT_TYPE_NOTIFY_REMOTE_THREAD_CREATE: handleRemoteThreadCreate(message)
+        case ES_EVENT_TYPE_NOTIFY_GET_TASK: handleGetTask(message)
+        case ES_EVENT_TYPE_NOTIFY_TRACE: handleTrace(message)
 
-            let stub = ESProcessInfo(
-                pid: childPid, ppid: parentPid, responsiblePid: responsiblePid,
-                path: esStringToSwift(child.executable.pointee.path),
-                name: URL(fileURLWithPath: esStringToSwift(child.executable.pointee.path)).lastPathComponent,
-                arguments: [],
-                userId: audit_token_to_euid(child.audit_token),
-                groupId: audit_token_to_egid(child.audit_token),
-                codeSigningInfo: extractCodeSigningInfo(from: child),
-                timestamp: Date()
-            )
+        // System changes
+        case ES_EVENT_TYPE_NOTIFY_KEXTLOAD: handleKextLoad(message)
+        case ES_EVENT_TYPE_NOTIFY_MOUNT: handleMount(message)
+        case ES_EVENT_TYPE_NOTIFY_BTM_LAUNCH_ITEM_ADD: handleBTMLaunchItemAdd(message)
+        case ES_EVENT_TYPE_NOTIFY_XPC_CONNECT: handleXPCConnect(message)
+        case ES_EVENT_TYPE_NOTIFY_TCC_MODIFY: handleTCCModify(message)
 
-            processLock.lock()
-            processTable[childPid] = stub
-            processLock.unlock()
-
-            recordEvent(.fork, process: stub)
-            forkCount += 1
-            logger.debug("[ES] FORK: child PID \(childPid) from parent PID \(parentPid)")
-
-        case ES_EVENT_TYPE_NOTIFY_EXIT:
-            let proc = message.pointee.process.pointee
-            let pid = audit_token_to_pid(proc.audit_token)
-
-            processLock.lock()
-            let exitingProcess = processTable.removeValue(forKey: pid)
-            processLock.unlock()
-
-            if let info = exitingProcess {
-                recordEvent(.exit, process: info)
-            }
-
-            exitCount += 1
-            logger.debug("[ES] EXIT: PID \(pid)")
-
-        case ES_EVENT_TYPE_NOTIFY_SIGNAL:
-            let target = message.pointee.event.signal.target.pointee
-            let targetPid = audit_token_to_pid(target.audit_token)
-            let sig = message.pointee.event.signal.sig
-            // Only log interesting signals: SIGKILL(9), SIGTERM(15), SIGSTOP(17)
-            if sig == 9 || sig == 15 || sig == 17 {
-                let sourcePid = audit_token_to_pid(message.pointee.process.pointee.audit_token)
-                logger.info("[ES] SIGNAL: PID \(sourcePid) sent signal \(sig) to PID \(targetPid)")
-            }
-
-        case ES_EVENT_TYPE_NOTIFY_CS_INVALIDATED:
-            let proc = message.pointee.process.pointee
-            let pid = audit_token_to_pid(proc.audit_token)
-            let path = esStringToSwift(proc.executable.pointee.path)
-            logger.warning("[ES] CS_INVALIDATED: PID \(pid) (\(path)) — code signature invalidated")
+        // Authentication
+        case ES_EVENT_TYPE_NOTIFY_OPENSSH_LOGIN: handleSSHLogin(message)
+        case ES_EVENT_TYPE_NOTIFY_XP_MALWARE_DETECTED: handleXProtectMalware(message)
 
         default:
             break
@@ -231,39 +229,6 @@ class ESClient {
             logger.info("[ES] Event summary: exec=\(self.execCount) fork=\(self.forkCount) exit=\(self.exitCount) tableSize=\(tableSize)")
             self.lastSummaryTime = now
         }
-    }
-
-    // MARK: - Event History
-
-    /// Record a process event into the ring buffer — O(1) insert, no allocations.
-    func recordEvent(_ type: ESProcessEvent.EventType, process: ESProcessInfo) {
-        let event = ESProcessEvent(eventType: type, process: process, timestamp: Date())
-        eventHistoryLock.lock()
-        let writeIndex = (eventRingHead + eventRingCount) % maxEventHistory
-        eventRing[writeIndex] = event
-        if eventRingCount < maxEventHistory {
-            eventRingCount += 1
-        } else {
-            eventRingHead = (eventRingHead + 1) % maxEventHistory
-        }
-        eventHistoryLock.unlock()
-    }
-
-    /// Get the most recent N events from the ring buffer — O(n) read only.
-    func getRecentEvents(limit: Int) -> [ESProcessEvent] {
-        eventHistoryLock.lock()
-        let count = min(limit, eventRingCount)
-        var events: [ESProcessEvent] = []
-        events.reserveCapacity(count)
-        let start = (eventRingHead + eventRingCount - count) % maxEventHistory
-        for i in 0..<count {
-            let idx = (start + i) % maxEventHistory
-            if let event = eventRing[idx] {
-                events.append(event)
-            }
-        }
-        eventHistoryLock.unlock()
-        return events
     }
 
     // MARK: - Public API (for XPC)

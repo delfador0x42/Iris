@@ -30,6 +30,10 @@ struct IrisMainApp: App {
 
       // 3. Send CA to proxy extension via XPC
       await IrisMainApp.sendCAToProxy()
+
+      // 4. Initialize detection engine with all rules, start event bus
+      await RuleLoader.loadAll()
+      await SecurityEventBus.shared.start()
     }
   }
 
