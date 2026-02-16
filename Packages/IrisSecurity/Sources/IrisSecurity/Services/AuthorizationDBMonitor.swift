@@ -75,7 +75,14 @@ public actor AuthorizationDBMonitor {
                         name: right, path: "/var/db/auth.db",
                         technique: "AuthDB Right Set to Allow",
                         description: "Authorization right '\(right)' (\(desc)) is set to 'allow' — no authentication required. This enables silent privilege escalation.",
-                        severity: .critical, mitreID: "T1548.004"
+                        severity: .critical, mitreID: "T1548.004",
+                        scannerId: "auth_db",
+                        enumMethod: "security authorizationdb read → plist rule array",
+                        evidence: [
+                            "right=\(right)",
+                            "rule=allow",
+                            "desc=\(desc)",
+                        ]
                     ))
                 }
             } else if let ruleStr = plist["rule"] as? String {
@@ -84,7 +91,14 @@ public actor AuthorizationDBMonitor {
                         name: right, path: "/var/db/auth.db",
                         technique: "AuthDB Right Set to Allow",
                         description: "Authorization right '\(right)' (\(desc)) is set to 'allow'. No authentication required for this privileged action.",
-                        severity: .critical, mitreID: "T1548.004"
+                        severity: .critical, mitreID: "T1548.004",
+                        scannerId: "auth_db",
+                        enumMethod: "security authorizationdb read → plist rule string",
+                        evidence: [
+                            "right=\(right)",
+                            "rule=\(ruleStr)",
+                            "desc=\(desc)",
+                        ]
                     ))
                 }
             }
@@ -101,7 +115,14 @@ public actor AuthorizationDBMonitor {
                             parentPID: 0, parentName: "",
                             technique: "Custom Auth Mechanism",
                             description: "Authorization right '\(right)' uses custom mechanism: \(mechanism). Non-standard auth mechanisms can capture credentials or bypass authentication.",
-                            severity: .high, mitreID: "T1556"
+                            severity: .high, mitreID: "T1556",
+                            scannerId: "auth_db",
+                            enumMethod: "security authorizationdb read → mechanisms array",
+                            evidence: [
+                                "right=\(right)",
+                                "mechanism=\(mechanism)",
+                                "desc=\(desc)",
+                            ]
                         ))
                     }
                 }
@@ -113,7 +134,14 @@ public actor AuthorizationDBMonitor {
                     name: right, path: "/var/db/auth.db",
                     technique: "Extended Auth Timeout",
                     description: "Authorization right '\(right)' has timeout of \(timeout)s (\(timeout/3600)h). Extended timeouts reduce re-authentication frequency.",
-                    severity: .low, mitreID: "T1548.004"
+                    severity: .low, mitreID: "T1548.004",
+                    scannerId: "auth_db",
+                    enumMethod: "security authorizationdb read → timeout value",
+                    evidence: [
+                        "right=\(right)",
+                        "timeout_seconds=\(timeout)",
+                        "timeout_hours=\(timeout/3600)",
+                    ]
                 ))
             }
         }
@@ -142,7 +170,14 @@ public actor AuthorizationDBMonitor {
                     name: item, path: bundlePath,
                     technique: "Non-Apple Auth Plugin",
                     description: "Authorization plugin \(item) at \(bundlePath) is not Apple-signed (status: \(status.rawValue)). Auth plugins execute during login and can capture credentials or grant unauthorized access.",
-                    severity: severity, mitreID: "T1556"
+                    severity: severity, mitreID: "T1556",
+                    scannerId: "auth_db",
+                    enumMethod: "FileManager → SecurityAgentPlugins directory scan",
+                    evidence: [
+                        "plugin=\(item)",
+                        "path=\(bundlePath)",
+                        "signing_status=\(status.rawValue)",
+                    ]
                 ))
             }
         }
@@ -168,7 +203,14 @@ public actor AuthorizationDBMonitor {
                 name: "auth.db", path: authDBPath,
                 technique: "Recently Modified AuthDB",
                 description: "Authorization database was modified \(String(format: "%.1f", daysSinceModified)) days ago. Outside of OS updates, changes to auth.db are suspicious.",
-                severity: .medium, mitreID: "T1548.004"
+                severity: .medium, mitreID: "T1548.004",
+                scannerId: "auth_db",
+                enumMethod: "FileManager.attributesOfItem → modificationDate",
+                evidence: [
+                    "path=\(authDBPath)",
+                    "days_since_modified=\(String(format: "%.1f", daysSinceModified))",
+                    "modification_date=\(modDate)",
+                ]
             ))
         }
 

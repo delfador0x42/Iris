@@ -38,7 +38,15 @@ public actor StagingDetector {
                     name: file, path: path,
                     technique: "Staged Archive",
                     description: "Archive in temp directory: \(file) (\(size / 1024)KB). Possible exfiltration staging.",
-                    severity: size > 10_000_000 ? .high : .medium, mitreID: "T1074.001"))
+                    severity: size > 10_000_000 ? .high : .medium, mitreID: "T1074.001",
+                    scannerId: "staging",
+                    enumMethod: "FileManager.contentsOfDirectory → temp dir archive scan",
+                    evidence: [
+                        "file=\(file)",
+                        "path=\(path)",
+                        "size_bytes=\(size)",
+                        "extension=\(ext)",
+                    ]))
             }
         }
         return result
@@ -61,7 +69,14 @@ public actor StagingDetector {
                     name: item, path: path,
                     technique: "Hidden Staging Directory",
                     description: "Suspicious hidden directory: ~/\(item). Matches malware staging pattern (Cuckoo/FlexibleFerret).",
-                    severity: .high, mitreID: "T1074.001"))
+                    severity: .high, mitreID: "T1074.001",
+                    scannerId: "staging",
+                    enumMethod: "FileManager.contentsOfDirectory → home hidden dir scan",
+                    evidence: [
+                        "directory=\(item)",
+                        "path=\(path)",
+                        "pattern=hidden staging",
+                    ]))
             }
         }
         return result
@@ -79,7 +94,14 @@ public actor StagingDetector {
                     name: file, path: "/tmp/\(file)",
                     technique: "Staged Screenshot",
                     description: "Hidden screenshot in /tmp: \(file). Matches Cuckoo stealer pattern.",
-                    severity: .critical, mitreID: "T1113"))
+                    severity: .critical, mitreID: "T1113",
+                    scannerId: "staging",
+                    enumMethod: "FileManager.contentsOfDirectory → /tmp hidden png scan",
+                    evidence: [
+                        "file=\(file)",
+                        "path=/tmp/\(file)",
+                        "pattern=Cuckoo stealer",
+                    ]))
             }
         }
 
@@ -93,7 +115,14 @@ public actor StagingDetector {
                         name: "pw.dat", path: pwPath,
                         technique: "Stolen Password File",
                         description: "Cleartext password file found: \(pwPath). Matches Cuckoo stealer pattern.",
-                        severity: .critical, mitreID: "T1555"))
+                        severity: .critical, mitreID: "T1555",
+                        scannerId: "staging",
+                        enumMethod: "FileManager.fileExists → ~/.local-*/pw.dat check",
+                        evidence: [
+                            "file=pw.dat",
+                            "path=\(pwPath)",
+                            "parent_dir=\(dir)",
+                        ]))
                 }
             }
         }
@@ -117,7 +146,14 @@ public actor StagingDetector {
                 name: file, path: "\(shared)/\(file)",
                 technique: "Suspicious File in /Users/Shared",
                 description: "Executable/script in /Users/Shared: \(file). Common malware staging location.",
-                severity: .high, mitreID: "T1074.001"))
+                severity: .high, mitreID: "T1074.001",
+                scannerId: "staging",
+                enumMethod: "FileManager.contentsOfDirectory → /Users/Shared scan",
+                evidence: [
+                    "file=\(file)",
+                    "path=\(shared)/\(file)",
+                    "location=/Users/Shared",
+                ]))
         }
         return result
     }

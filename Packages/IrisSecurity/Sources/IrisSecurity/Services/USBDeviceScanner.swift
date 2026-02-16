@@ -37,7 +37,14 @@ public actor USBDeviceScanner {
             name: String(name.prefix(60)), path: "ioreg:IOUSB",
             technique: "USB Implant Suspect",
             description: "Billboard USB with \(endpoints) data endpoint(s)",
-            severity: .high, mitreID: "T1200"))
+            severity: .high, mitreID: "T1200",
+            scannerId: "usb",
+            enumMethod: "IOKit → IOServiceMatching(IOUSBDevice)",
+            evidence: [
+              "device_name=\(name)",
+              "device_class=Billboard",
+              "data_endpoints=\(endpoints)",
+            ]))
         }
       }
 
@@ -48,7 +55,13 @@ public actor USBDeviceScanner {
           name: s, path: "ioreg:IOUSB",
           technique: "Known Attack Device",
           description: "Known attack USB device detected: \(s)",
-          severity: .critical, mitreID: "T1200"))
+          severity: .critical, mitreID: "T1200",
+          scannerId: "usb",
+          enumMethod: "IOKit → IOServiceMatching(IOUSBDevice)",
+          evidence: [
+            "matched_name=\(s)",
+            "device_string=\(deviceStr)",
+          ]))
       }
     }
     return result
@@ -72,7 +85,14 @@ public actor USBDeviceScanner {
           name: ar, path: "\(path)/\(ar)",
           technique: "USB Autorun Artifact",
           description: "Autorun file on external volume '\(mount)': \(ar)",
-          severity: .high, mitreID: "T1091"))
+          severity: .high, mitreID: "T1091",
+          scannerId: "usb",
+          enumMethod: "FileManager.fileExists → /Volumes autorun check",
+          evidence: [
+            "volume=\(mount)",
+            "autorun_file=\(ar)",
+            "path=\(path)/\(ar)",
+          ]))
       }
     }
     return result

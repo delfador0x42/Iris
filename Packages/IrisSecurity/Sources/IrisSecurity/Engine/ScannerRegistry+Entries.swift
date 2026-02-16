@@ -51,7 +51,13 @@ extension ScannerEntry {
       (await NetworkAnomalyDetector.shared.scanConnections(ctx.connections)).map { na in
         ProcessAnomaly(pid: 0, processName: na.processName, processPath: "",
           parentPID: 0, parentName: "", technique: na.type.rawValue,
-          description: na.description, severity: na.severity)
+          description: na.description, severity: na.severity,
+          scannerId: "network_anomaly",
+          enumMethod: "Network.framework connection analysis",
+          evidence: [
+            "remote: \(na.remoteAddress)",
+            "connections: \(na.connectionCount)",
+          ])
       }
     },
     ScannerEntry(id: "cloud_c2", name: "Cloud C2 Detector", tier: .fast) { ctx in
@@ -80,7 +86,14 @@ extension ScannerEntry {
           parentPID: 0, parentName: "",
           technique: "Suspicious \(item.type.rawValue)",
           description: item.suspicionReasons.joined(separator: "; "),
-          severity: item.signingStatus == .unsigned ? .high : .medium, mitreID: "T1547")
+          severity: item.signingStatus == .unsigned ? .high : .medium, mitreID: "T1547",
+          scannerId: "persistence",
+          enumMethod: "FileManager.contentsOfDirectory + plist/signing analysis",
+          evidence: [
+            "type: \(item.type.rawValue)",
+            "signing: \(item.signingStatus)",
+            "path: \(item.path)",
+          ])
       }
     },
     ScannerEntry(id: "event_taps", name: "Event Taps", tier: .medium) { _ in
@@ -89,7 +102,14 @@ extension ScannerEntry {
           processPath: tap.tappingProcessPath, parentPID: 0, parentName: "",
           technique: "Suspicious Event Tap",
           description: tap.suspicionReasons.joined(separator: "; "),
-          severity: tap.isKeyboardTap ? .high : .medium, mitreID: "T1056.001")
+          severity: tap.isKeyboardTap ? .high : .medium, mitreID: "T1056.001",
+          scannerId: "event_taps",
+          enumMethod: "CGGetEventTapList → CGEventTapInformation",
+          evidence: [
+            "tapping_pid: \(tap.tappingPID)",
+            "keyboard_tap: \(tap.isKeyboardTap)",
+            "process: \(tap.tappingProcessName)",
+          ])
       }
     },
     ScannerEntry(id: "tcc", name: "TCC Monitor", tier: .medium) { _ in
@@ -97,7 +117,13 @@ extension ScannerEntry {
         ProcessAnomaly(pid: 0, processName: entry.client, processPath: "",
           parentPID: 0, parentName: "", technique: "Suspicious TCC Grant",
           description: entry.suspicionReason ?? "Suspicious: \(entry.serviceName)",
-          severity: .high, mitreID: "T1005")
+          severity: .high, mitreID: "T1005",
+          scannerId: "tcc",
+          enumMethod: "SQLiteReader → TCC.db access table query",
+          evidence: [
+            "client: \(entry.client)",
+            "service: \(entry.serviceName)",
+          ])
       }
     },
     ScannerEntry(id: "ransomware", name: "Ransomware Detector", tier: .medium) { _ in
@@ -106,7 +132,14 @@ extension ScannerEntry {
           processPath: alert.processPath, parentPID: 0, parentName: "",
           technique: "Ransomware Behavior",
           description: "Encrypted \(alert.encryptedFiles.count) files (entropy: \(String(format: "%.2f", alert.entropy)))",
-          severity: .critical, mitreID: "T1486")
+          severity: .critical, mitreID: "T1486",
+          scannerId: "ransomware",
+          enumMethod: "ES_EVENT_TYPE_NOTIFY_WRITE entropy analysis",
+          evidence: [
+            "pid: \(alert.processID)",
+            "files_encrypted: \(alert.encryptedFiles.count)",
+            "entropy: \(String(format: "%.2f", alert.entropy))",
+          ])
       }
     },
     ScannerEntry(id: "system_integrity", name: "System Integrity", tier: .medium) { _ in
@@ -155,7 +188,13 @@ extension ScannerEntry {
       (await DNSTunnelingDetector.shared.analyze()).map { na in
         ProcessAnomaly(pid: 0, processName: na.processName, processPath: "",
           parentPID: 0, parentName: "", technique: na.type.rawValue,
-          description: na.description, severity: na.severity)
+          description: na.description, severity: na.severity,
+          scannerId: "dns_tunnel",
+          enumMethod: "DNS query log entropy + subdomain length analysis",
+          evidence: [
+            "remote: \(na.remoteAddress)",
+            "connections: \(na.connectionCount)",
+          ])
       }
     },
   ]
@@ -171,7 +210,14 @@ extension ScannerEntry {
         .filter(\.isActiveHijack).map { h in
           ProcessAnomaly(pid: 0, processName: h.binaryName, processPath: h.binaryPath,
             parentPID: 0, parentName: "", technique: h.type.rawValue,
-            description: h.details, severity: .high, mitreID: "T1574.004")
+            description: h.details, severity: .high, mitreID: "T1574.004",
+            scannerId: "dylib_hijack",
+            enumMethod: "otool -L + rpath/LC_LOAD_DYLIB analysis",
+            evidence: [
+              "binary: \(h.binaryName)",
+              "path: \(h.binaryPath)",
+              "hijack_type: \(h.type.rawValue)",
+            ])
         }
     },
     ScannerEntry(id: "certificate", name: "Certificate Auditor", tier: .slow) { _ in

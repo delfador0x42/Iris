@@ -53,7 +53,14 @@ public actor ScriptBackdoorScanner {
           name: (file as NSString).lastPathComponent, path: fullPath,
           technique: "Script in System Path",
           description: "Script found: \(fullPath)",
-          severity: .medium, mitreID: "T1059"
+          severity: .medium, mitreID: "T1059",
+          scannerId: "script_backdoor",
+          enumMethod: "FileManager.enumerator → system path script extension scan",
+          evidence: [
+            "file=\((file as NSString).lastPathComponent)",
+            "path=\(fullPath)",
+            "extension=\(ext)",
+          ]
         ))
       }
     }
@@ -81,7 +88,14 @@ public actor ScriptBackdoorScanner {
             name: file, path: path,
             technique: "AppleScript Persistence",
             description: "LaunchAgent uses osascript: \(file) — XCSSET/OSAMiner technique",
-            severity: .high, mitreID: "T1059.002"
+            severity: .high, mitreID: "T1059.002",
+            scannerId: "script_backdoor",
+            enumMethod: "NSDictionary(contentsOfFile:) → plist osascript/.scpt content scan",
+            evidence: [
+              "plist=\(file)",
+              "path=\(path)",
+              "indicator=osascript or .scpt reference",
+            ]
           ))
         }
       }
@@ -109,7 +123,14 @@ public actor ScriptBackdoorScanner {
             name: file, path: path,
             technique: "Script in /usr/local/bin",
             description: "\(file): \(firstLine.prefix(80))",
-            severity: .low, mitreID: "T1059"
+            severity: .low, mitreID: "T1059",
+            scannerId: "script_backdoor",
+            enumMethod: "FileManager.contents → shebang (#!) header check",
+            evidence: [
+              "file=\(file)",
+              "path=\(path)",
+              "shebang=\(firstLine.prefix(80))",
+            ]
           ))
         }
       }

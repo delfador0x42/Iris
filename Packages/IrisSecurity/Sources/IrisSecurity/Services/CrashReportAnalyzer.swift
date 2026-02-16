@@ -64,7 +64,15 @@ public actor CrashReportAnalyzer {
             name: procName, path: path,
             technique: "Suspicious Crash Report",
             description: "\(procName) crash: \(desc) — \(isCritical ? "CRITICAL PROCESS" : "user process")",
-            severity: severity, mitreID: "T1499.004"
+            severity: severity, mitreID: "T1499.004",
+            scannerId: "crash_reports",
+            enumMethod: "FileHandle.readData → crash report pattern matching",
+            evidence: [
+              "process=\(procName)",
+              "crash_file=\(file)",
+              "crash_pattern=\(pattern)",
+              "is_critical_process=\(isCritical)",
+            ]
           ))
           break // One finding per crash file
         }

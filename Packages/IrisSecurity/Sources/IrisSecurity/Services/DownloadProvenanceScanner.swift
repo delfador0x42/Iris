@@ -45,7 +45,15 @@ public actor DownloadProvenanceScanner {
           name: entry, path: path,
           technique: "Missing Quarantine Attribute",
           description: "\(entry) — executable without quarantine (Gatekeeper bypassed)",
-          severity: .medium, mitreID: "T1553.001"
+          severity: .medium, mitreID: "T1553.001",
+          scannerId: "download_provenance",
+          enumMethod: "getxattr(com.apple.quarantine) → missing xattr check",
+          evidence: [
+            "file=\(entry)",
+            "path=\(path)",
+            "extension=\(ext)",
+            "age_days=\(Int(age / 86400))",
+          ]
         ))
       } else if let value = quarantine, value.contains(";") {
         let parts = value.components(separatedBy: ";")
@@ -57,7 +65,15 @@ public actor DownloadProvenanceScanner {
               name: entry, path: path,
               technique: "Suspicious Download Origin",
               description: "\(entry) downloaded from: \(origin.prefix(80))",
-              severity: .high, mitreID: "T1204"
+              severity: .high, mitreID: "T1204",
+              scannerId: "download_provenance",
+              enumMethod: "getxattr(com.apple.quarantine) → origin domain analysis",
+              evidence: [
+                "file=\(entry)",
+                "path=\(path)",
+                "origin=\(origin)",
+                "matched_domain=\(suspicious)",
+              ]
             ))
           }
         }

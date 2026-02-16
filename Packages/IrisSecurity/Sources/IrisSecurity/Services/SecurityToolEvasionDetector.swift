@@ -49,7 +49,15 @@ public actor SecurityToolEvasionDetector {
             pid: pid, name: name, path: path,
             technique: "Security Tool Evasion Check",
             description: "\(name) querying for \(tool.name) — evasion behavior",
-            severity: .high, mitreID: "T1562.001"
+            severity: .high, mitreID: "T1562.001",
+            scannerId: "evasion",
+            enumMethod: "sysctl(KERN_PROCARGS2) → command line inspection",
+            evidence: [
+              "pid=\(pid)",
+              "target_tool=\(tool.name)",
+              "target_bundle=\(tool.bundleId)",
+              "cmdline_match=true",
+            ]
           ))
         }
       }
@@ -60,7 +68,14 @@ public actor SecurityToolEvasionDetector {
           pid: pid, name: name, path: path,
           technique: "VM Detection Check",
           description: "\(name) running VM detection: \(pattern)",
-          severity: .medium, mitreID: "T1497.001"
+          severity: .medium, mitreID: "T1497.001",
+          scannerId: "evasion",
+          enumMethod: "sysctl(KERN_PROCARGS2) → VM detection pattern match",
+          evidence: [
+            "pid=\(pid)",
+            "pattern=\(pattern)",
+            "process=\(name)",
+          ]
         ))
       }
     }
@@ -75,7 +90,15 @@ public actor SecurityToolEvasionDetector {
           name: tool.name, path: "/Applications/\(tool.name).app",
           technique: "Security Tool Not Running",
           description: "\(tool.name) installed but not running — may have been killed",
-          severity: .medium, mitreID: "T1562.001"
+          severity: .medium, mitreID: "T1562.001",
+          scannerId: "evasion",
+          enumMethod: "FileManager.fileExists + ProcessSnapshot name check",
+          evidence: [
+            "tool=\(tool.name)",
+            "bundle_id=\(tool.bundleId)",
+            "installed=true",
+            "running=false",
+          ]
         ))
       }
     }

@@ -64,7 +64,15 @@ public actor BrowserExtensionScanner {
                     technique: "Overprivileged Browser Extension",
                     description: "\(browser) extension '\(name)' has \(dangerous.count) dangerous permissions: \(dangerous.sorted().joined(separator: ", "))",
                     severity: dangerous.contains("nativeMessaging") ? .high : .medium,
-                    mitreID: "T1176"))
+                    mitreID: "T1176",
+                    scannerId: "browser_ext",
+                    enumMethod: "manifest.json parse → permission analysis",
+                    evidence: [
+                        "browser=\(browser)",
+                        "extension_id=\(extId)",
+                        "dangerous_perms=\(dangerous.sorted().joined(separator: ","))",
+                        "total_perms=\(allPerms.count)",
+                    ]))
             }
         }
         return result
@@ -90,7 +98,15 @@ public actor BrowserExtensionScanner {
                         name: name, path: addonsPath,
                         technique: "Unsigned Firefox Extension",
                         description: "Firefox extension '\(name)' is unsigned. May be sideloaded malware.",
-                        severity: .high, mitreID: "T1176"))
+                        severity: .high, mitreID: "T1176",
+                        scannerId: "browser_ext",
+                        enumMethod: "addons.json parse → signedState check",
+                        evidence: [
+                            "browser=Firefox",
+                            "extension_name=\(name)",
+                            "signed_state=\(signed)",
+                            "active=\(active)",
+                        ]))
                 }
             }
         }

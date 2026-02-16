@@ -53,7 +53,15 @@ public actor ScreenCaptureScanner {
           name: client, path: "",
           technique: "Surveillance TCC Grant",
           description: "\(client) has \(service) — potential surveillance",
-          severity: .high, mitreID: "T1113"))
+          severity: .high, mitreID: "T1113",
+          scannerId: "screen_capture",
+          enumMethod: "SQLiteReader → TCC.db access table query (auth_value=2)",
+          evidence: [
+              "client=\(client)",
+              "service=\(service)",
+              "tcc_db=\(dbPath)",
+              "auth_value=2",
+          ]))
       }
     }
     return anomalies
@@ -74,7 +82,14 @@ public actor ScreenCaptureScanner {
           pid: pid, name: name, path: path,
           technique: "Active Screen Capture",
           description: "Process PID \(pid) capturing screen",
-          severity: .high, mitreID: "T1113"))
+          severity: .high, mitreID: "T1113",
+          scannerId: "screen_capture",
+          enumMethod: "ProcessSnapshot.capture → process name match against capture indicators",
+          evidence: [
+              "pid=\(pid)",
+              "name=\(name)",
+              "path=\(path)",
+          ]))
       }
     }
     return anomalies

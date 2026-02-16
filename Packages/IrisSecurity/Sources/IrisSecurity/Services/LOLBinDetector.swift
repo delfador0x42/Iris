@@ -149,7 +149,14 @@ public actor LOLBinDetector {
                             parentPID: ppid, parentName: parentName,
                             technique: "Suspicious Process Lineage",
                             description: "\(ancestor.name) spawned \(name) (chain: \(chain)). \(ancestor.name) should not normally lead to \(name).",
-                            severity: .high, mitreID: mitreID
+                            severity: .high, mitreID: mitreID,
+                            scannerId: "lolbin",
+                            enumMethod: "sysctl(KERN_PROCARGS2) + proc_pidinfo(PROC_PIDTASKALLINFO) ancestry walk",
+                            evidence: [
+                                "child: \(name) (pid \(pid))",
+                                "ancestor: \(ancestor.name) (pid \(ancestor.pid))",
+                                "chain: \(chain)",
+                            ]
                         ))
                         break
                     }
@@ -164,7 +171,15 @@ public actor LOLBinDetector {
                             parentPID: ppid, parentName: parentName,
                             technique: "LOLBin in Suspicious Directory",
                             description: "\(name) running from \(cwd.isEmpty ? path : cwd). System tools should not execute from temp directories.",
-                            severity: .high, mitreID: mitreID
+                            severity: .high, mitreID: mitreID,
+                            scannerId: "lolbin",
+                            enumMethod: "proc_pidinfo(PROC_PIDVNODEPATHINFO) cwd + sysctl(KERN_PROCARGS2) path",
+                            evidence: [
+                                "binary: \(name)",
+                                "cwd: \(cwd)",
+                                "exec_path: \(path)",
+                                "suspicious_dir: \(dir)",
+                            ]
                         ))
                         break
                     }
@@ -179,7 +194,14 @@ public actor LOLBinDetector {
                     parentPID: ppid, parentName: parentName,
                     technique: "Execution from Suspicious Path",
                     description: "Binary executing from temporary or hidden directory: \(path)",
-                    severity: .critical, mitreID: "T1059"
+                    severity: .critical, mitreID: "T1059",
+                    scannerId: "lolbin",
+                    enumMethod: "sysctl(KERN_PROCARGS2) path prefix check",
+                    evidence: [
+                        "pid: \(pid)",
+                        "binary: \(name)",
+                        "path: \(path)",
+                    ]
                 ))
             }
 
@@ -190,7 +212,15 @@ public actor LOLBinDetector {
                     parentPID: ppid, parentName: parentName,
                     technique: "Deleted Binary Still Running",
                     description: "Process \(name) (PID \(pid)) is running but its binary no longer exists on disk. Possible fileless malware.",
-                    severity: .critical, mitreID: "T1620"
+                    severity: .critical, mitreID: "T1620",
+                    scannerId: "lolbin",
+                    enumMethod: "sysctl(KERN_PROCARGS2) path + FileManager.fileExists",
+                    evidence: [
+                        "pid: \(pid)",
+                        "binary: \(name)",
+                        "original_path: \(path)",
+                        "on_disk: false",
+                    ]
                 ))
             }
 
@@ -203,7 +233,14 @@ public actor LOLBinDetector {
                         parentPID: ppid, parentName: parentName,
                         technique: "Gatekeeper Bypass",
                         description: "xattr removing quarantine attribute — bypassing Gatekeeper.",
-                        severity: .high, mitreID: "T1553.001"
+                        severity: .high, mitreID: "T1553.001",
+                        scannerId: "lolbin",
+                        enumMethod: "sysctl(KERN_PROCARGS2) argument inspection",
+                        evidence: [
+                            "pid: \(pid)",
+                            "command: xattr -d com.apple.quarantine",
+                            "parent: \(parentName) (pid \(ppid))",
+                        ]
                     ))
                 }
             }
@@ -218,7 +255,14 @@ public actor LOLBinDetector {
                         parentPID: ppid, parentName: parentName,
                         technique: "TCC Database Access",
                         description: "sqlite3 accessing TCC.db — possible permission grant manipulation.",
-                        severity: .critical, mitreID: "T1548"
+                        severity: .critical, mitreID: "T1548",
+                        scannerId: "lolbin",
+                        enumMethod: "sysctl(KERN_PROCARGS2) argument inspection",
+                        evidence: [
+                            "pid: \(pid)",
+                            "command: sqlite3 targeting TCC.db",
+                            "args: \(argStr.prefix(200))",
+                        ]
                     ))
                 }
                 if argStr.contains("Cookies") || argStr.contains("Login Data") {
@@ -227,7 +271,14 @@ public actor LOLBinDetector {
                         parentPID: ppid, parentName: parentName,
                         technique: "Browser Credential Theft",
                         description: "sqlite3 accessing browser data — possible credential extraction.",
-                        severity: .high, mitreID: "T1555.003"
+                        severity: .high, mitreID: "T1555.003",
+                        scannerId: "lolbin",
+                        enumMethod: "sysctl(KERN_PROCARGS2) argument inspection",
+                        evidence: [
+                            "pid: \(pid)",
+                            "command: sqlite3 targeting browser data",
+                            "args: \(argStr.prefix(200))",
+                        ]
                     ))
                 }
             }
@@ -242,7 +293,14 @@ public actor LOLBinDetector {
                         parentPID: ppid, parentName: parentName,
                         technique: "Keychain Credential Dump",
                         description: "security CLI extracting keychain credentials.",
-                        severity: .critical, mitreID: "T1555.001"
+                        severity: .critical, mitreID: "T1555.001",
+                        scannerId: "lolbin",
+                        enumMethod: "sysctl(KERN_PROCARGS2) argument inspection",
+                        evidence: [
+                            "pid: \(pid)",
+                            "command: security \(args.prefix(4).joined(separator: " "))",
+                            "parent: \(parentName) (pid \(ppid))",
+                        ]
                     ))
                 }
             }

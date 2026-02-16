@@ -78,4 +78,54 @@ public enum CodeSignValidator {
       | UInt32(kSecCSCheckNestedCode) | UInt32(kSecCSStrictValidate))
     return SecStaticCodeCheckValidity(code, flags, nil) == errSecSuccess
   }
+
+  // MARK: - Kernel-level CS info via csops()
+
+  /// Kernel code signing flags for a running process.
+  /// These come from the kernel's cs_blob, not from SecCode.
+  public struct KernelCSInfo: Sendable {
+    public let flags: UInt32
+    public let isValid: Bool           // CS_VALID
+    public let isHardened: Bool        // CS_RUNTIME
+    public let isRestrict: Bool        // CS_RESTRICT
+    public let isPlatformBinary: Bool  // CS_PLATFORM_BINARY
+    public let isDebugged: Bool        // CS_DEBUGGED
+    public let isKillOnInvalid: Bool   // CS_KILL
+
+    public var flagsHex: String { String(format: "0x%08X", flags) }
+    public var flagDescriptions: [String] {
+      var d: [String] = []
+      if isValid { d.append("CS_VALID") }
+      if isHardened { d.append("CS_RUNTIME") }
+      if isRestrict { d.append("CS_RESTRICT") }
+      if isPlatformBinary { d.append("CS_PLATFORM_BINARY") }
+      if isDebugged { d.append("CS_DEBUGGED") }
+      if isKillOnInvalid { d.append("CS_KILL") }
+      if flags & 0x0001 != 0 { d.append("CS_VALID") }
+      if flags & 0x0002 != 0 { d.append("CS_ADHOC") }
+      if flags & 0x0004 != 0 { d.append("CS_GET_TASK_ALLOW") }
+      return Array(Set(d))
+    }
+  }
+
+  /// Get kernel CS flags for a running PID via csops() syscall.
+  public static func kernelCSInfo(pid: pid_t) -> KernelCSInfo? {
+    var flags: UInt32 = 0
+    // csops(pid, CS_OPS_STATUS, &flags, sizeof(flags))
+    let result = csops(pid, 0 /* CS_OPS_STATUS */, &flags, MemoryLayout<UInt32>.size)
+    guard result == 0 else { return nil }
+    return KernelCSInfo(
+      flags: flags,
+      isValid: flags & 0x00000001 != 0,        // CS_VALID
+      isHardened: flags & 0x00010000 != 0,      // CS_RUNTIME
+      isRestrict: flags & 0x00000800 != 0,      // CS_RESTRICT
+      isPlatformBinary: flags & 0x04000000 != 0, // CS_PLATFORM_BINARY
+      isDebugged: flags & 0x10000000 != 0,       // CS_DEBUGGED
+      isKillOnInvalid: flags & 0x00000200 != 0   // CS_KILL
+    )
+  }
 }
+
+// csops() is not in public headers — declare it
+@_silgen_name("csops")
+private func csops(_ pid: pid_t, _ ops: UInt32, _ useraddr: UnsafeMutableRawPointer, _ usersize: Int) -> Int32

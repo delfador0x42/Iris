@@ -50,7 +50,14 @@ public actor CertificateAuditor {
               name: name, path: "keychain:user-trust-settings",
               technique: "Proxy/MITM Certificate Trusted",
               description: "User-trusted certificate '\(name)' matches known MITM proxy pattern",
-              severity: .high, mitreID: "T1557.002"))
+              severity: .high, mitreID: "T1557.002",
+              scannerId: "certificate",
+              enumMethod: "SecTrustSettingsCopyCertificates → user domain trust scan",
+              evidence: [
+                "cert_name=\(name)",
+                "trust_domain=user",
+                "matched_pattern=\(lower)",
+              ]))
           }
         }
       }
@@ -61,7 +68,14 @@ public actor CertificateAuditor {
         name: "TrustSettings", path: "keychain:user-trust-settings",
         technique: "Modified Trust Settings",
         description: "\(suspiciousCount) user-modified certificate trust settings. May indicate MITM proxy or malware CA.",
-        severity: .medium, mitreID: "T1556"))
+        severity: .medium, mitreID: "T1556",
+        scannerId: "certificate",
+        enumMethod: "SecTrustSettingsCopyCertificates → user domain trust enumeration",
+        evidence: [
+          "suspicious_count=\(suspiciousCount)",
+          "trust_domain=user",
+          "threshold=5",
+        ]))
     }
 
     return result
@@ -92,7 +106,14 @@ public actor CertificateAuditor {
           name: issuer.capitalized, path: "keychain:certificate",
           technique: "Proxy/MITM Certificate",
           description: "Certificate '\(name)' in keychain matches '\(issuer)'. May enable traffic interception.",
-          severity: .high, mitreID: "T1557.002"))
+          severity: .high, mitreID: "T1557.002",
+          scannerId: "certificate",
+          enumMethod: "SecItemCopyMatching → keychain certificate enumeration",
+          evidence: [
+            "cert_name=\(name)",
+            "matched_issuer=\(issuer)",
+            "source=keychain",
+          ]))
       }
     }
 

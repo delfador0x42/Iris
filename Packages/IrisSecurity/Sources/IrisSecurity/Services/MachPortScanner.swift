@@ -42,7 +42,13 @@ public actor MachPortScanner {
           name: serviceName, path: "",
           technique: "Non-Apple Mach Service",
           description: "Bootstrap service: \(serviceName)",
-          severity: .medium, mitreID: "T1559.001"
+          severity: .medium, mitreID: "T1559.001",
+          scannerId: "mach_port",
+          enumMethod: "launchctl print system → endpoints parsing",
+          evidence: [
+              "service: \(serviceName)",
+              "domain: system",
+          ]
         ))
       }
     }
@@ -65,7 +71,13 @@ public actor MachPortScanner {
             name: "kctl", path: "",
             technique: "Non-Apple Kernel Control Socket",
             description: "Kernel control: \(trimmed.prefix(100))",
-            severity: .high, mitreID: "T1014"
+            severity: .high, mitreID: "T1014",
+            scannerId: "mach_port",
+            enumMethod: "netstat -an -f systm → kctl filtering",
+            evidence: [
+                "socket_type: kctl",
+                "line: \(String(trimmed.prefix(100)))",
+            ]
           ))
         }
       }

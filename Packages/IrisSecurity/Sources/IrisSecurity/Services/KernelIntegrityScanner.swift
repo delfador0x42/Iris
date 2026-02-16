@@ -36,7 +36,13 @@ public actor KernelIntegrityScanner {
           name: base, path: "",
           technique: "Unknown MACF Policy",
           description: "Non-standard MACF policy: \(key) — possible rootkit",
-          severity: .critical, mitreID: "T1014"))
+          severity: .critical, mitreID: "T1014",
+          scannerId: "kernel_integrity",
+          enumMethod: "sysctl(security.mac) → MACF policy enumeration",
+          evidence: [
+            "policy_key=\(key)",
+            "base_name=\(base)",
+          ]))
       }
     }
     return anomalies
@@ -54,19 +60,33 @@ public actor KernelIntegrityScanner {
         name: bundleId, path: dbPath,
         technique: "Approved Third-Party Kext",
         description: "Kext \(bundleId) (team \(teamId)) approved in policy DB",
-        severity: .low, mitreID: "T1547.006")
+        severity: .low, mitreID: "T1547.006",
+        scannerId: "kernel_integrity",
+        enumMethod: "SQLite query → KextPolicy DB (allowed=1)",
+        evidence: [
+          "bundle_id=\(bundleId)",
+          "team_id=\(teamId)",
+          "db_path=\(dbPath)",
+        ])
     }
   }
 
   /// Scan trust caches — still requires kmutil (no native API)
   private func scanTrustCaches() async -> [ProcessAnomaly] {
     let output = await runCommand("/usr/bin/kmutil", args: ["showloaded", "--show", "trust"])
+    let cacheType = output.contains("engineering") ? "engineering" : "development"
     if output.contains("engineering") || output.contains("development") {
       return [.filesystem(
         name: "trust-cache", path: "",
         technique: "Non-Production Trust Cache",
         description: "Engineering/development trust cache — allows unsigned code",
-        severity: .critical, mitreID: "T1553")]
+        severity: .critical, mitreID: "T1553",
+        scannerId: "kernel_integrity",
+        enumMethod: "kmutil showloaded --show trust → trust cache inspection",
+        evidence: [
+          "cache_type=\(cacheType)",
+          "allows_unsigned=true",
+        ])]
     }
     return []
   }
@@ -78,7 +98,13 @@ public actor KernelIntegrityScanner {
         name: "hypervisor", path: "",
         technique: "Hypervisor Detected",
         description: "Running inside hypervisor — CTRR/KTRR may not be enforced",
-        severity: .low, mitreID: "T1497.001")]
+        severity: .low, mitreID: "T1497.001",
+        scannerId: "kernel_integrity",
+        enumMethod: "SysctlHelper.isVirtualMachine → hw.model check",
+        evidence: [
+          "is_vm=true",
+          "ctrr_enforced=unknown",
+        ])]
     }
     return []
   }

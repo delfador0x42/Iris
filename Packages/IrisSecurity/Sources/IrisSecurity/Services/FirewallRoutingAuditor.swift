@@ -26,7 +26,13 @@ public actor FirewallRoutingAuditor {
         name: "ALF", path: "/usr/libexec/ApplicationFirewall",
         technique: "Firewall Disabled",
         description: "Application Layer Firewall is disabled",
-        severity: .medium, mitreID: "T1562.004"
+        severity: .medium, mitreID: "T1562.004",
+        scannerId: "firewall",
+        enumMethod: "socketfilterfw --getglobalstate",
+        evidence: [
+          "firewall=ALF",
+          "state=disabled",
+        ]
       )]
     }
     return []
@@ -43,7 +49,13 @@ public actor FirewallRoutingAuditor {
           name: "pfctl", path: "/etc/pf.conf",
           technique: "PF NAT/Redirect Rule",
           description: "PF rule: \(line.prefix(120))",
-          severity: .medium, mitreID: "T1557"
+          severity: .medium, mitreID: "T1557",
+          scannerId: "firewall",
+          enumMethod: "pfctl -sr → rule list scan",
+          evidence: [
+            "rule=\(line.prefix(120))",
+            "type=nat/rdr",
+          ]
         ))
       }
       // Suspicious: pass rules allowing all traffic
@@ -52,7 +64,13 @@ public actor FirewallRoutingAuditor {
           name: "pfctl", path: "/etc/pf.conf",
           technique: "Permissive Firewall Rule",
           description: "PF allows all: \(line.prefix(120))",
-          severity: .medium, mitreID: "T1562.004"
+          severity: .medium, mitreID: "T1562.004",
+          scannerId: "firewall",
+          enumMethod: "pfctl -sr → permissive rule scan",
+          evidence: [
+            "rule=\(line.prefix(120))",
+            "type=pass all",
+          ]
         ))
       }
     }
@@ -72,7 +90,13 @@ public actor FirewallRoutingAuditor {
             name: "route", path: "",
             technique: "Suspicious Tunnel Interface",
             description: "Route via tunnel: \(line.trimmingCharacters(in: .whitespaces).prefix(100))",
-            severity: .low, mitreID: "T1572"
+            severity: .low, mitreID: "T1572",
+            scannerId: "firewall",
+            enumMethod: "netstat -rn → tunnel interface scan",
+            evidence: [
+              "interface=\(iface)",
+              "route=\(line.trimmingCharacters(in: .whitespaces).prefix(100))",
+            ]
           ))
         }
       }
@@ -90,7 +114,13 @@ public actor FirewallRoutingAuditor {
         name: "proxy", path: "",
         technique: "PAC Proxy Configured",
         description: "Proxy Auto-Config (PAC) enabled — could intercept traffic",
-        severity: .medium, mitreID: "T1557"
+        severity: .medium, mitreID: "T1557",
+        scannerId: "firewall",
+        enumMethod: "scutil --proxy → ProxyAutoConfigEnable check",
+        evidence: [
+          "proxy_type=PAC",
+          "enabled=true",
+        ]
       ))
     }
     if output.contains("SOCKSEnable : 1") {
@@ -98,7 +128,13 @@ public actor FirewallRoutingAuditor {
         name: "proxy", path: "",
         technique: "SOCKS Proxy Configured",
         description: "SOCKS proxy enabled — could tunnel traffic through attacker",
-        severity: .high, mitreID: "T1090"
+        severity: .high, mitreID: "T1090",
+        scannerId: "firewall",
+        enumMethod: "scutil --proxy → SOCKSEnable check",
+        evidence: [
+          "proxy_type=SOCKS",
+          "enabled=true",
+        ]
       ))
     }
     return anomalies

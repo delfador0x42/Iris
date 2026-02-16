@@ -46,7 +46,14 @@ public actor VMContainerDetector {
             pid: pid, name: procName, path: procPath,
             technique: "Virtual Machine/Container Running",
             description: "\(vmType) detected: \(procName) (PID \(pid))",
-            severity: .low, mitreID: "T1564.006"
+            severity: .low, mitreID: "T1564.006",
+            scannerId: "vm_container",
+            enumMethod: "ProcessSnapshot → VM/container process name match",
+            evidence: [
+              "pid=\(pid)",
+              "vm_type=\(vmType)",
+              "matched_name=\(name)",
+            ]
           ))
         }
       }
@@ -66,7 +73,13 @@ public actor VMContainerDetector {
           name: URL(fileURLWithPath: resolved).lastPathComponent, path: resolved,
           technique: "VM/Container Infrastructure",
           description: "VM/container artifact found: \(resolved)",
-          severity: .low, mitreID: "T1564.006"
+          severity: .low, mitreID: "T1564.006",
+          scannerId: "vm_container",
+          enumMethod: "FileManager.fileExists → known VM path check",
+          evidence: [
+            "path=\(resolved)",
+            "original_pattern=\(path)",
+          ]
         ))
       }
     }
@@ -87,7 +100,13 @@ public actor VMContainerDetector {
         name: name, path: "docker",
         technique: "Running Docker Container",
         description: "Container: \(line)",
-        severity: .low, mitreID: "T1564.006"
+        severity: .low, mitreID: "T1564.006",
+        scannerId: "vm_container",
+        enumMethod: "docker ps → running container enumeration",
+        evidence: [
+          "container_name=\(name)",
+          "full_line=\(line)",
+        ]
       ))
     }
     return anomalies

@@ -41,7 +41,14 @@ public actor CovertChannelDetector {
             name: "ICMP", path: "",
             technique: "ICMP Tunnel Indicator",
             description: "High ICMP volume: \(count) messages — possible ICMP tunneling",
-            severity: .high, mitreID: "T1095"
+            severity: .high, mitreID: "T1095",
+            scannerId: "covert_channel",
+            enumMethod: "netstat -s -p icmp → message count",
+            evidence: [
+              "protocol=ICMP",
+              "message_count=\(count)",
+              "threshold=10000",
+            ]
           ))
         }
       }
@@ -63,7 +70,14 @@ public actor CovertChannelDetector {
             name: procName, path: "",
             technique: "Suspicious Port Connection",
             description: "\(procName) connected on port \(port): \(desc)",
-            severity: .high, mitreID: "T1571"
+            severity: .high, mitreID: "T1571",
+            scannerId: "covert_channel",
+            enumMethod: "lsof -i -n -P → ESTABLISHED connection scan",
+            evidence: [
+              "process=\(procName)",
+              "port=\(port)",
+              "indicator=\(desc)",
+            ]
           ))
         }
       }
@@ -84,7 +98,13 @@ public actor CovertChannelDetector {
         name: procName, path: "",
         technique: "Raw Socket Usage",
         description: "\(procName) using raw sockets — potential covert channel",
-        severity: .high, mitreID: "T1095"
+        severity: .high, mitreID: "T1095",
+        scannerId: "covert_channel",
+        enumMethod: "lsof -i raw -n -P → raw socket enumeration",
+        evidence: [
+          "process=\(procName)",
+          "socket_type=raw",
+        ]
       ))
     }
     return anomalies

@@ -36,7 +36,15 @@ public actor XPCServiceAuditor {
                                 parentPID: 0, parentName: URL(fileURLWithPath: parent).lastPathComponent,
                                 technique: "XPC Service Signing Mismatch",
                                 description: "XPC service in \(parent) has different signing than parent app. Parent: \(parentSigning.rawValue), XPC: \(xpcSigning.rawValue)",
-                                severity: .critical, mitreID: "T1574"
+                                severity: .critical, mitreID: "T1574",
+                                scannerId: "xpc_services",
+                                enumMethod: "FileManager.enumerator → .xpc bundle inspection",
+                                evidence: [
+                                    "xpc_path=\(fullPath)",
+                                    "parent_app=\(parent)",
+                                    "parent_signing=\(parentSigning.rawValue)",
+                                    "xpc_signing=\(xpcSigning.rawValue)",
+                                ]
                             ))
                         }
 
@@ -48,7 +56,15 @@ public actor XPCServiceAuditor {
                                 parentPID: 0, parentName: URL(fileURLWithPath: parent).lastPathComponent,
                                 technique: "Unsigned XPC Service",
                                 description: "Unsigned XPC service in signed app bundle: \(fullPath)",
-                                severity: .critical, mitreID: "T1574"
+                                severity: .critical, mitreID: "T1574",
+                                scannerId: "xpc_services",
+                                enumMethod: "FileManager.enumerator → .xpc bundle inspection",
+                                evidence: [
+                                    "xpc_path=\(fullPath)",
+                                    "parent_app=\(parent)",
+                                    "xpc_signing=unsigned",
+                                    "parent_signing=\(parentSigning.rawValue)",
+                                ]
                             ))
                         }
                     }
@@ -89,7 +105,14 @@ public actor XPCServiceAuditor {
                                 parentPID: 0, parentName: binary ?? "unknown",
                                 technique: "Non-Apple Mach Service",
                                 description: "Third-party Mach service '\(serviceName)' registered in system directory. Binary: \(binary ?? "unknown")",
-                                severity: .medium, mitreID: "T1569.001"
+                                severity: .medium, mitreID: "T1569.001",
+                                scannerId: "xpc_services",
+                                enumMethod: "NSDictionary(contentsOfFile:) → MachServices key",
+                                evidence: [
+                                    "service_name=\(serviceName)",
+                                    "plist_path=\(path)",
+                                    "binary=\(binary ?? "unknown")",
+                                ]
                             ))
                         }
                     }
@@ -106,7 +129,14 @@ public actor XPCServiceAuditor {
                                     name: file, path: path,
                                     technique: "Suspicious Unix Socket",
                                     description: "LaunchAgent/Daemon uses Unix socket in suspicious location: \(sockPath)",
-                                    severity: .high, mitreID: "T1071"
+                                    severity: .high, mitreID: "T1071",
+                                    scannerId: "xpc_services",
+                                    enumMethod: "NSDictionary(contentsOfFile:) → Sockets/SockPathName",
+                                    evidence: [
+                                        "plist=\(file)",
+                                        "sock_path=\(sockPath)",
+                                        "directory=\(dir)",
+                                    ]
                                 ))
                             }
                         }

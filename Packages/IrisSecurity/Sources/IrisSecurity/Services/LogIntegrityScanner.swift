@@ -44,7 +44,15 @@ public actor LogIntegrityScanner {
                         name: file, path: path,
                         technique: "Security Process Crash",
                         description: "Security daemon \(proc) crashed recently (\(file)). May indicate exploitation attempt.",
-                        severity: .high, mitreID: "T1211"))
+                        severity: .high, mitreID: "T1211",
+                        scannerId: "log_integrity",
+                        enumMethod: "FileManager.contentsOfDirectory → DiagnosticReports .ips/.crash scan",
+                        evidence: [
+                            "process=\(proc)",
+                            "crash_file=\(file)",
+                            "path=\(path)",
+                            "modified=\(mod)",
+                        ]))
                 }
             }
         }
@@ -63,7 +71,14 @@ public actor LogIntegrityScanner {
                 name: "diagnostics", path: logStore,
                 technique: "Log Store Anomaly",
                 description: "Unified log store is unusually small (\(size) bytes). Logs may have been cleared.",
-                severity: .high, mitreID: "T1070.002"))
+                severity: .high, mitreID: "T1070.002",
+                scannerId: "log_integrity",
+                enumMethod: "FileManager.attributesOfItem → /var/db/diagnostics size check",
+                evidence: [
+                    "path=\(logStore)",
+                    "size_bytes=\(size)",
+                    "threshold=1048576",
+                ]))
         }
 
         // Check for disabled logging subsystems
@@ -77,7 +92,14 @@ public actor LogIntegrityScanner {
                         name: file, path: path,
                         technique: "Disabled Logging Subsystem",
                         description: "Logging subsystem \(file) has disabled levels. May hide malicious activity.",
-                        severity: .medium, mitreID: "T1562.002"))
+                        severity: .medium, mitreID: "T1562.002",
+                        scannerId: "log_integrity",
+                        enumMethod: "String(contentsOfFile:) → Logging plist Level=Off scan",
+                        evidence: [
+                            "plist=\(file)",
+                            "path=\(path)",
+                            "indicator=Level+Off in plist",
+                        ]))
                 }
             }
         }
@@ -104,7 +126,14 @@ public actor LogIntegrityScanner {
                 name: file, path: path,
                 technique: "Recent Kernel Panic",
                 description: "Kernel panic within last 7 days: \(file). May indicate kernel exploitation.",
-                severity: .high, mitreID: "T1014"))
+                severity: .high, mitreID: "T1014",
+                scannerId: "log_integrity",
+                enumMethod: "FileManager.contentsOfDirectory → DiagnosticReports .panic scan",
+                evidence: [
+                    "panic_file=\(file)",
+                    "path=\(path)",
+                    "modified=\(mod)",
+                ]))
         }
         return result
     }

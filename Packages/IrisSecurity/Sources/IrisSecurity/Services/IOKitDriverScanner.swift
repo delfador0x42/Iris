@@ -28,7 +28,14 @@ public actor IOKitDriverScanner {
         name: bundleId, path: "",
         technique: "Non-Apple IOKit Driver",
         description: "IOKit driver \(bundleId) (class: \(ioClass))",
-        severity: .medium, mitreID: "T1547.006"
+        severity: .medium, mitreID: "T1547.006",
+        scannerId: "iokit",
+        enumMethod: "IOKitHelper.registryEntries → IOService plane scan",
+        evidence: [
+          "bundle_id=\(bundleId)",
+          "io_class=\(ioClass)",
+          "plane=IOService",
+        ]
       ))
     }
     return anomalies
@@ -48,7 +55,13 @@ public actor IOKitDriverScanner {
         name: creator, path: "",
         technique: "Non-Apple IOUserClient",
         description: "IOUserClient created by: \(creator)",
-        severity: .medium, mitreID: "T1547.006"
+        severity: .medium, mitreID: "T1547.006",
+        scannerId: "iokit",
+        enumMethod: "IOKitHelper.servicesMatching → IOUserClient creator scan",
+        evidence: [
+          "creator=\(creator)",
+          "class=IOUserClient",
+        ]
       ))
     }
     return anomalies

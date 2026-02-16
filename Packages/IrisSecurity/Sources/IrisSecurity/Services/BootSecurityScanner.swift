@@ -45,7 +45,13 @@ public actor BootSecurityScanner {
         name: "nvram", path: "",
         technique: "Suspicious NVRAM Setting",
         description: desc,
-        severity: .high, mitreID: "T1542"))
+        severity: .high, mitreID: "T1542",
+        scannerId: "boot_security",
+        enumMethod: "IOKitHelper.nvramVariables → boot-args inspection",
+        evidence: [
+          "matched_pattern=\(pattern)",
+          "boot_args=\(bootArgs)",
+        ]))
     }
 
     // Check csr-active-config (custom SIP configuration)
@@ -54,7 +60,13 @@ public actor BootSecurityScanner {
         name: "nvram", path: "",
         technique: "Suspicious NVRAM Setting",
         description: "Custom SIP configuration (csr-active-config present)",
-        severity: .high, mitreID: "T1542"))
+        severity: .high, mitreID: "T1542",
+        scannerId: "boot_security",
+        enumMethod: "IOKitHelper.nvramVariables → csr-active-config check",
+        evidence: [
+          "variable=csr-active-config",
+          "present=true",
+        ]))
     }
     return anomalies
   }
@@ -66,11 +78,18 @@ public actor BootSecurityScanner {
     if output.contains("Permissive Security")
       || output.contains("Reduced Security")
     {
+      let policy = output.contains("Permissive Security") ? "Permissive" : "Reduced"
       return [.filesystem(
         name: "SecureBoot", path: "",
         technique: "Reduced Secure Boot",
         description: "Secure Boot not at Full Security",
-        severity: .medium, mitreID: "T1542")]
+        severity: .medium, mitreID: "T1542",
+        scannerId: "boot_security",
+        enumMethod: "bputil --display-all-policies → Secure Boot policy check",
+        evidence: [
+          "policy=\(policy) Security",
+          "expected=Full Security",
+        ])]
     }
     return []
   }
@@ -85,11 +104,19 @@ public actor BootSecurityScanner {
     let suspiciousExts = [".sh", ".py", ".dylib", ".so", ".exe"]
     for entry in entries {
       if suspiciousExts.contains(where: { entry.hasSuffix($0) }) {
+        let ext = suspiciousExts.first(where: { entry.hasSuffix($0) }) ?? ""
         anomalies.append(.filesystem(
           name: entry, path: "/System/Volumes/Preboot/\(entry)",
           technique: "Suspicious Preboot File",
           description: "Unexpected file in Preboot volume: \(entry)",
-          severity: .critical, mitreID: "T1542"))
+          severity: .critical, mitreID: "T1542",
+          scannerId: "boot_security",
+          enumMethod: "FileManager.contentsOfDirectory → Preboot volume scan",
+          evidence: [
+            "filename=\(entry)",
+            "extension=\(ext)",
+            "volume=/System/Volumes/Preboot",
+          ]))
       }
     }
     return anomalies
@@ -104,7 +131,14 @@ public actor BootSecurityScanner {
         name: "SEP", path: "",
         technique: "Missing Secure Enclave",
         description: "SEP not found in IORegistry",
-        severity: .medium, mitreID: "T1542")]
+        severity: .medium, mitreID: "T1542",
+        scannerId: "boot_security",
+        enumMethod: "IOKitHelper.entryExists → IODeviceTree/sep lookup",
+        evidence: [
+          "plane=IODeviceTree",
+          "path=sep",
+          "is_vm=false",
+        ])]
     }
     return []
   }

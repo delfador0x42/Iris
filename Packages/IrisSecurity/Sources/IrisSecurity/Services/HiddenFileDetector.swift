@@ -32,7 +32,14 @@ public actor HiddenFileDetector {
                     name: file, path: path,
                     technique: "Double Extension Masquerade",
                     description: "File uses double extension to disguise type: \(file)",
-                    severity: .high, mitreID: "T1036.007"))
+                    severity: .high, mitreID: "T1036.007",
+                    scannerId: "hidden_files",
+                    enumMethod: "FileManager.contentsOfDirectory extension parsing",
+                    evidence: [
+                        "file: \(file)",
+                        "path: \(path)",
+                        "directory: \(dir)",
+                    ]))
             }
 
             // Unicode RLO (Right-to-Left Override) character
@@ -41,7 +48,14 @@ public actor HiddenFileDetector {
                     name: file, path: path,
                     technique: "Unicode RLO Filename",
                     description: "Filename contains Right-to-Left Override character to hide real extension.",
-                    severity: .critical, mitreID: "T1036.002"))
+                    severity: .critical, mitreID: "T1036.002",
+                    scannerId: "hidden_files",
+                    enumMethod: "FileManager.contentsOfDirectory Unicode U+202E scan",
+                    evidence: [
+                        "file: \(file)",
+                        "path: \(path)",
+                        "rlo_char: U+202E present",
+                    ]))
             }
 
             // Null bytes in filename
@@ -50,7 +64,14 @@ public actor HiddenFileDetector {
                     name: file, path: path,
                     technique: "Null Byte in Filename",
                     description: "Filename contains null byte — may exploit path parsing vulnerabilities.",
-                    severity: .critical, mitreID: "T1036"))
+                    severity: .critical, mitreID: "T1036",
+                    scannerId: "hidden_files",
+                    enumMethod: "FileManager.contentsOfDirectory null byte scan",
+                    evidence: [
+                        "file: \(file)",
+                        "path: \(path)",
+                        "null_byte: present in filename",
+                    ]))
             }
 
             // Executable hidden as non-executable extension
@@ -59,7 +80,15 @@ public actor HiddenFileDetector {
                     name: file, path: path,
                     technique: "Executable Masquerading as Document",
                     description: "File \(file) is a Mach-O binary disguised as a document.",
-                    severity: .critical, mitreID: "T1036.008"))
+                    severity: .critical, mitreID: "T1036.008",
+                    scannerId: "hidden_files",
+                    enumMethod: "FileHandle 4-byte Mach-O magic header check",
+                    evidence: [
+                        "file: \(file)",
+                        "path: \(path)",
+                        "claimed_ext: \((file as NSString).pathExtension)",
+                        "actual_type: Mach-O binary",
+                    ]))
             }
         }
         return result

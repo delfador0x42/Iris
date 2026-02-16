@@ -32,7 +32,13 @@ public actor NetworkConfigAuditor {
                     name: "hosts", path: "/etc/hosts",
                     technique: "Hosts File Tampering",
                     description: "Apple domain blocked in /etc/hosts: \(pattern). May disable security updates or OCSP.",
-                    severity: .critical, mitreID: "T1565.001"))
+                    severity: .critical, mitreID: "T1565.001",
+                    scannerId: "network_config",
+                    enumMethod: "String(contentsOfFile:) → /etc/hosts line scan",
+                    evidence: [
+                        "file=/etc/hosts",
+                        "blocked_entry=\(pattern)",
+                    ]))
             }
         }
 
@@ -46,7 +52,13 @@ public actor NetworkConfigAuditor {
                 name: "hosts", path: "/etc/hosts",
                 technique: "Large Hosts File",
                 description: "\(customEntries.count) custom entries in /etc/hosts. May indicate DNS redirection.",
-                severity: .medium, mitreID: "T1565.001"))
+                severity: .medium, mitreID: "T1565.001",
+                scannerId: "network_config",
+                enumMethod: "String(contentsOfFile:) → /etc/hosts line count",
+                evidence: [
+                    "file=/etc/hosts",
+                    "custom_entry_count=\(customEntries.count)",
+                ]))
         }
         return result
     }
@@ -63,7 +75,14 @@ public actor NetworkConfigAuditor {
                 name: file, path: path,
                 technique: "Custom DNS Resolver",
                 description: "Custom DNS resolver configured: /etc/resolver/\(file). DNS queries for '\(file)' domain may be redirected.",
-                severity: .medium, mitreID: "T1584.002"))
+                severity: .medium, mitreID: "T1584.002",
+                scannerId: "network_config",
+                enumMethod: "FileManager.contentsOfDirectory → /etc/resolver/",
+                evidence: [
+                    "resolver_file=\(file)",
+                    "path=\(path)",
+                    "domain=\(file)",
+                ]))
         }
         return result
     }
@@ -78,7 +97,13 @@ public actor NetworkConfigAuditor {
                 name: iface, path: "ifconfig",
                 technique: "Promiscuous Mode",
                 description: "Interface \(iface) in promiscuous mode. May indicate packet capture/sniffing.",
-                severity: .high, mitreID: "T1040"))
+                severity: .high, mitreID: "T1040",
+                scannerId: "network_config",
+                enumMethod: "ifconfig -a → PROMISC flag",
+                evidence: [
+                    "interface=\(iface)",
+                    "flag=PROMISC",
+                ]))
         }
         return result
     }
@@ -92,7 +117,13 @@ public actor NetworkConfigAuditor {
                 name: "WebProxy", path: "networksetup",
                 technique: "Web Proxy Configured",
                 description: "HTTP proxy is enabled on Wi-Fi. Traffic may be intercepted.",
-                severity: .medium, mitreID: "T1557"))
+                severity: .medium, mitreID: "T1557",
+                scannerId: "network_config",
+                enumMethod: "networksetup -getwebproxy Wi-Fi",
+                evidence: [
+                    "interface=Wi-Fi",
+                    "proxy_enabled=true",
+                ]))
         }
         return result
     }

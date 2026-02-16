@@ -41,7 +41,15 @@ public actor XattrAbuseDetector {
                             technique: "Suspicious Extended Attribute",
                             description: "App \(app) has custom xattr '\(attr)' (\(size) bytes). Possible RustyAttr-style code smuggling.",
                             severity: size > 1000 ? .critical : .high,
-                            mitreID: "T1564.004"))
+                            mitreID: "T1564.004",
+                            scannerId: "xattr",
+                            enumMethod: "listxattr → getxattr size check",
+                            evidence: [
+                                "app=\(app)",
+                                "xattr_name=\(attr)",
+                                "xattr_size=\(size)",
+                                "path=\(appPath)",
+                            ]))
                     }
                 }
             }
@@ -70,13 +78,27 @@ public actor XattrAbuseDetector {
                             name: app, path: "\(dir)/\(app)",
                             technique: "Tauri App with XAttr Access",
                             description: "Tauri app \(app) has preload.js that may read extended attributes. Matches RustyAttr/Lazarus technique.",
-                            severity: .critical, mitreID: "T1564.004"))
+                            severity: .critical, mitreID: "T1564.004",
+                            scannerId: "xattr",
+                            enumMethod: "FileManager.fileExists → preload.js content scan",
+                            evidence: [
+                                "app=\(app)",
+                                "preload_js=\(preloadJs)",
+                                "framework=Tauri",
+                            ]))
                     } else {
                         result.append(.filesystem(
                             name: app, path: "\(dir)/\(app)",
                             technique: "Tauri Framework App",
                             description: "Tauri-based app detected: \(app). Unusual framework — verify legitimacy.",
-                            severity: .medium, mitreID: "T1027"))
+                            severity: .medium, mitreID: "T1027",
+                            scannerId: "xattr",
+                            enumMethod: "FileManager.fileExists → tauri.conf.json detection",
+                            evidence: [
+                                "app=\(app)",
+                                "path=\(dir)/\(app)",
+                                "framework=Tauri",
+                            ]))
                     }
                 }
             }

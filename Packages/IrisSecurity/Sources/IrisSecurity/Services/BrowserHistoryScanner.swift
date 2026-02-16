@@ -55,7 +55,15 @@ public actor BrowserHistoryScanner {
           name: browser, path: dbPath,
           technique: "Suspicious Browser History",
           description: "\(browser) visited \(desc): \(url.prefix(100))",
-          severity: .medium, mitreID: "T1071.001"))
+          severity: .medium, mitreID: "T1071.001",
+          scannerId: "browser_history",
+          enumMethod: "SQLiteReader → \(table) table URL scan",
+          evidence: [
+            "browser=\(browser)",
+            "db_path=\(dbPath)",
+            "url=\(String(url.prefix(200)))",
+            "matched_pattern=\(pattern)",
+          ]))
       }
     }
     return anomalies

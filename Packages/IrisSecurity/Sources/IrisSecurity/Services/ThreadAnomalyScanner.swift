@@ -32,7 +32,15 @@ public actor ThreadAnomalyScanner {
           pid: pid, name: name, path: path,
           technique: "Anomalous Thread Count",
           description: "\(name) has \(threadCount) threads (expected <\(Self.simpleProcessMax))",
-          severity: .medium, mitreID: "T1055"
+          severity: .medium, mitreID: "T1055",
+          scannerId: "thread_anomaly",
+          enumMethod: "proc_pidinfo(PROC_PIDTASKINFO)",
+          evidence: [
+            "pid: \(pid)",
+            "thread_count: \(threadCount)",
+            "expected_max: \(Self.simpleProcessMax)",
+            "process: \(name)",
+          ]
         ))
       } else if threadCount > Self.extremeThreadCount {
         guard !path.hasPrefix("/System/") else { continue }
@@ -40,7 +48,15 @@ public actor ThreadAnomalyScanner {
           pid: pid, name: name, path: path,
           technique: "Extreme Thread Count",
           description: "\(name) has \(threadCount) threads — possible injection or mining",
-          severity: .medium, mitreID: "T1055"
+          severity: .medium, mitreID: "T1055",
+          scannerId: "thread_anomaly",
+          enumMethod: "proc_pidinfo(PROC_PIDTASKINFO)",
+          evidence: [
+            "pid: \(pid)",
+            "thread_count: \(threadCount)",
+            "threshold: \(Self.extremeThreadCount)",
+            "process: \(name)",
+          ]
         ))
       }
     }

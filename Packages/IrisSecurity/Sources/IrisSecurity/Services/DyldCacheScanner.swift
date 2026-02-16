@@ -43,7 +43,14 @@ public actor DyldCacheScanner {
           name: entry, path: path,
           technique: "Unexpected Dyld Cache Variant",
           description: "Non-standard dyld cache file: \(entry)",
-          severity: .high, mitreID: "T1574"
+          severity: .high, mitreID: "T1574",
+          scannerId: "dyld_cache",
+          enumMethod: "FileManager.contentsOfDirectory → dyld cache variant check",
+          evidence: [
+            "filename=\(entry)",
+            "suffix=\(suffix)",
+            "directory=\(dyldDir)",
+          ]
         ))
       }
 
@@ -53,7 +60,14 @@ public actor DyldCacheScanner {
           name: entry, path: path,
           technique: "Writable Dyld Cache",
           description: "Dyld cache is writable: \(entry) — integrity concern",
-          severity: .critical, mitreID: "T1574"
+          severity: .critical, mitreID: "T1574",
+          scannerId: "dyld_cache",
+          enumMethod: "FileManager.attributesOfItem → posixPermissions check",
+          evidence: [
+            "filename=\(entry)",
+            "permissions=0o\(String(posix, radix: 8))",
+            "writable=true",
+          ]
         ))
       }
     }
@@ -76,7 +90,14 @@ public actor DyldCacheScanner {
           pid: pid, name: name, path: path,
           technique: "Dyld Cache Override",
           description: "\(name) (PID \(pid)) has \(key)=\(value) — shared cache hijacking",
-          severity: .critical, mitreID: "T1574"
+          severity: .critical, mitreID: "T1574",
+          scannerId: "dyld_cache",
+          enumMethod: "ProcessEnumeration.getProcessEnvironment → DYLD env var scan",
+          evidence: [
+            "pid=\(pid)",
+            "env_var=\(key)",
+            "env_value=\(value)",
+          ]
         ))
       }
     }

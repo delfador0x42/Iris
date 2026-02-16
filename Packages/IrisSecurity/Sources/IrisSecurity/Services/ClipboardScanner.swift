@@ -44,7 +44,14 @@ public actor ClipboardScanner {
             pid: pid, name: name, path: snapshot.path(for: pid),
             technique: "Clipboard Monitoring",
             description: "\(name) accessing clipboard — possible clipboard hijacking",
-            severity: .high, mitreID: "T1115"
+            severity: .high, mitreID: "T1115",
+            scannerId: "clipboard",
+            enumMethod: "sysctl(KERN_PROCARGS2) argument parsing",
+            evidence: [
+              "pid: \(pid)",
+              "interpreter: \(name)",
+              "cmdline_match: pbpaste/NSPasteboard/clipboard",
+            ]
           ))
         }
       }
@@ -75,7 +82,14 @@ public actor ClipboardScanner {
             name: file, path: path,
             technique: "Clipboard Monitoring Persistence",
             description: "LaunchAgent references clipboard: \(file)",
-            severity: .high, mitreID: "T1115"
+            severity: .high, mitreID: "T1115",
+            scannerId: "clipboard",
+            enumMethod: "LaunchAgent plist content scan",
+            evidence: [
+              "plist: \(file)",
+              "path: \(path)",
+              "match: pbpaste/NSPasteboard/clipboard reference",
+            ]
           ))
         }
       }

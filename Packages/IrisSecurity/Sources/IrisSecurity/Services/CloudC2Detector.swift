@@ -49,7 +49,15 @@ public actor CloudC2Detector {
                     parentPID: 0, parentName: "",
                     technique: "Cloud C2/Exfiltration",
                     description: anomaly.description,
-                    severity: anomaly.severity, mitreID: "T1567.002"
+                    severity: anomaly.severity, mitreID: "T1567.002",
+                    scannerId: "cloud_c2",
+                    enumMethod: "NEFilterDataProvider connection hostname matching",
+                    evidence: [
+                        "pid: \(conn.processId)",
+                        "process: \(conn.processName)",
+                        "hostname: \(hostname)",
+                        "anomaly_type: \(anomaly.type.rawValue)",
+                    ]
                 ))
             }
         }
