@@ -65,4 +65,16 @@ public final class ScanSession: ObservableObject {
   public func result(for id: String) -> ScannerResult? {
     scannerResults.first { $0.id == id }
   }
+
+  /// Current results (complete or in-progress). Enables export during scan.
+  public var currentResult: ThreatScanResult {
+    scanResult ?? ThreatScanResult(
+      anomalies: scannerResults.flatMap(\.anomalies),
+      supplyChainFindings: [], fsChanges: [],
+      scannerResults: scannerResults,
+      correlations: correlations, allowlistSuppressed: allowlistSuppressedCount,
+      scanDuration: 0, scannerCount: scannerResults.count,
+      timestamp: Date()
+    )
+  }
 }
