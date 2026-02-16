@@ -98,11 +98,13 @@ extension SecurityAssessor {
 
     // Cross-scanner correlation
     let correlations = CorrelationEngine.correlate(allResults)
+    let sc = await scFindings
+    let fs = await fsChanges
 
     let result = ThreatScanResult(
       anomalies: allResults.flatMap(\.anomalies).sorted { $0.severity > $1.severity },
-      supplyChainFindings: await scFindings,
-      fsChanges: await fsChanges,
+      supplyChainFindings: sc,
+      fsChanges: fs,
       scannerResults: allResults,
       correlations: correlations,
       allowlistSuppressed: totalSuppressed,

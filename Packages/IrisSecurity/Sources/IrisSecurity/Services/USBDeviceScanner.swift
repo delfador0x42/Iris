@@ -18,7 +18,7 @@ public actor USBDeviceScanner {
   /// Check USB devices for implant characteristics via IOKit
   private func scanUSBDevices() -> [ProcessAnomaly] {
     var result: [ProcessAnomaly] = []
-    let devices = IOKitHelper.usbDevices()
+    let devices = IOKitRegistryReader.usbDevices()
 
     let suspicious = [
       "BadUSB", "Rubber Ducky", "USB Armory", "LAN Turtle",

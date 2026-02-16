@@ -151,4 +151,23 @@ int32_t iris_der_build_implicit_tag(uint8_t tag, const uint8_t *content, size_t 
 int32_t iris_der_build_utc_time(int64_t unix_timestamp, uint8_t **out, size_t *out_len);
 int32_t iris_der_build_generalized_time(int64_t unix_timestamp, uint8_t **out, size_t *out_len);
 
+// ============================================================
+// Batch operations (SHA256, entropy)
+// ============================================================
+
+/// SHA256 hash a file. Returns hex string via out_hex. Free with iris_free_string.
+/// Returns 0=ok, -1=file error, -2=arg error.
+int32_t iris_sha256_file(const char *path, char **out_hex);
+
+/// Free a string from iris_sha256_file.
+void iris_free_string(char *ptr);
+
+/// Shannon entropy of a file (0.0–8.0). Returns 0=ok, -1=error.
+int32_t iris_file_entropy(const char *path, double *out);
+
+/// Batch SHA256: hash multiple files. Returns array of hex digests.
+/// Empty string for files that failed. Free with iris_batch_sha256_free.
+int32_t iris_batch_sha256(const char **paths, size_t count, IrisCStringArray *out);
+void iris_batch_sha256_free(IrisCStringArray *arr);
+
 #endif

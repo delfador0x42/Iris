@@ -7,112 +7,24 @@ struct ProcessDetailView: View {
     @State private var manPageContent: String?
     @State private var isLoadingManPage = false
     @State private var showManPage = false
+    @State private var binaryAnalysis: BinaryAnalysis?
+    @State private var isAnalyzing = false
+    @State private var analysisRequested = false
 
     var body: some View {
         ZStack {
-            // Background
             Color(red: 0.05, green: 0.07, blue: 0.1)
                 .ignoresSafeArea()
 
             ThemedScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    // Header
-                    HStack {
-                        if process.isSuspicious {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundColor(.red)
-                                .font(.title2)
-                        }
-
-                        Text(process.displayName)
-                            .font(.system(size: 24, weight: .bold))
-                            .foregroundColor(process.isSuspicious ? .red : .white)
-
-                        Spacer()
-
-                        Button("Close") { onDismiss() }
-                            .foregroundColor(.blue)
-                    }
-                    .padding(.bottom, 10)
-
-                    // Process lineage (spawn chain)
+                    header
+                    commandLineSection
+                    processIdentity
                     processLineage
-
-                    // Basic info
-                    DetailSection(title: "Process Information") {
-                        DetailRow(label: "Name", value: process.name)
-                        DetailRow(label: "PID", value: String(process.pid))
-                        DetailRow(label: "Parent PID", value: String(process.ppid))
-                        if process.responsiblePid > 0 {
-                            DetailRow(label: "Responsible PID", value: String(process.responsiblePid))
-                        }
-                        DetailRow(label: "Path", value: process.path)
-                        DetailRow(label: "User ID", value: String(process.userId))
-                        DetailRow(label: "Group ID", value: String(process.groupId))
-                        DetailRow(label: "Has Man Page", value: manPageStatusText)
-                    }
-
-                    // Resource metrics
-                    if let res = process.resources {
-                        DetailSection(title: "Resources") {
-                            DetailRow(label: "CPU Usage", value: res.formattedCPU)
-                            DetailRow(label: "Memory (RSS)", value: res.formattedMemory)
-                            DetailRow(label: "Threads", value: String(res.threadCount))
-                            DetailRow(label: "Open Files", value: String(res.openFileCount))
-                        }
-                    }
-
-                    // Code signing
-                    if let csInfo = process.codeSigningInfo {
-                        DetailSection(title: "Code Signing") {
-                            DetailRow(label: "Status", value: csInfo.signerDescription)
-                            DetailRow(label: "Team ID", value: csInfo.teamId ?? "None")
-                            DetailRow(label: "Signing ID", value: csInfo.signingId ?? "None")
-                            DetailRow(label: "Platform Binary", value: csInfo.isPlatformBinary ? "Yes" : "No")
-                            DetailRow(label: "Apple Signed", value: csInfo.isAppleSigned ? "Yes" : "No")
-                            DetailRow(label: "Hardened Runtime", value: csInfo.isHardenedRuntime ? "Yes" : "No")
-                            DetailRow(label: "Debuggable", value: csInfo.isDebuggable ? "Yes" : "No")
-                            DetailRow(label: "Restricted", value: csInfo.isRestricted ? "Yes" : "No")
-                            DetailRow(label: "Linker Signed", value: csInfo.isLinkerSigned ? "Yes" : "No")
-                            DetailRow(label: "Flags", value: "0x\(String(csInfo.flags, radix: 16))")
-                        }
-                    }
-
-                    // Suspicion reasons
-                    if !process.suspicionReasons.isEmpty {
-                        DetailSection(title: "Suspicion Indicators") {
-                            ForEach(process.suspicionReasons, id: \.self) { reason in
-                                HStack {
-                                    Image(systemName: "exclamationmark.triangle.fill")
-                                        .foregroundColor(severityColor(reason.severity))
-                                    Text(reason.description)
-                                        .foregroundColor(.white)
-                                    Spacer()
-                                    Text(reason.severity.label)
-                                        .foregroundColor(severityColor(reason.severity))
-                                        .font(.caption)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 2)
-                                        .background(severityColor(reason.severity).opacity(0.2))
-                                        .cornerRadius(4)
-                                }
-                                .padding(.vertical, 4)
-                            }
-                        }
-                    }
-
-                    // Arguments
-                    if !process.arguments.isEmpty {
-                        DetailSection(title: "Arguments") {
-                            ForEach(process.arguments.indices, id: \.self) { index in
-                                Text(process.arguments[index])
-                                    .font(.system(size: 12, design: .monospaced))
-                                    .foregroundColor(.gray)
-                            }
-                        }
-                    }
-
-                    // Man Page Section
+                    resourcesSection
+                    alertsSection
+                    binaryAnalysisSection
                     manPageSection
                 }
                 .padding(24)
@@ -120,30 +32,132 @@ struct ProcessDetailView: View {
         }
         .task {
             await loadManPage()
+            await runBinaryAnalysis()
         }
     }
 
-    private var manPageStatusText: String {
-        if isLoadingManPage {
-            return "Checking..."
-        } else if manPageContent != nil {
-            return "Yes"
-        } else if process.hasManPage == false {
-            return "No"
-        } else {
-            return "Unknown"
+    // MARK: - Header
+
+    private var header: some View {
+        HStack {
+            if process.isSuspicious {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundColor(.red)
+                    .font(.title2)
+            }
+
+            Text(process.displayName)
+                .font(.system(size: 24, weight: .bold))
+                .foregroundColor(process.isSuspicious ? .red : .white)
+
+            Spacer()
+
+            Button("Close") { onDismiss() }
+                .foregroundColor(.blue)
+        }
+        .padding(.bottom, 4)
+    }
+
+    // MARK: - Command Line
+
+    @ViewBuilder
+    private var commandLineSection: some View {
+        if !process.arguments.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("COMMAND LINE")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundColor(.cyan.opacity(0.6))
+
+                Text(formatCommandLine())
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundColor(.white)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(10)
+                    .background(Color.black.opacity(0.4))
+                    .cornerRadius(6)
+            }
         }
     }
+
+    // MARK: - Process Identity
+
+    private var processIdentity: some View {
+        DetailSection(title: "Process") {
+            DetailRow(label: "PID", value: "\(process.pid) (parent: \(process.ppid))")
+            DetailRow(label: "Path", value: process.path)
+            DetailRow(label: "User", value: userDescription)
+            if let csInfo = process.codeSigningInfo {
+                DetailRow(label: "Signing", value: signingOneLiner(csInfo))
+            } else {
+                DetailRow(label: "Signing", value: "Unsigned")
+            }
+        }
+    }
+
+    // MARK: - Resources
+
+    @ViewBuilder
+    private var resourcesSection: some View {
+        if let res = process.resources {
+            DetailSection(title: "Resources") {
+                DetailRow(label: "CPU", value: res.formattedCPU)
+                DetailRow(label: "Memory", value: res.formattedMemory)
+                DetailRow(label: "Threads", value: String(res.threadCount))
+                DetailRow(label: "Open Files", value: String(res.openFileCount))
+            }
+        }
+    }
+
+    // MARK: - Alerts
+
+    @ViewBuilder
+    private var alertsSection: some View {
+        if !process.suspicionReasons.isEmpty {
+            DetailSection(title: "Alerts") {
+                ForEach(process.suspicionReasons, id: \.self) { reason in
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(severityColor(reason.severity))
+                            .frame(width: 6, height: 6)
+                        Text(reason.description)
+                            .font(.system(size: 12))
+                            .foregroundColor(.white)
+                    }
+                    .padding(.vertical, 1)
+                }
+            }
+        }
+    }
+
+    // MARK: - Binary Analysis
+
+    @ViewBuilder
+    private var binaryAnalysisSection: some View {
+        if isAnalyzing {
+            DetailSection(title: "Binary Analysis") {
+                HStack {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                    Text("Analyzing binary...")
+                        .foregroundColor(.gray)
+                        .font(.system(size: 12))
+                }
+            }
+        } else if let analysis = binaryAnalysis {
+            BinaryAnalysisSection(analysis: analysis)
+        }
+    }
+
+    // MARK: - Man Page
 
     @ViewBuilder
     private var manPageSection: some View {
         if isLoadingManPage {
             DetailSection(title: "Man Page") {
                 HStack {
-                    ProgressView()
-                        .scaleEffect(0.8)
-                    Text("Loading man page...")
-                        .foregroundColor(.gray)
+                    ProgressView().scaleEffect(0.8)
+                    Text("Loading...").foregroundColor(.gray)
                 }
             }
         } else if let content = manPageContent {
@@ -152,9 +166,7 @@ struct ProcessDetailView: View {
                     Text("Man Page")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundColor(Color(red: 0.0, green: 0.8, blue: 0.8))
-
                     Spacer()
-
                     Button(action: { showManPage.toggle() }) {
                         HStack(spacing: 4) {
                             Text(showManPage ? "Hide" : "Show")
@@ -180,17 +192,34 @@ struct ProcessDetailView: View {
                     .cornerRadius(8)
                 }
             }
-        } else if process.hasManPage == false {
-            DetailSection(title: "Man Page") {
-                HStack {
-                    Image(systemName: "doc.questionmark")
-                        .foregroundColor(.orange)
-                    Text("No man page available for this command")
-                        .foregroundColor(.gray)
-                        .font(.system(size: 12))
-                }
-            }
         }
+    }
+
+    // MARK: - Helpers
+
+    private func formatCommandLine() -> String {
+        process.arguments.map { arg in
+            arg.contains(" ") || arg.contains("\"") ? "'\(arg)'" : arg
+        }.joined(separator: " ")
+    }
+
+    private var userDescription: String {
+        let uid = process.userId
+        switch uid {
+        case 0: return "root (0)"
+        case 501: return "user (501)"
+        default: return String(uid)
+        }
+    }
+
+    private func signingOneLiner(_ cs: ProcessInfo.CodeSigningInfo) -> String {
+        var parts = [cs.signerDescription]
+        var flags: [String] = []
+        if cs.isHardenedRuntime { flags.append("hardened") }
+        if cs.isDebuggable { flags.append("debuggable") }
+        if cs.isLinkerSigned { flags.append("linker-signed") }
+        if !flags.isEmpty { parts.append("[\(flags.joined(separator: ", "))]") }
+        return parts.joined(separator: " ")
     }
 
     private func loadManPage() async {
@@ -199,4 +228,12 @@ struct ProcessDetailView: View {
         isLoadingManPage = false
     }
 
+    private func runBinaryAnalysis() async {
+        guard !process.path.isEmpty else { return }
+        isAnalyzing = true
+        binaryAnalysis = await Task.detached {
+            BinaryAnalysisEngine.analyzeOne(process.path)
+        }.value
+        isAnalyzing = false
+    }
 }

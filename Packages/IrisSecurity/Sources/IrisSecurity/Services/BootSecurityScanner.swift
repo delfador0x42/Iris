@@ -4,7 +4,7 @@ import os.log
 /// Scans boot chain security: NVRAM variables, Secure Boot, firmware.
 /// Covers: eficheck, nvram_boot, preboot_scan, sep_coprocessor.
 /// Firmware implants survive OS reinstall — critical to verify.
-/// Uses IOKit + SysctlHelper for NVRAM/SEP. bputil still shells out.
+/// Uses IOKit + SysctlReader for NVRAM/SEP. bputil still shells out.
 public actor BootSecurityScanner {
   public static let shared = BootSecurityScanner()
   private let logger = Logger(subsystem: "com.wudan.iris", category: "BootSecurity")
@@ -21,7 +21,7 @@ public actor BootSecurityScanner {
   /// Check NVRAM for suspicious boot arguments via IOKit
   private func scanNVRAM() -> [ProcessAnomaly] {
     var anomalies: [ProcessAnomaly] = []
-    let nvram = IOKitHelper.nvramVariables()
+    let nvram = IOKitRegistryReader.nvramVariables()
 
     // Read boot-args (can be Data or String)
     let bootArgs: String
@@ -47,7 +47,7 @@ public actor BootSecurityScanner {
         description: desc,
         severity: .high, mitreID: "T1542",
         scannerId: "boot_security",
-        enumMethod: "IOKitHelper.nvramVariables → boot-args inspection",
+        enumMethod: "IOKitRegistryReader.nvramVariables → boot-args inspection",
         evidence: [
           "matched_pattern=\(pattern)",
           "boot_args=\(bootArgs)",
@@ -62,7 +62,7 @@ public actor BootSecurityScanner {
         description: "Custom SIP configuration (csr-active-config present)",
         severity: .high, mitreID: "T1542",
         scannerId: "boot_security",
-        enumMethod: "IOKitHelper.nvramVariables → csr-active-config check",
+        enumMethod: "IOKitRegistryReader.nvramVariables → csr-active-config check",
         evidence: [
           "variable=csr-active-config",
           "present=true",
@@ -124,16 +124,16 @@ public actor BootSecurityScanner {
 
   /// Check Secure Enclave status via IOKit device tree
   private func scanSEPStatus() -> [ProcessAnomaly] {
-    let hasSEP = IOKitHelper.entryExists(
+    let hasSEP = IOKitRegistryReader.entryExists(
       plane: "IODeviceTree", path: "sep")
-    if !hasSEP && !SysctlHelper.isVirtualMachine {
+    if !hasSEP && !SysctlReader.isVirtualMachine {
       return [.filesystem(
         name: "SEP", path: "",
         technique: "Missing Secure Enclave",
         description: "SEP not found in IORegistry",
         severity: .medium, mitreID: "T1542",
         scannerId: "boot_security",
-        enumMethod: "IOKitHelper.entryExists → IODeviceTree/sep lookup",
+        enumMethod: "IOKitRegistryReader.entryExists → IODeviceTree/sep lookup",
         evidence: [
           "plane=IODeviceTree",
           "path=sep",

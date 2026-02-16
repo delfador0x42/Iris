@@ -10,6 +10,8 @@ public actor DNSTunnelingDetector {
     /// Query counts per domain in the current window
     private var queryCounts: [String: Int] = [:]
     private var txtQueryCounts: [String: Int] = [:]
+    /// Track subdomain entropy per base domain for tunnel detection
+    private var subdomainSamples: [String: [String]] = [:]
     private var windowStart = Date()
     private let windowDuration: TimeInterval = 60 // 1 minute window
 
@@ -20,6 +22,13 @@ public actor DNSTunnelingDetector {
         queryCounts[baseDomain, default: 0] += 1
         if recordType == "TXT" {
             txtQueryCounts[baseDomain, default: 0] += 1
+        }
+        // Keep last 50 subdomain labels for entropy analysis
+        let labels = domain.split(separator: ".")
+        if labels.count >= 3, let sub = labels.first {
+            var samples = subdomainSamples[baseDomain, default: []]
+            if samples.count < 50 { samples.append(String(sub)) }
+            subdomainSamples[baseDomain] = samples
         }
     }
 
@@ -53,6 +62,23 @@ public actor DNSTunnelingDetector {
                     averageInterval: 0
                 ))
             }
+
+            // High-entropy subdomains = encoded data exfiltration
+            if let samples = subdomainSamples[domain], samples.count >= 5 {
+                let avgEntropy = samples.reduce(0.0) { $0 + shannonEntropy($1) } / Double(samples.count)
+                let avgLen = samples.reduce(0) { $0 + $1.count } / samples.count
+                if avgEntropy > 3.5 && avgLen > 15 {
+                    anomalies.append(NetworkAnomaly(
+                        type: .dnsTunneling,
+                        processName: "DNS",
+                        remoteAddress: domain,
+                        description: "High-entropy subdomains to \(domain) (avg entropy: \(String(format: "%.1f", avgEntropy)), avg len: \(avgLen)) — data exfiltration",
+                        severity: .critical,
+                        connectionCount: count,
+                        averageInterval: 0
+                    ))
+                }
+            }
         }
 
         return anomalies
@@ -77,6 +103,7 @@ public actor DNSTunnelingDetector {
         if Date().timeIntervalSince(windowStart) > windowDuration {
             queryCounts.removeAll()
             txtQueryCounts.removeAll()
+            subdomainSamples.removeAll()
             windowStart = Date()
         }
     }

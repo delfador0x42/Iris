@@ -24,17 +24,10 @@ public struct CorrelationEngine: Sendable {
       let scannerIds = Set(anomalies.compactMap { findScanner($0, in: results) })
       guard scannerIds.count >= 2 else { continue }
 
-      // Credential access + network = exfiltration chain
-      if let c = checkExfiltrationChain(processName, anomalies, scannerIds) {
-        correlations.append(c)
-      }
-      // Hidden + stealth = rootkit behavior
-      if let c = checkRootkitChain(processName, anomalies, scannerIds) {
-        correlations.append(c)
-      }
-      // Persistence + unsigned = malware install
-      if let c = checkMalwareInstall(processName, anomalies, scannerIds) {
-        correlations.append(c)
+      for chain in chainChecks {
+        if let c = chain(processName, anomalies, scannerIds) {
+          correlations.append(c)
+        }
       }
       // Multi-scanner hit (3+) on same process = high confidence threat
       if scannerIds.count >= 3 {
@@ -51,44 +44,91 @@ public struct CorrelationEngine: Sendable {
 
   // MARK: - Chain Detectors
 
-  private static func checkExfiltrationChain(
-    _ proc: String, _ anomalies: [ProcessAnomaly], _ ids: Set<String>
-  ) -> Correlation? {
-    let hasCredAccess = ids.contains("credential_access")
-    let hasNetwork = ids.contains("network_anomaly") || ids.contains("cloud_c2")
-    guard hasCredAccess && hasNetwork else { return nil }
-    return Correlation(
-      id: UUID(), name: "Credential Exfiltration Chain",
-      description: "\(proc): credential access + suspicious network activity",
-      scannerIds: Array(ids), anomalies: anomalies, severity: .critical,
-      mitreChain: "T1555 → T1567")
-  }
+  private typealias ChainCheck = (String, [ProcessAnomaly], Set<String>) -> Correlation?
 
-  private static func checkRootkitChain(
-    _ proc: String, _ anomalies: [ProcessAnomaly], _ ids: Set<String>
-  ) -> Correlation? {
-    let hasHidden = ids.contains("hidden_process") || ids.contains("stealth")
-    let hasKernel = ids.contains("kext") || ids.contains("kernel_integrity")
-    guard hasHidden && hasKernel else { return nil }
-    return Correlation(
-      id: UUID(), name: "Rootkit Behavior",
-      description: "\(proc): hidden process + kernel manipulation",
-      scannerIds: Array(ids), anomalies: anomalies, severity: .critical,
-      mitreChain: "T1014 → T1547.006")
-  }
-
-  private static func checkMalwareInstall(
-    _ proc: String, _ anomalies: [ProcessAnomaly], _ ids: Set<String>
-  ) -> Correlation? {
-    let hasPersistence = ids.contains("persistence")
-    let hasBinary = ids.contains("binary_integrity") || ids.contains("dylib_hijack")
-    guard hasPersistence && hasBinary else { return nil }
-    return Correlation(
-      id: UUID(), name: "Malware Installation",
-      description: "\(proc): persistence + unsigned/hijacked binary",
-      scannerIds: Array(ids), anomalies: anomalies, severity: .high,
-      mitreChain: "T1547 → T1574")
-  }
+  private static let chainChecks: [ChainCheck] = [
+    // Credential access + network = exfiltration
+    { proc, anomalies, ids in
+      guard ids.contains("credential_access"),
+            ids.contains("network_anomaly") || ids.contains("cloud_c2") else { return nil }
+      return Correlation(id: UUID(), name: "Credential Exfiltration Chain",
+        description: "\(proc): credential access + suspicious network",
+        scannerIds: Array(ids), anomalies: anomalies, severity: .critical,
+        mitreChain: "T1555 → T1567")
+    },
+    // Hidden + kernel = rootkit
+    { proc, anomalies, ids in
+      guard ids.contains("hidden_process") || ids.contains("stealth"),
+            ids.contains("kext") || ids.contains("kernel_integrity") else { return nil }
+      return Correlation(id: UUID(), name: "Rootkit Behavior",
+        description: "\(proc): hidden process + kernel manipulation",
+        scannerIds: Array(ids), anomalies: anomalies, severity: .critical,
+        mitreChain: "T1014 → T1547.006")
+    },
+    // Persistence + unsigned binary = malware install
+    { proc, anomalies, ids in
+      guard ids.contains("persistence") || ids.contains("persistence_monitor"),
+            ids.contains("binary_integrity") || ids.contains("dylib_hijack") else { return nil }
+      return Correlation(id: UUID(), name: "Malware Installation",
+        description: "\(proc): persistence + unsigned/hijacked binary",
+        scannerIds: Array(ids), anomalies: anomalies, severity: .high,
+        mitreChain: "T1547 → T1574")
+    },
+    // Defense evasion: stealth + security tool evasion
+    { proc, anomalies, ids in
+      guard ids.contains("stealth") || ids.contains("hidden_process"),
+            ids.contains("security_evasion") || ids.contains("process_integrity") else { return nil }
+      return Correlation(id: UUID(), name: "Defense Evasion Chain",
+        description: "\(proc): hiding + security tool evasion",
+        scannerIds: Array(ids), anomalies: anomalies, severity: .high,
+        mitreChain: "T1562 → T1070")
+    },
+    // Privilege escalation: auth_db + persistence
+    { proc, anomalies, ids in
+      guard ids.contains("auth_db"),
+            ids.contains("persistence") || ids.contains("persistence_monitor") || ids.contains("kext") else { return nil }
+      return Correlation(id: UUID(), name: "Privilege Escalation Chain",
+        description: "\(proc): authorization abuse + persistence",
+        scannerIds: Array(ids), anomalies: anomalies, severity: .critical,
+        mitreChain: "T1548 → T1547")
+    },
+    // C2 establishment: DNS tunneling/covert channel + cloud C2
+    { proc, anomalies, ids in
+      guard ids.contains("dns_tunnel") || ids.contains("covert_channel"),
+            ids.contains("cloud_c2") || ids.contains("network_anomaly") else { return nil }
+      return Correlation(id: UUID(), name: "C2 Establishment",
+        description: "\(proc): covert channel + network C2",
+        scannerIds: Array(ids), anomalies: anomalies, severity: .critical,
+        mitreChain: "T1071 → T1573")
+    },
+    // Injection chain: thread anomaly + dyld env + process integrity
+    { proc, anomalies, ids in
+      guard ids.contains("thread_anomaly") || ids.contains("dyld_env"),
+            ids.contains("process_integrity") || ids.contains("memory") else { return nil }
+      return Correlation(id: UUID(), name: "Code Injection Chain",
+        description: "\(proc): injection indicators + integrity violation",
+        scannerIds: Array(ids), anomalies: anomalies, severity: .high,
+        mitreChain: "T1055 → T1574.006")
+    },
+    // Ransomware chain: ransomware + network (exfil before encrypt)
+    { proc, anomalies, ids in
+      guard ids.contains("ransomware"),
+            ids.contains("network_anomaly") || ids.contains("cloud_c2") || ids.contains("dns_tunnel") else { return nil }
+      return Correlation(id: UUID(), name: "Ransomware + Exfiltration",
+        description: "\(proc): encryption + network exfiltration (double extortion)",
+        scannerIds: Array(ids), anomalies: anomalies, severity: .critical,
+        mitreChain: "T1486 → T1567")
+    },
+    // TCC abuse + credential access = surveillance
+    { proc, anomalies, ids in
+      guard ids.contains("tcc"),
+            ids.contains("credential_access") || ids.contains("screen_capture") || ids.contains("clipboard") else { return nil }
+      return Correlation(id: UUID(), name: "Surveillance Chain",
+        description: "\(proc): TCC abuse + data collection",
+        scannerIds: Array(ids), anomalies: anomalies, severity: .high,
+        mitreChain: "T1005 → T1113")
+    },
+  ]
 
   // MARK: - Helpers
 

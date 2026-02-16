@@ -3,7 +3,7 @@ import os.log
 
 /// Detects anomalous thread counts in processes.
 /// Injected code (dylib injection, shellcode) often creates extra threads.
-/// Compares running process thread counts against expected baselines.
+/// Checks: simple process inflation, extreme counts, high-thread non-JIT binaries.
 public actor ThreadAnomalyScanner {
   public static let shared = ThreadAnomalyScanner()
   private let logger = Logger(subsystem: "com.wudan.iris", category: "ThreadAnomaly")
@@ -14,10 +14,18 @@ public actor ThreadAnomalyScanner {
     "wc", "sort", "uniq", "head", "tail", "cut",
   ]
 
-  /// Threshold for "too many threads" in a simple process
+  /// JIT-heavy processes that legitimately run many threads
+  private static let highThreadAllowlist: Set<String> = [
+    "java", "node", "python3", "ruby", "dotnet", "mono",
+    "Xcode", "Safari", "Google Chrome", "Firefox",
+    "WebKit", "com.apple.WebKit", "WindowServer",
+    "Finder", "Activity Monitor", "Spotlight",
+  ]
+
   private static let simpleProcessMax = 10
-  /// Threshold for any process to be flagged as extreme
   private static let extremeThreadCount = 500
+  /// Non-JIT, non-system binaries with >100 threads are unusual
+  private static let elevatedThreadCount = 100
 
   public func scan(snapshot: ProcessSnapshot) async -> [ProcessAnomaly] {
     var anomalies: [ProcessAnomaly] = []
@@ -27,6 +35,7 @@ public actor ThreadAnomalyScanner {
       let name = snapshot.name(for: pid)
       let path = snapshot.path(for: pid)
 
+      // Simple utilities should never have many threads
       if Self.lowThreadExpected.contains(name.lowercased()) && threadCount > Self.simpleProcessMax {
         anomalies.append(.forProcess(
           pid: pid, name: name, path: path,
@@ -36,13 +45,12 @@ public actor ThreadAnomalyScanner {
           scannerId: "thread_anomaly",
           enumMethod: "proc_pidinfo(PROC_PIDTASKINFO)",
           evidence: [
-            "pid: \(pid)",
-            "thread_count: \(threadCount)",
-            "expected_max: \(Self.simpleProcessMax)",
-            "process: \(name)",
-          ]
-        ))
-      } else if threadCount > Self.extremeThreadCount {
+            "pid: \(pid)", "thread_count: \(threadCount)",
+            "expected_max: \(Self.simpleProcessMax)", "process: \(name)",
+          ]))
+      }
+      // Extreme thread count (any non-system process)
+      else if threadCount > Self.extremeThreadCount {
         guard !path.hasPrefix("/System/") else { continue }
         anomalies.append(.forProcess(
           pid: pid, name: name, path: path,
@@ -52,12 +60,26 @@ public actor ThreadAnomalyScanner {
           scannerId: "thread_anomaly",
           enumMethod: "proc_pidinfo(PROC_PIDTASKINFO)",
           evidence: [
-            "pid: \(pid)",
-            "thread_count: \(threadCount)",
-            "threshold: \(Self.extremeThreadCount)",
-            "process: \(name)",
-          ]
-        ))
+            "pid: \(pid)", "thread_count: \(threadCount)",
+            "threshold: \(Self.extremeThreadCount)", "process: \(name)",
+          ]))
+      }
+      // Elevated threads in non-JIT, non-system binary = suspicious
+      else if threadCount > Self.elevatedThreadCount
+              && !path.hasPrefix("/System/")
+              && !path.hasPrefix("/usr/")
+              && !Self.highThreadAllowlist.contains(name) {
+        anomalies.append(.forProcess(
+          pid: pid, name: name, path: path,
+          technique: "Elevated Thread Count",
+          description: "\(name) has \(threadCount) threads (non-JIT binary)",
+          severity: .low, mitreID: "T1055",
+          scannerId: "thread_anomaly",
+          enumMethod: "proc_pidinfo(PROC_PIDTASKINFO)",
+          evidence: [
+            "pid: \(pid)", "thread_count: \(threadCount)",
+            "threshold: \(Self.elevatedThreadCount)", "process: \(name)",
+          ]))
       }
     }
     return anomalies

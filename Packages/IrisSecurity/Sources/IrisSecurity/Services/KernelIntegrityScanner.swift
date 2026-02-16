@@ -19,7 +19,7 @@ public actor KernelIntegrityScanner {
   /// Check MACF policies via sysctl — additional policies beyond Apple's = rootkit
   private func scanMACFPolicies() -> [ProcessAnomaly] {
     // Use native sysctl to read security.mac subtree
-    guard let data = SysctlHelper.data("security.mac") else { return [] }
+    guard let data = SysctlReader.data("security.mac") else { return [] }
     let raw = String(data: data, encoding: .utf8) ?? ""
     let knownPrefixes: Set<String> = [
       "security.mac.amfi", "security.mac.sandbox", "security.mac.vnode_enforce",
@@ -93,14 +93,14 @@ public actor KernelIntegrityScanner {
 
   /// Check CTRR/KTRR via native sysctl
   private func scanKernelTextRegion() -> [ProcessAnomaly] {
-    if SysctlHelper.isVirtualMachine {
+    if SysctlReader.isVirtualMachine {
       return [.filesystem(
         name: "hypervisor", path: "",
         technique: "Hypervisor Detected",
         description: "Running inside hypervisor — CTRR/KTRR may not be enforced",
         severity: .low, mitreID: "T1497.001",
         scannerId: "kernel_integrity",
-        enumMethod: "SysctlHelper.isVirtualMachine → hw.model check",
+        enumMethod: "SysctlReader.isVirtualMachine → hw.model check",
         evidence: [
           "is_vm=true",
           "ctrr_enforced=unknown",

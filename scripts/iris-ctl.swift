@@ -25,7 +25,7 @@ let action = args.count > 1 ? args[1] : "status"
 
 let validCommands = [
   "status", "reinstall", "startProxy", "stopProxy", "sendCA", "checkExtensions",
-  "installProxy", "installDNS", "cleanProxy",
+  "installProxy", "installDNS", "cleanProxy", "scan",
 ]
 guard validCommands.contains(action) else {
   print("Unknown command: \(action)")
@@ -66,8 +66,9 @@ center.postNotificationName(
   deliverImmediately: true
 )
 
-// Wait for response (up to 10s)
-let deadline = Date().addingTimeInterval(10)
+// Wait for response (scan takes longer — up to 60s)
+let timeout: TimeInterval = action == "scan" ? 60 : 10
+let deadline = Date().addingTimeInterval(timeout)
 while !gotResponse && Date() < deadline {
   RunLoop.main.run(until: Date().addingTimeInterval(0.1))
 }
@@ -79,10 +80,17 @@ if !gotResponse {
   exit(1)
 }
 
-// Print status file if it was a status command
-if action == "status" || action == "checkExtensions" {
-  Thread.sleep(forTimeInterval: 0.5)  // Small delay for file write
-  if let data = FileManager.default.contents(atPath: statusPath),
+// Print result file if available
+let resultFile: String? = {
+  switch action {
+  case "status", "checkExtensions": return statusPath
+  case "scan": return "/tmp/iris-scan-timing.json"
+  default: return nil
+  }
+}()
+if let path = resultFile {
+  Thread.sleep(forTimeInterval: 0.5)
+  if let data = FileManager.default.contents(atPath: path),
     let json = String(data: data, encoding: .utf8)
   {
     print("\n\(json)")

@@ -6,6 +6,22 @@ import os.log
 public actor SigningVerifier {
     public static let shared = SigningVerifier()
     private let logger = Logger(subsystem: "com.wudan.iris", category: "SigningVerifier")
+    private static let cache = VerificationCache()
+
+    /// Thread-safe cache for verification results (avoid repeated SecStaticCodeCheckValidity)
+    private final class VerificationCache: @unchecked Sendable {
+        private let lock = NSLock()
+        private var results: [String: VerificationResult] = [:]
+
+        func get(_ path: String) -> VerificationResult? {
+            lock.lock(); defer { lock.unlock() }
+            return results[path]
+        }
+        func set(_ path: String, _ result: VerificationResult) {
+            lock.lock(); defer { lock.unlock() }
+            results[path] = result
+        }
+    }
 
     /// Verify the signing status of a binary at the given path
     public nonisolated func verify(_ path: String) -> (status: SigningStatus, identifier: String?, isApple: Bool) {
@@ -13,8 +29,30 @@ public actor SigningVerifier {
         return (result.status, result.identifier, result.isApple)
     }
 
+    /// Lightweight signing identity — reads embedded signing metadata only.
+    /// No SecStaticCodeCheckValidity (no resource hash validation).
+    /// O(1) vs O(n) for full verify. Use when you need WHO signed, not whether it's valid.
+    public nonisolated func signingIdentity(_ path: String) -> (identifier: String?, teamID: String?, isApple: Bool) {
+        let url = URL(fileURLWithPath: path) as CFURL
+        var staticCode: SecStaticCode?
+        guard SecStaticCodeCreateWithPath(url, [], &staticCode) == errSecSuccess,
+              let code = staticCode else {
+            return (nil, nil, false)
+        }
+        let info = extractSigningInfo(code)
+        let isApple = info.identifier?.hasPrefix("com.apple.") == true
+        return (info.identifier, info.teamID, isApple)
+    }
+
     /// Full verification including Team ID and hardened runtime check
     public nonisolated func verifyFull(_ path: String) -> VerificationResult {
+        if let cached = Self.cache.get(path) { return cached }
+        let result = verifyUncached(path)
+        Self.cache.set(path, result)
+        return result
+    }
+
+    private nonisolated func verifyUncached(_ path: String) -> VerificationResult {
         let url = URL(fileURLWithPath: path) as CFURL
         var staticCode: SecStaticCode?
 

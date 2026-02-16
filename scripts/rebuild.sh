@@ -73,12 +73,25 @@ for dd in ~/Library/Developer/Xcode/DerivedData/Iris-*/; do
   fi
 done
 
-# 5. Build
+# 5. Build Rust static library
+RUST_CRATE="$PROJECT_DIR/rust/iris-parsers"
+echo "[rust] cleaning..."
+(cd "$RUST_CRATE" && cargo clean 2>&1 | tail -1)
+echo "[rust] building (arm64 release)..."
+(cd "$RUST_CRATE" && cargo build --release --target aarch64-apple-darwin 2>&1 | tail -3)
+if [ ! -f "$RUST_CRATE/target/aarch64-apple-darwin/release/libiris_parsers.a" ]; then
+  echo "[rust] FAILED — libiris_parsers.a not found"
+  exit 1
+fi
+echo "[rust] succeeded"
+
+# 6. Build Xcode project
 echo "[build] building..."
 cd "$PROJECT_DIR"
 xcodebuild \
   -scheme Iris \
   -configuration Debug \
+  -arch arm64 \
   build \
   2>&1 | tail -5
 
@@ -92,11 +105,11 @@ if [ ! -d "$APP_SRC" ]; then
 fi
 echo "[build] succeeded"
 
-# 6. Copy to /Applications
+# 7. Copy to /Applications
 cp -R "$APP_SRC" "$APP_DST"
 echo "[install] copied to $APP_DST"
 
-# 7. Verify
+# 8. Verify
 echo ""
 echo "=== Verify ==="
 echo "Extensions bundled:"

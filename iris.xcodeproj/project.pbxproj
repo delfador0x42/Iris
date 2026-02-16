@@ -567,7 +567,7 @@
 		3F0974B32F24FCC30004D070 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ARCHS = "$(ARCHS_STANDARD)";
+				ARCHS = arm64;
 				AUTOMATION_APPLE_EVENTS = NO;
 				CODE_SIGN_ENTITLEMENTS = IrisNetworkExtension/IrisNetworkExtension.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
@@ -622,7 +622,7 @@
 		3F0974B42F24FCC30004D070 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ARCHS = "$(ARCHS_STANDARD)";
+				ARCHS = arm64;
 				AUTOMATION_APPLE_EVENTS = NO;
 				CODE_SIGN_ENTITLEMENTS = IrisNetworkExtension/IrisNetworkExtension.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
@@ -803,7 +803,7 @@
 		3F5108812F24FBE0004CFE8D /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ARCHS = "$(ARCHS_STANDARD)";
+				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				AUTOMATION_APPLE_EVENTS = NO;
@@ -815,7 +815,7 @@
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 99HGW2AR62;
 				ENABLE_APP_SANDBOX = NO;
-				ENABLE_HARDENED_RUNTIME = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
 				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
@@ -857,7 +857,7 @@
 		3F5108822F24FBE0004CFE8D /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ARCHS = "$(ARCHS_STANDARD)";
+				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				AUTOMATION_APPLE_EVENTS = NO;
@@ -869,7 +869,7 @@
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 99HGW2AR62;
 				ENABLE_APP_SANDBOX = NO;
-				ENABLE_HARDENED_RUNTIME = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
 				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
@@ -911,7 +911,7 @@
 		3FA0000A2F2600000004D070 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ARCHS = "$(ARCHS_STANDARD)";
+				ARCHS = arm64;
 				AUTOMATION_APPLE_EVENTS = NO;
 				CODE_SIGN_ENTITLEMENTS = IrisProxyExtension/IrisProxyExtension.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
@@ -966,7 +966,7 @@
 		3FA0000B2F2600000004D070 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ARCHS = "$(ARCHS_STANDARD)";
+				ARCHS = arm64;
 				AUTOMATION_APPLE_EVENTS = NO;
 				CODE_SIGN_ENTITLEMENTS = IrisProxyExtension/IrisProxyExtension.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
@@ -1021,7 +1021,7 @@
 		3FB0000A2F2600000004D070 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ARCHS = "$(ARCHS_STANDARD)";
+				ARCHS = arm64;
 				AUTOMATION_APPLE_EVENTS = NO;
 				CODE_SIGN_ENTITLEMENTS = IrisDNSExtension/IrisDNSExtension.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
@@ -1076,7 +1076,7 @@
 		3FB0000B2F2600000004D070 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ARCHS = "$(ARCHS_STANDARD)";
+				ARCHS = arm64;
 				AUTOMATION_APPLE_EVENTS = NO;
 				CODE_SIGN_ENTITLEMENTS = IrisDNSExtension/IrisDNSExtension.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
@@ -1131,7 +1131,7 @@
 		3FE000072F25A0000004D070 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ARCHS = "$(ARCHS_STANDARD)";
+				ARCHS = arm64;
 				AUTOMATION_APPLE_EVENTS = NO;
 				CODE_SIGN_ENTITLEMENTS = IrisEndpointExtension/IrisEndpointExtension.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
@@ -1186,7 +1186,7 @@
 		3FE000082F25A0000004D070 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ARCHS = "$(ARCHS_STANDARD)";
+				ARCHS = arm64;
 				AUTOMATION_APPLE_EVENTS = NO;
 				CODE_SIGN_ENTITLEMENTS = IrisEndpointExtension/IrisEndpointExtension.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";

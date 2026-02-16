@@ -12,9 +12,15 @@ public actor DylibHijackScanner {
         let snap = snapshot ?? ProcessSnapshot.capture()
         var results: [DylibHijack] = []
 
+        var checked = Set<String>()
         for pid in snap.pids {
             let path = snap.path(for: pid)
-            guard !path.isEmpty else { continue }
+            guard !path.isEmpty, !checked.contains(path) else { continue }
+            checked.insert(path)
+            // Skip Apple system binaries — not hijackable with SIP on, and slow to parse
+            if path.hasPrefix("/System/") || path.hasPrefix("/usr/libexec/")
+              || path.hasPrefix("/usr/sbin/") || path.hasPrefix("/usr/bin/")
+              || path.hasPrefix("/sbin/") || path.hasPrefix("/bin/") { continue }
             guard let info = RustMachOParser.parse(path) else { continue }
             // Only scan executables
             guard info.fileType == MH_EXECUTE else { continue }

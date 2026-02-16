@@ -1,6 +1,5 @@
 import Foundation
 import os.log
-import CryptoKit
 
 /// Monitors persistence locations for changes (BlockBlock-inspired).
 /// In ES mode: receives file events and matches against persistence paths.
@@ -166,11 +165,9 @@ public actor PersistenceMonitor {
         return changes
     }
 
-    /// SHA256 hash a file for integrity comparison. Returns nil if unreadable.
+    /// SHA256 hash via Rust FFI (streaming, no full-file memory load).
     private nonisolated func hashFile(_ path: String) -> String? {
-        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)) else { return nil }
-        let digest = SHA256.hash(data: data)
-        return digest.map { String(format: "%02x", $0) }.joined()
+        RustBatchOps.sha256(path: path)
     }
 }
 

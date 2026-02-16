@@ -197,6 +197,25 @@ extension ScannerEntry {
           ])
       }
     },
+    ScannerEntry(id: "persistence_monitor", name: "Persistence Monitor", tier: .medium) { _ in
+      (await PersistenceMonitor.shared.diffAgainstSnapshot()).map { change in
+        ProcessAnomaly.filesystem(
+          name: change.processName.isEmpty ? URL(fileURLWithPath: change.path).lastPathComponent : change.processName,
+          path: change.path,
+          technique: "Persistence \(change.eventType.rawValue.capitalized)",
+          description: "\(change.persistenceType.rawValue) \(change.eventType.rawValue): \(change.path)\(change.pid > 0 ? " by PID \(change.pid)" : "")",
+          severity: change.eventType == .deleted ? .medium : .high,
+          mitreID: "T1547",
+          scannerId: "persistence_monitor",
+          enumMethod: "SHA256 snapshot diff of persistence locations",
+          evidence: [
+            "path: \(change.path)",
+            "type: \(change.persistenceType.rawValue)",
+            "event: \(change.eventType.rawValue)",
+            "pid: \(change.pid)",
+          ])
+      }
+    },
   ]
 
   // MARK: - Slow Tier (codesign, docker, network calls)

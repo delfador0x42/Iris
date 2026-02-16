@@ -18,7 +18,7 @@ public actor IOKitDriverScanner {
   /// Check IOKit service plane for non-Apple drivers via native API
   private func scanIOKitPlane() -> [ProcessAnomaly] {
     var anomalies: [ProcessAnomaly] = []
-    let entries = IOKitHelper.registryEntries(plane: "IOService")
+    let entries = IOKitRegistryReader.registryEntries(plane: "IOService")
     for entry in entries {
       guard let bundleId = entry["CFBundleIdentifier"] as? String,
             !bundleId.isEmpty, !bundleId.hasPrefix("com.apple.")
@@ -30,7 +30,7 @@ public actor IOKitDriverScanner {
         description: "IOKit driver \(bundleId) (class: \(ioClass))",
         severity: .medium, mitreID: "T1547.006",
         scannerId: "iokit",
-        enumMethod: "IOKitHelper.registryEntries → IOService plane scan",
+        enumMethod: "IOKitRegistryReader.registryEntries → IOService plane scan",
         evidence: [
           "bundle_id=\(bundleId)",
           "io_class=\(ioClass)",
@@ -44,7 +44,7 @@ public actor IOKitDriverScanner {
   /// Check for non-Apple IOUserClient creators
   private func scanUserClients() -> [ProcessAnomaly] {
     var anomalies: [ProcessAnomaly] = []
-    let entries = IOKitHelper.servicesMatching(className: "IOUserClient")
+    let entries = IOKitRegistryReader.servicesMatching(className: "IOUserClient")
     for entry in entries {
       guard let creator = entry["IOUserClientCreator"] as? String,
             !creator.isEmpty,
@@ -57,7 +57,7 @@ public actor IOKitDriverScanner {
         description: "IOUserClient created by: \(creator)",
         severity: .medium, mitreID: "T1547.006",
         scannerId: "iokit",
-        enumMethod: "IOKitHelper.servicesMatching → IOUserClient creator scan",
+        enumMethod: "IOKitRegistryReader.servicesMatching → IOUserClient creator scan",
         evidence: [
           "creator=\(creator)",
           "class=IOUserClient",

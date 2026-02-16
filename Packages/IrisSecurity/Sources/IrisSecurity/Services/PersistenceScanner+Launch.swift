@@ -105,6 +105,11 @@ extension PersistenceScanner {
         guard let path, FileManager.default.fileExists(atPath: path) else {
             return (.unknown, nil, false)
         }
+        // Binaries on the sealed system volume are always Apple-signed.
+        // Skip expensive SecStaticCodeCheckValidity (5+ seconds for all system plists).
+        if path.hasPrefix("/System/") || path.hasPrefix("/usr/libexec/") || path.hasPrefix("/usr/sbin/") || path.hasPrefix("/usr/bin/") || path.hasPrefix("/sbin/") {
+            return (.apple, nil, true)
+        }
         return verifier.verify(path)
     }
 }

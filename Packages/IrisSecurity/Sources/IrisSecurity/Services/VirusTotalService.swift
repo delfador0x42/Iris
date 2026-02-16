@@ -1,5 +1,4 @@
 import Foundation
-import CryptoKit
 import os.log
 
 /// Verdict from VirusTotal analysis
@@ -57,9 +56,7 @@ public actor VirusTotalService {
     // MARK: - Hash a file
 
     public func sha256(of path: String) -> String? {
-        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)) else { return nil }
-        let digest = SHA256.hash(data: data)
-        return digest.map { String(format: "%02x", $0) }.joined()
+        RustBatchOps.sha256(path: path)
     }
 
     // MARK: - Check hash against VT

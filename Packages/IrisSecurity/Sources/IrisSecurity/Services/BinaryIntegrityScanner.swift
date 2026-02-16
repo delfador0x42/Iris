@@ -7,6 +7,16 @@ public actor BinaryIntegrityScanner {
   public static let shared = BinaryIntegrityScanner()
   private let logger = Logger(subsystem: "com.wudan.iris", category: "BinaryIntegrity")
 
+  private static let dangerousKeys = [
+    "com.apple.security.get-task-allow",
+    "com.apple.security.cs.disable-library-validation",
+    "com.apple.security.cs.allow-unsigned-executable-memory",
+    "com.apple.security.cs.allow-dyld-environment-variables",
+    "com.apple.private.security.no-sandbox",
+    "task_for_pid-allow",
+    "platform-application",
+  ]
+
   public func scan(snapshot: ProcessSnapshot) async -> [ProcessAnomaly] {
     var anomalies: [ProcessAnomaly] = []
     var checked = Set<String>()
@@ -51,7 +61,10 @@ public actor BinaryIntegrityScanner {
           ]))
       }
 
-      let dangerous = CodeSignValidator.dangerousEntitlements(path: path)
+      // Check entitlements from already-validated SigningInfo (no re-validation)
+      let dangerous = Self.dangerousKeys.filter { key in
+        (info.entitlements?[key] as? Bool) == true
+      }
       for ent in dangerous {
         let isCritical = ent.contains("task_for_pid") || ent.contains("rootless")
         anomalies.append(.forProcess(

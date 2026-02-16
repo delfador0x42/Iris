@@ -1,5 +1,4 @@
 import Foundation
-import CommonCrypto
 
 /// Orchestrates deep static analysis on binaries referenced in scan findings.
 /// Runs all sub-analyzers concurrently, computes risk score.
@@ -50,7 +49,7 @@ public enum BinaryAnalysisEngine {
   }
 
   /// Run all sub-analyzers on a single binary path.
-  private static func analyzeOne(_ path: String) -> BinaryAnalysis? {
+  public static func analyzeOne(_ path: String) -> BinaryAnalysis? {
     let fm = FileManager.default
     guard let attrs = try? fm.attributesOfItem(atPath: path) else { return nil }
     let fileSize = (attrs[.size] as? Int64) ?? 0
@@ -97,19 +96,8 @@ public enum BinaryAnalysisEngine {
       riskScore: score, riskFactors: factors)
   }
 
-  /// SHA256 via CommonCrypto (no shell-out to shasum).
+  /// SHA256 via Rust FFI (pure-Rust FIPS 180-4, no framework overhead).
   private static func sha256(path: String) -> String {
-    guard let handle = FileHandle(forReadingAtPath: path) else { return "" }
-    defer { handle.closeFile() }
-    var ctx = CC_SHA256_CTX()
-    CC_SHA256_Init(&ctx)
-    while true {
-      let chunk = handle.readData(ofLength: 1024 * 1024)
-      if chunk.isEmpty { break }
-      chunk.withUnsafeBytes { CC_SHA256_Update(&ctx, $0.baseAddress, CC_LONG(chunk.count)) }
-    }
-    var digest = [UInt8](repeating: 0, count: Int(CC_SHA256_DIGEST_LENGTH))
-    CC_SHA256_Final(&digest, &ctx)
-    return digest.map { String(format: "%02x", $0) }.joined()
+    RustBatchOps.sha256(path: path) ?? ""
   }
 }

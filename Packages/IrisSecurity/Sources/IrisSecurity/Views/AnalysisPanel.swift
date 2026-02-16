@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// Right-side analysis context panel for expanded findings.
-/// Top: compact TLDR. Bottom: rich forensic detail (module, enumeration, evidence).
+/// Evidence-first layout: MITRE + evidence + process detail on top.
+/// TLDR insight collapsed into a single expandable line.
 struct AnalysisPanel: View {
   let technique: String
   let processName: String
@@ -10,6 +11,8 @@ struct AnalysisPanel: View {
   var anomalies: [ProcessAnomaly] = []
   var vtVerdict: VTVerdict?
   var binaryAnalysis: BinaryAnalysis?
+  @State private var showTLDR = false
+  @State private var ancestors: [ProcessProfiler.Ancestor] = []
 
   var body: some View {
     let a = FindingAnalyzer.analyze(
@@ -18,72 +21,98 @@ struct AnalysisPanel: View {
     )
     ScrollView {
       VStack(alignment: .leading, spacing: 6) {
-        tldrSection(a)
-        Divider().background(Color.white.opacity(0.08))
         forensicSection
+        Divider().background(Color.white.opacity(0.08))
+        insightRow(a)
       }
       .padding(10)
     }
     .background(Color.white.opacity(0.03))
     .cornerRadius(6)
+    .task { loadGenealogy() }
   }
 
-  // MARK: - Compact TLDR (top half)
+  // MARK: - Compact insight (replaces verbose TLDR)
 
-  private func tldrSection(_ a: FindingAnalyzer.Analysis) -> some View {
-    VStack(alignment: .leading, spacing: 4) {
-      label("WHY", color: .orange)
-      Text(a.whyItMatters)
-        .font(.system(size: 10)).foregroundColor(.white.opacity(0.7))
-      label("WHAT", color: .cyan)
+  private func insightRow(_ a: FindingAnalyzer.Analysis) -> some View {
+    VStack(alignment: .leading, spacing: 3) {
+      HStack(spacing: 4) {
+        label("INSIGHT", color: .orange)
+        Spacer()
+        Button(action: { withAnimation(.easeInOut(duration: 0.15)) { showTLDR.toggle() } }) {
+          Image(systemName: showTLDR ? "chevron.up" : "chevron.down")
+            .font(.system(size: 7))
+            .foregroundColor(.white.opacity(0.3))
+        }.buttonStyle(.plain)
+      }
       Text(a.whatsHappening)
         .font(.system(size: 10)).foregroundColor(.white.opacity(0.7))
-      HStack(alignment: .top, spacing: 12) {
-        VStack(alignment: .leading, spacing: 1) {
-          label("SEVERITY", color: .yellow)
-          Text(a.severityContext)
-            .font(.system(size: 9)).foregroundColor(.white.opacity(0.6))
-        }
-        VStack(alignment: .leading, spacing: 1) {
-          label("ACTION", color: .green)
-          Text(a.recommendedAction)
-            .font(.system(size: 9)).foregroundColor(.white.opacity(0.6))
+        .lineLimit(showTLDR ? nil : 2)
+      if showTLDR {
+        HStack(alignment: .top, spacing: 12) {
+          VStack(alignment: .leading, spacing: 1) {
+            label("WHY", color: .orange.opacity(0.6))
+            Text(a.whyItMatters)
+              .font(.system(size: 9)).foregroundColor(.white.opacity(0.5))
+          }
+          VStack(alignment: .leading, spacing: 1) {
+            label("ACTION", color: .green.opacity(0.6))
+            Text(a.recommendedAction)
+              .font(.system(size: 9)).foregroundColor(.white.opacity(0.5))
+          }
         }
       }
     }
   }
 
-  // MARK: - Rich forensic detail (bottom half)
+  // MARK: - Evidence-first forensic detail
 
   @ViewBuilder
   private var forensicSection: some View {
     let first = anomalies.first
-    let sid = first?.scannerId ?? ""
-    let method = first?.enumMethod ?? ""
     let evidence = first?.evidence ?? []
 
     VStack(alignment: .leading, spacing: 6) {
-      if !sid.isEmpty {
-        detailRow("MODULE", value: scannerDisplayName(sid), color: .purple)
+      // MITRE + severity context on same line
+      HStack(spacing: 8) {
+        if let mitre = anomalies.compactMap(\.mitreID).first {
+          HStack(spacing: 3) {
+            label("MITRE", color: .red)
+            Text(mitre)
+              .font(.system(size: 10, weight: .medium, design: .monospaced))
+              .foregroundColor(.red.opacity(0.8))
+          }
+        }
+        Spacer()
+        if let sid = first?.scannerId {
+          Text(scannerDisplayName(sid))
+            .font(.system(size: 8, design: .monospaced))
+            .foregroundColor(.purple.opacity(0.5))
+        }
       }
-      if !method.isEmpty {
-        detailRow("ENUMERATION", value: method, color: .blue)
-      }
-      if let mitre = anomalies.compactMap(\.mitreID).first {
-        detailRow("MITRE ATT&CK", value: mitre, color: .red)
-      }
-      if let f = first, f.pid > 0 {
-        processDetail(f)
-      }
+      // Evidence (primary content)
       if !evidence.isEmpty {
         evidenceBlock(evidence)
       }
+      // Process context from knowledge base
+      processContext
+      // Genealogy chain (live-traced from PID)
+      if !ancestors.isEmpty {
+        lineageSection
+      }
+      // Process info
+      if let f = first, f.pid > 0 {
+        processDetail(f)
+      }
+      // Affected paths for groups
       if anomalies.count > 1 {
         groupedPaths
       }
+      // Binary analysis
       if let ba = binaryAnalysis {
         BinaryAnalysisSection(analysis: ba)
       }
+      // VirusTotal
       if let vt = vtVerdict {
         vtSection(vt)
       }
@@ -102,6 +131,26 @@ struct AnalysisPanel: View {
              destination: URL(string: "https://www.virustotal.com/gui/file/\(vt.sha256)")!)
           .font(.system(size: 9, design: .monospaced))
           .foregroundColor(.blue.opacity(0.7))
+      }
+    }
+  }
+
+  @ViewBuilder
+  private var processContext: some View {
+    let info = ProcessKnowledgeBase.lookup(processName)
+    if let info {
+      VStack(alignment: .leading, spacing: 2) {
+        HStack(spacing: 6) {
+          label("IDENTITY", color: .cyan)
+          Text(info.category.rawValue)
+            .font(.system(size: 8, design: .monospaced))
+            .foregroundColor(.cyan.opacity(0.5))
+        }
+        Text("\(processName) — \(info.description)")
+          .font(.system(size: 10)).foregroundColor(.white.opacity(0.7))
+        Text("subsystem: \(info.subsystem)")
+          .font(.system(size: 9, design: .monospaced))
+          .foregroundColor(.white.opacity(0.4))
       }
     }
   }
@@ -142,6 +191,21 @@ struct AnalysisPanel: View {
     }
   }
 
+  // MARK: - Lineage
+
+  private var lineageSection: some View {
+    VStack(alignment: .leading, spacing: 2) {
+      label("LINEAGE", color: .cyan.opacity(0.7))
+      let chain = ProcessProfiler.chainString(ancestors: ancestors, processName: processName)
+      monoLine(chain)
+    }
+  }
+
+  private func loadGenealogy() {
+    guard ancestors.isEmpty, let first = anomalies.first, first.pid > 0 else { return }
+    ancestors = ProcessProfiler.traceGenealogyLive(pid: first.pid)
+  }
+
   // MARK: - Helpers
 
   private func label(_ text: String, color: Color) -> some View {
@@ -157,37 +221,31 @@ struct AnalysisPanel: View {
       .textSelection(.enabled)
   }
 
-  private func detailRow(_ title: String, value: String, color: Color) -> some View {
-    VStack(alignment: .leading, spacing: 1) {
-      label(title, color: color)
-      Text(value)
-        .font(.system(size: 10, design: .monospaced))
-        .foregroundColor(.white.opacity(0.7))
-        .textSelection(.enabled)
-    }
-  }
-
   private func scannerDisplayName(_ id: String) -> String {
     let names: [String: String] = [
-      "process_integrity": "ProcessIntegrityChecker",
-      "hidden_process": "HiddenProcessDetector",
-      "credential_access": "CredentialAccessDetector",
-      "stealth": "StealthScanner",
-      "masquerade": "MasqueradeDetector",
-      "lolbin": "LOLBinDetector",
-      "dyld_env": "DyldEnvDetector",
-      "memory": "MemoryScanner",
-      "exploit_tool": "ExploitToolDetector",
-      "binary_integrity": "BinaryIntegrityScanner",
-      "dylib_hijack": "DylibHijackScanner",
-      "entitlement": "EntitlementScanner",
-      "persistence": "PersistenceScanner",
-      "kext": "KextAnomalyDetector",
-      "system_integrity": "SystemIntegrityScanner",
-      "tcc": "TCCMonitor",
-      "event_taps": "EventTapScanner",
-      "network_anomaly": "NetworkAnomalyDetector",
-      "cloud_c2": "CloudC2Detector",
+      "process_integrity": "ProcessIntegrity",
+      "hidden_process": "HiddenProcess",
+      "credential_access": "CredentialAccess",
+      "stealth": "Stealth",
+      "masquerade": "Masquerade",
+      "lolbin": "LOLBin",
+      "dyld_env": "DyldEnv",
+      "memory": "Memory",
+      "exploit_tool": "ExploitTool",
+      "binary_integrity": "BinaryIntegrity",
+      "dylib_hijack": "DylibHijack",
+      "entitlement": "Entitlement",
+      "persistence": "Persistence",
+      "persistence_monitor": "PersistenceMonitor",
+      "kext": "KextAnomaly",
+      "system_integrity": "SystemIntegrity",
+      "tcc": "TCC",
+      "event_taps": "EventTaps",
+      "network_anomaly": "NetworkAnomaly",
+      "cloud_c2": "CloudC2",
+      "covert_channel": "CovertChannel",
+      "thread_anomaly": "ThreadAnomaly",
+      "dns_tunnel": "DNSTunnel",
     ]
     return names[id] ?? id
   }

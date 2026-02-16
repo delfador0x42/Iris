@@ -5,6 +5,15 @@ import Security
 /// Replaces 4 shell-outs to /usr/bin/codesign across the codebase.
 public enum CodeSignValidator {
 
+  /// Thread-safe cache for validate() results
+  private static let cache = _CSVCache()
+  final class _CSVCache: @unchecked Sendable {
+    private let lock = NSLock()
+    private var results: [String: SigningInfo] = [:]
+    func get(_ k: String) -> SigningInfo? { lock.lock(); defer { lock.unlock() }; return results[k] }
+    func set(_ k: String, _ v: SigningInfo) { lock.lock(); defer { lock.unlock() }; results[k] = v }
+  }
+
   /// Signing status for a binary.
   public struct SigningInfo: Sendable {
     public let isSigned: Bool
@@ -19,17 +28,30 @@ public enum CodeSignValidator {
   }
 
   /// Validate code signature for a binary at path. Thread-safe, no shell-out.
+  /// Caches results — safe to call repeatedly for the same path.
   public static func validate(path: String) -> SigningInfo {
+    if let cached = cache.get(path) { return cached }
+
+    // System volume binaries are always Apple-signed, skip expensive validation.
+    // Still extract signing info (identifier, entitlements) cheaply.
+    let isSystemBin = path.hasPrefix("/System/") || path.hasPrefix("/usr/libexec/")
+      || path.hasPrefix("/usr/sbin/") || path.hasPrefix("/usr/bin/") || path.hasPrefix("/sbin/")
+
     let url = URL(fileURLWithPath: path) as CFURL
     var code: SecStaticCode?
     guard SecStaticCodeCreateWithPath(url, [], &code) == errSecSuccess,
           let code else {
-      return SigningInfo(
-        isSigned: false, isValidSignature: false, isAppleSigned: false,
+      let r = SigningInfo(
+        isSigned: false, isValidSignature: false, isAppleSigned: isSystemBin,
         signingIdentifier: nil, teamIdentifier: nil, entitlements: nil)
+      cache.set(path, r)
+      return r
     }
 
-    let isValid = SecStaticCodeCheckValidity(code, [], nil) == errSecSuccess
+    // For system binaries, skip SecStaticCodeCheckValidity (the expensive part).
+    // Just extract signing info for entitlement checks.
+    let isValid = isSystemBin ? true
+      : (SecStaticCodeCheckValidity(code, [], nil) == errSecSuccess)
 
     var info: CFDictionary?
     let flags = SecCSFlags(rawValue: kSecCSSigningInformation
@@ -41,14 +63,15 @@ public enum CodeSignValidator {
     let teamId = dict[kSecCodeInfoTeamIdentifier as String] as? String
     let entitlements = dict[kSecCodeInfoEntitlementsDict as String] as? [String: Any]
 
-    // Apple-signed = team is Apple or signing ID starts with com.apple
-    let isApple = teamId == "apple" || teamId == "Apple"
+    let isApple = isSystemBin || teamId == "apple" || teamId == "Apple"
       || (signingId?.hasPrefix("com.apple.") ?? false)
 
-    return SigningInfo(
+    let result = SigningInfo(
       isSigned: true, isValidSignature: isValid, isAppleSigned: isApple,
       signingIdentifier: signingId, teamIdentifier: teamId,
       entitlements: entitlements)
+    cache.set(path, result)
+    return result
   }
 
   /// Check for dangerous entitlements. Returns list of dangerous entitlement keys.

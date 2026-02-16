@@ -1,5 +1,4 @@
 import Foundation
-import CryptoKit
 
 /// File hashing, baseline persistence (save/load)
 extension FileSystemBaseline {
@@ -49,22 +48,14 @@ extension FileSystemBaseline {
     static func hashFile(_ path: String) -> FileEntry? {
         let fm = FileManager.default
         guard let attrs = try? fm.attributesOfItem(atPath: path) else { return nil }
-        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)) else { return nil }
-
-        let digest = SHA256.hash(data: data)
-        let hash = digest.map { String(format: "%02x", $0) }.joined()
-
-        let size = attrs[.size] as? UInt64 ?? 0
-        let perms = attrs[.posixPermissions] as? UInt16 ?? 0
-        let modDate = attrs[.modificationDate] as? Date ?? Date.distantPast
-        let isExec = fm.isExecutableFile(atPath: path)
+        guard let hash = RustBatchOps.sha256(path: path), !hash.isEmpty else { return nil }
 
         return FileEntry(
             hash: hash,
-            size: size,
-            permissions: perms,
-            modificationDate: modDate,
-            isExecutable: isExec
+            size: attrs[.size] as? UInt64 ?? 0,
+            permissions: attrs[.posixPermissions] as? UInt16 ?? 0,
+            modificationDate: attrs[.modificationDate] as? Date ?? .distantPast,
+            isExecutable: fm.isExecutableFile(atPath: path)
         )
     }
 

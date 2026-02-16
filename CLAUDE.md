@@ -51,7 +51,7 @@ Also: CertificateStore (no XPC), SatelliteStore (no XPC), SecurityAssessmentStor
 | IrisWiFi | WiFi monitoring via CoreWLAN | `WiFiStore.swift`, `WiFiMonitorView.swift` |
 | IrisProxy | Proxy data models (shared types) | `ProxyStore.swift`, `ProxyMonitorView.swift` |
 | IrisDNS | DNS monitoring, DoH client, DNS models | `DNSStore.swift`, `DNSMonitorView.swift`, `DoHClient.swift` |
-| IrisSecurity | 49 scanners, detection engine, 9 rule modules, threat intel, security views, SocketEnumerator (native proc_pidfdinfo), MachTaskEnumerator | `SecurityAssessor.swift`, `DetectionEngine.swift`, `RuleLoader.swift` |
+| IrisSecurity | 49 scanners (14 fast/22 medium/13 slow), detection engine, 9 rule modules, threat intel, 15+ security views, ~12 support services (SocketEnumerator, MachTaskEnumerator, MachOParser, SigningVerifier, etc.) | `SecurityAssessor.swift`, `DetectionEngine.swift`, `ScannerRegistry+Entries.swift` |
 | IrisApp | Main UI, home screen, settings, CLI handler | `HomeView.swift`, `SettingsView.swift`, `CLICommandHandler.swift` |
 
 ## Key Entry Points
@@ -229,7 +229,7 @@ iris/
 │   ├── IrisCertificates/       # CA + leaf cert generation, KeychainManager
 │   ├── IrisWiFi/               # WiFi monitoring (CoreWLAN + system_profiler)
 │   ├── IrisProxy/              # Proxy UI (ProxyStore, ProxyMonitorView, HTTPFlowDetailView)
-│   ├── IrisSecurity/           # APT detection (35 scanners, detection engine, rules, threat intel, 15+ views)
+│   ├── IrisSecurity/           # APT detection (49 scanners, detection engine, rules, threat intel, 15+ views)
 │   ├── IrisDNS/                # DNS monitoring
 │   │   ├── Models/             # DNSMessage.swift, DNSQuery.swift
 │   │   ├── Services/           # DoHClient.swift, DNSMessageParser.swift
@@ -248,11 +248,11 @@ iris/
 
 ## Current Development State (2026-02-15)
 
-All 5 targets build (including CodeSign). 11 packages, 4 system extensions, ~405 Swift files / ~50K lines.
+All 5 targets build (including CodeSign). 11 packages, 4 system extensions, ~444 Swift files / ~52K lines.
 
 **All features working:** Network filter + firewall rules, proxy MITM (with HTTP pipelining capture), WiFi, disk, satellite, process monitoring, certificates, DNS, security scanning + real-time detection engine, CLI remote control. All packages and extensions in Xcode project.
 
-**File size distribution:** 1 file >300 (shader, exempted), ~14 in 251-300, ~80 in 151-250, ~200 in 51-150, ~50 under 50. Zero generic file names, zero dead code. P0 splits completed: SupplyChainAuditor→5 files, HTTPParser+Streaming→3 files, ProxyXPCProtocol→4 files.
+**File size distribution:** 1 file >300 (shader, exempted), 18 in 251-300, ~80 in 151-250, ~200 in 51-150, ~50 under 50. 12 generic file names (Helper/Util/Baseline patterns in IrisSecurity/Helpers/ and IrisSecurity/Services/), zero dead code. P0 splits completed: SupplyChainAuditor→5 files, HTTPParser+Streaming→3 files, ProxyXPCProtocol→4 files.
 
 **Process Monitor:** Two-view system via Monitor/History tabs. Monitor view: HSplitView with suspicious processes (left, live 2s refresh) + parent-child tree (right, 30s snapshot). History view: chronological timeline of all processes seen this session, with live/exited status. ES extension subscribes to 23 event types (process lifecycle + file + privilege + injection + system + auth), dual ring buffer (5000 process events + 10000 security events), app fetches via `getRecentEvents()` and `getSecurityEventsSince()` XPC.
 
@@ -260,7 +260,7 @@ All 5 targets build (including CodeSign). 11 packages, 4 system extensions, ~405
 
 **Firewall:** Process dedup by signing identity (`identityKey`), SecurityRule CRUD via XPC, rule persistence (JSON in ApplicationSupport), inline allow/block in UI, connection conversation view with timestamped CaptureSegments.
 
-**IrisSecurity (119 files, ~14K lines):** 49 scanners covering all 12 hunt-script categories (process, network, filesystem, kernel, firmware, identity, IPC, persistence, memory, logs, hardware), real-time detection engine (DetectionEngine + SecurityEventBus + AlertStore), 9 rule modules (CredentialTheft, Persistence, C2, Evasion, Injection, Exfiltration, APT, Correlation), multi-event correlation rules, threat intel database (48 persistence labels, 35 C2 domains, 35 targeted paths, 30 masquerade processes). Evidence-based scoring (PersistenceScanner), IPSW baseline structure (baseline-25C56.json, 50KB). ProcessEnumeration shared helper. SigningVerifier with Team ID + hardened runtime. ProcessAnomaly factories (.filesystem(), .forProcess()). All 49 scanners wired via SecurityAssessor async let. Services/ is flat — scanner names are descriptive.
+**IrisSecurity (172 files, ~19K lines):** 49 scanners (14 fast/22 medium/13 slow) in ScannerRegistry+Entries.swift, covering all 12 hunt-script categories (process, network, filesystem, kernel, firmware, identity, IPC, persistence, memory, logs, hardware), ~12 support services (SigningVerifier, MachOParser, SocketEnumerator, MachTaskEnumerator, EntropyAnalyzer, etc.), real-time detection engine (DetectionEngine + SecurityEventBus + AlertStore), 9 rule modules (CredentialTheft, Persistence, C2, Evasion, Injection, Exfiltration, APT, Correlation), multi-event correlation rules, threat intel database (48 persistence labels, 35 C2 domains, 35 targeted paths, 30 masquerade processes). Evidence-based scoring (PersistenceScanner), IPSW baseline structure (baseline-25C56.json, 50KB). ProcessEnumeration shared helper. ProcessAnomaly factories (.filesystem(), .forProcess()). All 49 scanners wired via ScannerRegistry. Services/ is flat — scanner names are descriptive.
 
 **CLI Toolchain:** `CLICommandHandler` in app listens for `DistributedNotificationCenter` commands. `scripts/iris-ctl.swift` sends commands and reads `/tmp/iris-status.json`. Supports: status, reinstall, startProxy, stopProxy, sendCA, checkExtensions.
 

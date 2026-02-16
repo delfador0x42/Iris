@@ -28,10 +28,10 @@ struct AnomalyGroupRow: View {
         HStack(spacing: 6) {
           Text(group.processName)
             .font(.system(size: 10, design: .monospaced)).foregroundColor(.gray)
-          if let sid = group.anomalies.first?.scannerId, !sid.isEmpty {
-            Text(sid)
-              .font(.system(size: 8, design: .monospaced))
-              .foregroundColor(.purple.opacity(0.6))
+          if let desc = ProcessKnowledgeBase.describe(group.processName) {
+            Text("— \(desc)")
+              .font(.system(size: 9)).foregroundColor(.gray.opacity(0.5))
+              .lineLimit(1)
           }
         }
       }

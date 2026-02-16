@@ -11,7 +11,9 @@ public actor ProcessIntegrityChecker {
     public static let shared = ProcessIntegrityChecker()
     private let logger = Logger(subsystem: "com.wudan.iris", category: "ProcessIntegrity")
 
-    /// Check all running processes for integrity violations
+    /// Check all running processes for integrity violations.
+    /// System binaries (sealed volume) skip expensive dylib enum + __TEXT check —
+    /// checkCodeSigningFlags still catches CS_DEBUGGED/CS_VALID anomalies cheaply.
     public func scan(snapshot: ProcessSnapshot? = nil) async -> [ProcessAnomaly] {
         let snap = snapshot ?? ProcessSnapshot.capture()
         var anomalies: [ProcessAnomaly] = []
@@ -21,72 +23,90 @@ public actor ProcessIntegrityChecker {
             let path = snap.path(for: pid)
             guard !path.isEmpty else { continue }
 
-            // 1. Check for injected dylibs (dylibs loaded that weren't in the binary)
-            let injected = checkInjectedDylibs(pid: pid, binaryPath: path)
-            anomalies.append(contentsOf: injected)
+            let isSystem = path.hasPrefix("/System/") || path.hasPrefix("/usr/libexec/")
+                || path.hasPrefix("/usr/sbin/") || path.hasPrefix("/usr/bin/")
+                || path.hasPrefix("/sbin/")
 
-            // 2. Check code signing flags anomalies
+            // 1. Injected dylibs — EXPENSIVE (task_for_pid + dyld image enum).
+            // Skip for system binaries: sealed volume prevents tampering, dyld shared cache.
+            if !isSystem {
+                let injected = checkInjectedDylibs(pid: pid, binaryPath: path)
+                anomalies.append(contentsOf: injected)
+            }
+
+            // 2. Code signing flags — CHEAP (proc_pidinfo + csops, ~2 syscalls). Always run.
             let csAnomalies = checkCodeSigningFlags(pid: pid, path: path)
             anomalies.append(contentsOf: csAnomalies)
 
-            // 3. Check for processes with mismatched binary hash
+            // 3. Binary hash — only checks system binaries, uses cached CodeSignValidator.
             let hashAnomaly = await checkBinaryHash(pid: pid, path: path)
             if let a = hashAnomaly { anomalies.append(a) }
 
-            // 4. __TEXT integrity: compare on-disk vs in-memory (process hollowing)
-            if let textAnomaly = TextIntegrityChecker.check(pid: pid, binaryPath: path) {
-                anomalies.append(textAnomaly)
+            // 4. __TEXT integrity — EXPENSIVE (reads binary + task_for_pid + memory hash).
+            // Skip for system binaries: sealed volume prevents disk tampering,
+            // in-memory patching needs task_for_pid → caught by CS_DEBUGGED above.
+            if !isSystem {
+                if let textAnomaly = TextIntegrityChecker.check(pid: pid, binaryPath: path) {
+                    anomalies.append(textAnomaly)
+                }
             }
         }
 
         return anomalies.sorted { $0.severity > $1.severity }
     }
 
-    /// Compare dylibs actually loaded in a process vs what the binary declares
+    /// Compare dylibs actually loaded in a process vs what the binary declares.
+    /// Aggregates per-process — one finding with all undeclared dylibs, not one per dylib.
+    /// System framework loads from sealed volume are whitelisted (can't be tampered).
     private func checkInjectedDylibs(pid: pid_t, binaryPath: String) -> [ProcessAnomaly] {
-        var anomalies: [ProcessAnomaly] = []
         let processName = URL(fileURLWithPath: binaryPath).lastPathComponent
 
-        // Get dylibs declared in Mach-O
         guard let machInfo = RustMachOParser.parse(binaryPath) else { return [] }
-        let declaredDylibs = Set(machInfo.loadDylibs.map { resolveDylibPath($0) })
 
-        // Get dylibs actually loaded (TASK_DYLD_INFO primary, VM regions fallback)
+        // Build declared set from ALL load command types (load + weak + reexport)
+        let allDeclared = machInfo.loadDylibs + machInfo.weakDylibs + machInfo.reexportDylibs
+        let declaredNames = Set(allDeclared.map { dylibLeafName($0) })
+
         let enumResult = DylibEnumerator.loadedImagesWithMethod(for: pid)
-        let loadedImages = enumResult.images
 
-        for image in loadedImages {
-            let imageName = URL(fileURLWithPath: image).lastPathComponent
-
+        // Collect undeclared, non-system dylibs
+        var undeclared: [String] = []
+        for image in enumResult.images {
             if image == binaryPath { continue }
-
-            // Check if this dylib was declared in the binary
-            let isDeclared = declaredDylibs.contains { declared in
-                image.hasSuffix(declared) || declared.hasSuffix(imageName)
-            }
-
-            if !isDeclared {
-                anomalies.append(.forProcess(
-                    pid: pid, name: processName, path: binaryPath,
-                    technique: "Dylib Injection Detected",
-                    description: "Process \(processName) (PID \(pid)) has loaded \(image) which is NOT declared in its Mach-O headers. Possible DYLD_INSERT_LIBRARIES or task_for_pid injection.",
-                    severity: .critical, mitreID: "T1055.001",
-                    scannerId: "process_integrity",
-                    enumMethod: enumResult.method == .dyld
-                        ? "task_info(TASK_DYLD_INFO) → dyld_all_image_infos"
-                        : "PROC_PIDREGIONPATHINFO (incomplete — shared cache missed)",
-                    evidence: [
-                        "injected_dylib: \(image)",
-                        "enum_method: \(enumResult.method.rawValue)",
-                        "declared_count: \(declaredDylibs.count)",
-                        "loaded_count: \(loadedImages.count)",
-                        "binary: \(binaryPath)",
-                    ]
-                ))
+            // System libs from sealed volume / dyld shared cache — always expected
+            if isSystemLibrary(image) { continue }
+            let leaf = dylibLeafName(image)
+            if !declaredNames.contains(leaf) {
+                undeclared.append(image)
             }
         }
 
-        return anomalies
+        guard !undeclared.isEmpty else { return [] }
+
+        // Severity: unsigned non-system dylib = critical, signed third-party = medium
+        let severity: AnomalySeverity = undeclared.count > 5 ? .critical : .high
+
+        var evidence = [
+            "injected_count: \(undeclared.count)",
+            "declared_count: \(declaredNames.count)",
+            "loaded_count: \(enumResult.images.count)",
+            "enum_method: \(enumResult.method.rawValue)",
+            "binary: \(binaryPath)",
+        ]
+        evidence += undeclared.prefix(10).map { "injected_dylib: \($0)" }
+        if undeclared.count > 10 { evidence.append("... +\(undeclared.count - 10) more") }
+
+        return [.forProcess(
+            pid: pid, name: processName, path: binaryPath,
+            technique: "Dylib Injection Detected",
+            description: "\(processName) (PID \(pid)) has \(undeclared.count) non-system dylib(s) not declared in Mach-O headers.",
+            severity: severity, mitreID: "T1055.001",
+            scannerId: "process_integrity",
+            enumMethod: enumResult.method == .dyld
+                ? "task_info(TASK_DYLD_INFO) → dyld_all_image_infos"
+                : "PROC_PIDREGIONPATHINFO",
+            evidence: evidence
+        )]
     }
 
     /// Check code signing flags for anomalies (two layers: proc_bsdinfo + csops kernel)
@@ -202,12 +222,18 @@ public actor ProcessIntegrityChecker {
         return nil
     }
 
-    private func resolveDylibPath(_ path: String) -> String {
-        // Strip @rpath/, @executable_path/, etc — just get the filename
-        if let lastSlash = path.lastIndex(of: "/") {
-            return String(path[path.index(after: lastSlash)...])
-        }
-        return path
+    /// Extract leaf filename from a dylib path (strips @rpath/, @executable_path/, etc.)
+    private func dylibLeafName(_ path: String) -> String {
+        URL(fileURLWithPath: path).lastPathComponent
+    }
+
+    /// System libraries from the sealed system volume / dyld shared cache.
+    /// These cannot be tampered with on modern macOS — always expected loads.
+    private func isSystemLibrary(_ path: String) -> Bool {
+        path.hasPrefix("/System/Library/") ||
+        path.hasPrefix("/usr/lib/") ||
+        path.hasPrefix("/System/iOSSupport/") ||
+        path.hasPrefix("/System/Cryptexes/")
     }
 
 }

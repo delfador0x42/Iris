@@ -71,6 +71,9 @@ final class CLICommandHandler {
       ExtensionManager.shared.installExtension(.dns)
       respond("ok", action: "installDNS")
 
+    case "scan":
+      await runScanWithTiming()
+
     default:
       logger.warning("Unknown CLI command: \(action)")
       respond("error", action: action)
@@ -106,6 +109,38 @@ final class CLICommandHandler {
     }
 
     respond("ok", action: "status")
+  }
+
+  private func runScanWithTiming() async {
+    let start = Date()
+    let result = await SecurityAssessor.shared.scanThreats { progress in
+      // No-op progress callback for CLI — we just want timing
+    }
+    let elapsed = Date().timeIntervalSince(start)
+
+    // Build per-scanner timing report
+    let scannerTimes = result.scannerResults
+      .sorted { $0.duration > $1.duration }
+      .map { "\($0.name): \(String(format: "%.1f", $0.duration * 1000))ms (\($0.anomalies.count) findings)" }
+
+    let report: [String: Any] = [
+      "timestamp": ISO8601DateFormatter().string(from: Date()),
+      "totalDuration_ms": Int(elapsed * 1000),
+      "scannerCount": result.scannerCount,
+      "totalFindings": result.totalFindings,
+      "criticalCount": result.criticalCount,
+      "highCount": result.highCount,
+      "scannerTiming": scannerTimes,
+    ]
+
+    if let data = try? JSONSerialization.data(
+      withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
+    {
+      try? data.write(to: URL(fileURLWithPath: "/tmp/iris-scan-timing.json"))
+    }
+
+    logger.info("CLI scan complete: \(result.totalFindings) findings in \(String(format: "%.1f", elapsed))s")
+    respond("ok", action: "scan")
   }
 
   private func respond(_ status: String, action: String) {

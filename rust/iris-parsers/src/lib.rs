@@ -3,3 +3,4 @@ mod ffi;
 mod macho;
 mod dns;
 mod der;
+mod batch;
