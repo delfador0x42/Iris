@@ -112,8 +112,9 @@ public enum TextIntegrityChecker {
     }
 
     /// SHA256 of in-memory __TEXT segment for a running process.
+    /// Uses TASK_DYLD_INFO to get the ASLR slide, then reads at the actual runtime address.
     private static func hashMemoryText(task: mach_port_t, path: String) -> String? {
-        // Find __TEXT segment info from the on-disk binary
+        // Get __TEXT vmaddr + vmsize from on-disk binary
         guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
               data.count > MemoryLayout<mach_header_64>.size else { return nil }
         var textVMAddr: UInt64 = 0
@@ -141,17 +142,64 @@ public enum TextIntegrityChecker {
         }
         guard textVMSize > 0 else { return nil }
 
-        // Read __TEXT from target process memory
+        // Get ASLR slide via TASK_DYLD_INFO → dyld_all_image_infos → imageLoadAddress
+        guard let slide = getASLRSlide(task: task, staticTextAddr: textVMAddr) else {
+            return nil
+        }
+        let actualAddr = textVMAddr &+ slide
+
+        // Read __TEXT from target process memory at ASLR-adjusted address
         let readSize = Int(textVMSize)
         let buf = UnsafeMutableRawPointer.allocate(byteCount: readSize, alignment: 8)
         defer { buf.deallocate() }
         var outSize: mach_vm_size_t = 0
         let kr = mach_vm_read_overwrite(
-            task, mach_vm_address_t(textVMAddr), mach_vm_size_t(readSize),
+            task, mach_vm_address_t(actualAddr), mach_vm_size_t(readSize),
             mach_vm_address_t(UInt(bitPattern: buf)), &outSize)
         guard kr == KERN_SUCCESS, outSize > 0 else { return nil }
         let memData = Data(bytes: buf, count: Int(outSize))
         let h = SHA256.hash(data: memData)
         return h.map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// Get ASLR slide for main executable via TASK_DYLD_INFO.
+    /// slide = imageLoadAddress - static __TEXT vmaddr
+    private static func getASLRSlide(task: mach_port_t, staticTextAddr: UInt64) -> UInt64? {
+        var dyldInfo = task_dyld_info_data_t()
+        var count = mach_msg_type_number_t(
+            MemoryLayout<task_dyld_info_data_t>.size / MemoryLayout<natural_t>.size)
+        let kr = withUnsafeMutablePointer(to: &dyldInfo) { ptr in
+            ptr.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                task_info(task, task_flavor_t(TASK_DYLD_INFO), $0, &count)
+            }
+        }
+        guard kr == KERN_SUCCESS, dyldInfo.all_image_info_addr != 0 else { return nil }
+
+        // Read dyld_all_image_infos from target
+        var allInfo = dyld_all_image_infos()
+        guard readMem(task, dyldInfo.all_image_info_addr,
+                      &allInfo, MemoryLayout<dyld_all_image_infos>.size) else { return nil }
+        guard allInfo.infoArrayCount > 0 else { return nil }
+
+        // Read first entry (main executable)
+        let arrayAddr = unsafeBitCast(allInfo.infoArray, to: UInt.self)
+        guard arrayAddr != 0 else { return nil }
+        var firstImage = dyld_image_info()
+        guard readMem(task, mach_vm_address_t(arrayAddr),
+                      &firstImage, MemoryLayout<dyld_image_info>.stride) else { return nil }
+
+        let loadAddr = unsafeBitCast(firstImage.imageLoadAddress, to: UInt64.self)
+        return loadAddr &- staticTextAddr
+    }
+
+    private static func readMem<T>(_ task: mach_port_t, _ addr: mach_vm_address_t,
+                                   _ out: inout T, _ size: Int) -> Bool {
+        var outSize: mach_vm_size_t = 0
+        let kr = withUnsafeMutablePointer(to: &out) { ptr in
+            mach_vm_read_overwrite(
+                task, addr, mach_vm_size_t(size),
+                mach_vm_address_t(UInt(bitPattern: ptr)), &outSize)
+        }
+        return kr == KERN_SUCCESS
     }
 }
