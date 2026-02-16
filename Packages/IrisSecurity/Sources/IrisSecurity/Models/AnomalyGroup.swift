@@ -2,7 +2,7 @@ import Foundation
 
 /// Groups anomalies by (technique, processName) for presentation dedup.
 /// Scanners produce individual findings; this collapses duplicates in the view layer.
-struct AnomalyGroup: Identifiable {
+struct AnomalyGroup: Identifiable, Sendable {
   let id: String
   let technique: String
   let processName: String

@@ -1,0 +1,23 @@
+{
+  "/Users/tal/wudan/dojo/crash3/iris/IrisProxyExtension/FlowHandler+MITMRelay.swift" : {
+    "const-values" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/FlowHandler+MITMRelay.swiftconstvalues",
+    "dependencies" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/FlowHandler+MITMRelay.d",
+    "diagnostics" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/FlowHandler+MITMRelay.dia",
+    "object" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/FlowHandler+MITMRelay.o",
+    "swift-dependencies" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/FlowHandler+MITMRelay.swiftdeps"
+  },
+  "/Users/tal/wudan/dojo/crash3/iris/IrisProxyExtension/FlowHandler+NetworkIO.swift" : {
+    "const-values" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/FlowHandler+NetworkIO.swiftconstvalues",
+    "dependencies" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/FlowHandler+NetworkIO.d",
+    "diagnostics" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/FlowHandler+NetworkIO.dia",
+    "object" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/FlowHandler+NetworkIO.o",
+    "swift-dependencies" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/FlowHandler+NetworkIO.swiftdeps"
+  },
+  "/Users/tal/wudan/dojo/crash3/iris/IrisProxyExtension/FlowHandler+Passthrough.swift" : {
+    "const-values" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/FlowHandler+Passthrough.swiftconstvalues",
+    "dependencies" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/FlowHandler+Passthrough.d",
+    "diagnostics" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/FlowHandler+Passthrough.dia",
+    "object" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/FlowHandler+Passthrough.o",
+    "swift-dependencies" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/FlowHandler+Passthrough.swiftdeps"
+  }
+}

@@ -92,4 +92,35 @@ extension FlowHandler {
         state.markResponseCaptured()
         xpcService?.updateFlow(updateId, response: capturedResponse)
     }
+
+    /// After resetForNextRequest, check if leftover buffer contains a pipelined request.
+    /// The data was already sent to the server by the Client→Server task; this just
+    /// ensures the capture pipeline sees the request so responses get associated.
+    static func capturePipelinedRequest(
+        state: RelayState, host: String, port: Int,
+        processName: String, isSecure: Bool, xpcService: ProxyXPCService?
+    ) {
+        guard !state.hasRequest else { return }
+        guard let request = state.withRequestBuffer({
+            RustHTTPParser.parseRequest(from: $0)
+        }) else { return }
+        let scheme = isSecure ? "https" : "http"
+        let url = "\(scheme)://\(host)\(request.path)"
+        let body = state.withRequestBuffer {
+            extractRequestBody(from: $0, request: request)
+        }
+        let capturedRequest = ProxyCapturedRequest(
+            method: request.method, url: url, httpVersion: request.httpVersion,
+            headers: request.headers, body: body
+        )
+        let bodySize = request.contentLength ?? 0
+        state.setRequestMessageSize(request.headerEndIndex + bodySize)
+        let pipelinedFlowId = UUID()
+        let capturedFlow = ProxyCapturedFlow(
+            id: pipelinedFlowId, flowType: isSecure ? .https : .http,
+            host: host, port: port, request: capturedRequest, processName: processName
+        )
+        state.markRequestCaptured(flowId: pipelinedFlowId)
+        xpcService?.addFlow(capturedFlow)
+    }
 }

@@ -5,7 +5,7 @@ import Foundation
 public struct CorrelationEngine: Sendable {
 
   /// A correlated finding linking multiple scanners.
-  public struct Correlation: Identifiable, Sendable {
+  public struct Correlation: Identifiable, Sendable, Codable, Equatable {
     public let id: UUID
     public let name: String
     public let description: String

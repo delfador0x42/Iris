@@ -3,8 +3,8 @@
 ## Quick Start
 
 ```bash
-# Build
-xcodebuild -project Iris.xcodeproj -scheme Iris -configuration Debug build
+# Build (arm64 required — Rust staticlib is arm64-only)
+xcodebuild -scheme Iris -configuration Debug -arch arm64 ONLY_ACTIVE_ARCH=YES build
 
 # Run tests
 xcodebuild test -scheme Iris -destination 'platform=macOS'
@@ -51,7 +51,7 @@ Also: CertificateStore (no XPC), SatelliteStore (no XPC), SecurityAssessmentStor
 | IrisWiFi | WiFi monitoring via CoreWLAN | `WiFiStore.swift`, `WiFiMonitorView.swift` |
 | IrisProxy | Proxy data models (shared types) | `ProxyStore.swift`, `ProxyMonitorView.swift` |
 | IrisDNS | DNS monitoring, DoH client, DNS models | `DNSStore.swift`, `DNSMonitorView.swift`, `DoHClient.swift` |
-| IrisSecurity | 49 scanners, detection engine, 9 rule modules, threat intel, security views | `SecurityAssessor.swift`, `DetectionEngine.swift`, `RuleLoader.swift` |
+| IrisSecurity | 49 scanners, detection engine, 9 rule modules, threat intel, security views, SocketEnumerator (native proc_pidfdinfo), MachTaskEnumerator | `SecurityAssessor.swift`, `DetectionEngine.swift`, `RuleLoader.swift` |
 | IrisApp | Main UI, home screen, settings, CLI handler | `HomeView.swift`, `SettingsView.swift`, `CLICommandHandler.swift` |
 
 ## Key Entry Points
@@ -125,7 +125,7 @@ All models: `Identifiable, Sendable, Codable, Equatable`
 
 ### File Splitting Pattern
 
-When a file exceeds ~250 lines, split using `FileName+Category.swift`:
+When a file exceeds ~100 lines (hard max 300), split using `FileName+Category.swift`:
 - Change `private` → `internal` for properties/methods accessed cross-file
 - Category name describes WHAT, not "Helpers": `+Formatting`, `+NetworkIO`, `+ProcessParsing`
 
@@ -191,7 +191,7 @@ All entitlements files already include these NE provider types:
 
 ```
 iris/
-├── Shared/                     # 11 files: XPC protocols, HTTPParser, DEREncoder, CaptureSegment, AtomicFlag (compiled into all 6 targets)
+├── Shared/                     # ~17 files: XPC protocol, ProxyCaptured{Flow,Request,Response}, HTTPParser (+StreamingRequest, +StreamingResponse, +ChunkedEncoding, +RequestParsing, +ConnectHandling), DEREncoder, CaptureSegment, AtomicFlag (compiled into all 6 targets)
 ├── IrisApp/                    # App entry point + CLI handler
 │   ├── IrisApp.swift           # @main App struct, startup sequence (CA → proxy → sendCA)
 │   └── CLICommandHandler.swift # DistributedNotificationCenter command receiver
@@ -246,13 +246,13 @@ iris/
 - Private frameworks ARE accessible and can be used
 - References: `references/program_examples/` has airport, mitmproxy, WARP binaries
 
-## Current Development State (2026-02-14)
+## Current Development State (2026-02-15)
 
-All 5 targets build (including CodeSign). 11 packages, 4 system extensions, 394 Swift files / 49K lines.
+All 5 targets build (including CodeSign). 11 packages, 4 system extensions, ~405 Swift files / ~50K lines.
 
-**All features working:** Network filter + firewall rules, proxy MITM (with HTTP pipelining support), WiFi, disk, satellite, process monitoring, certificates, DNS, security scanning + real-time detection engine, CLI remote control. All packages and extensions in Xcode project.
+**All features working:** Network filter + firewall rules, proxy MITM (with HTTP pipelining capture), WiFi, disk, satellite, process monitoring, certificates, DNS, security scanning + real-time detection engine, CLI remote control. All packages and extensions in Xcode project.
 
-**File size distribution:** 1 file >300 (shader, exempted), 21 in 251-300 (acceptable), 84 in 151-250 (sweet spot), 198 in 51-150, 47 under 50. Zero generic file names, zero dead code.
+**File size distribution:** 1 file >300 (shader, exempted), ~14 in 251-300, ~80 in 151-250, ~200 in 51-150, ~50 under 50. Zero generic file names, zero dead code. P0 splits completed: SupplyChainAuditor→5 files, HTTPParser+Streaming→3 files, ProxyXPCProtocol→4 files.
 
 **Process Monitor:** Two-view system via Monitor/History tabs. Monitor view: HSplitView with suspicious processes (left, live 2s refresh) + parent-child tree (right, 30s snapshot). History view: chronological timeline of all processes seen this session, with live/exited status. ES extension subscribes to 23 event types (process lifecycle + file + privilege + injection + system + auth), dual ring buffer (5000 process events + 10000 security events), app fetches via `getRecentEvents()` and `getSecurityEventsSince()` XPC.
 
@@ -264,9 +264,9 @@ All 5 targets build (including CodeSign). 11 packages, 4 system extensions, 394 
 
 **CLI Toolchain:** `CLICommandHandler` in app listens for `DistributedNotificationCenter` commands. `scripts/iris-ctl.swift` sends commands and reads `/tmp/iris-status.json`. Supports: status, reinstall, startProxy, stopProxy, sendCA, checkExtensions.
 
-**Proxy MITM:** CA generated in app → sent to extension via XPC. Per-host certs via temp file-based keychain (`SecKeychainCreate` in /tmp). Thread-safe CA access via `caLock`. `TransparentProxyManager.ensureRunning()` reconnects on app launch. `enableProxy()` only called during installation. HTTP pipeline fix: response body completeness tracking (Content-Length + chunked) before resetting for next request.
+**Proxy MITM:** CA generated in app → sent to extension via XPC. Per-host certs via temp file-based keychain (`SecKeychainCreate` in /tmp). Thread-safe CA access via `caLock`. `TransparentProxyManager.ensureRunning()` reconnects on app launch. `enableProxy()` only called during installation. HTTP pipeline fix: response body completeness tracking (Content-Length + chunked) before resetting for next request. Pipelined request capture: `capturePipelinedRequest()` re-parses leftover buffer after reset in both HTTP and MITM relays.
 
-**Now working (SIP disabled):** TCCMonitor reads both user and system TCC.db via sqlite3 CLI, flags suspicious permission grants, wired to SecurityHubView. NetworkAnomalyDetector uses structured NEFilter connection data for PID-to-connection mapping, detects C2 beaconing via coefficient of variation analysis.
+**Now working (SIP disabled):** TCCMonitor reads both user and system TCC.db via native SQLiteReader (no shell-out), queries flags/LENGTH(csreq)/pid columns, flags suspicious grants (missing code signing requirement, non-user auth_reason), wired to SecurityHubView. NetworkAnomalyDetector uses structured NEFilter connection data for PID-to-connection mapping, detects C2 beaconing via coefficient of variation analysis. SocketEnumerator (native proc_pidfdinfo, ~1.5ms full system scan) replaces lsof shell-out for fallback network scanning.
 
 **Architecture is optimal:** NEFilterDataProvider + NEAppProxyProvider + NEDNSProxyProvider. NEPacketTunnelProvider was researched and rejected (see DESIGN_DECISIONS.md).
 

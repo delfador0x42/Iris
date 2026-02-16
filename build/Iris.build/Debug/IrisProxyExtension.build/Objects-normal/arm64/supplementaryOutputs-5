@@ -1,0 +1,23 @@
+{
+  "/Users/tal/wudan/dojo/crash3/iris/IrisProxyExtension/RustHTTPParser.swift" : {
+    "const-values" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/RustHTTPParser.swiftconstvalues",
+    "dependencies" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/RustHTTPParser.d",
+    "diagnostics" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/RustHTTPParser.dia",
+    "object" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/RustHTTPParser.o",
+    "swift-dependencies" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/RustHTTPParser.swiftdeps"
+  },
+  "/Users/tal/wudan/dojo/crash3/iris/IrisProxyExtension/TLSInterceptor+ASN1.swift" : {
+    "const-values" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/TLSInterceptor+ASN1.swiftconstvalues",
+    "dependencies" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/TLSInterceptor+ASN1.d",
+    "diagnostics" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/TLSInterceptor+ASN1.dia",
+    "object" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/TLSInterceptor+ASN1.o",
+    "swift-dependencies" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/TLSInterceptor+ASN1.swiftdeps"
+  },
+  "/Users/tal/wudan/dojo/crash3/iris/IrisProxyExtension/TLSInterceptor.swift" : {
+    "const-values" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/TLSInterceptor.swiftconstvalues",
+    "dependencies" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/TLSInterceptor.d",
+    "diagnostics" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/TLSInterceptor.dia",
+    "object" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/TLSInterceptor.o",
+    "swift-dependencies" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/TLSInterceptor.swiftdeps"
+  }
+}

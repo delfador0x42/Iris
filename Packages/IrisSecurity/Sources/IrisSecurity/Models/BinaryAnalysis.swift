@@ -6,7 +6,7 @@ public enum StringCategory: String, Sendable, Codable {
 }
 
 /// Result of deep static analysis on a single binary
-public struct BinaryAnalysis: Sendable {
+public struct BinaryAnalysis: Sendable, Codable, Equatable {
   public let path: String
   public let sha256: String
   public let fileSize: Int64
@@ -34,7 +34,7 @@ public struct BinaryAnalysis: Sendable {
   public let riskScore: Int       // 0-100
   public let riskFactors: [String]
 
-  public struct SigningSummary: Sendable {
+  public struct SigningSummary: Sendable, Codable, Equatable {
     public let isSigned: Bool
     public let isValid: Bool
     public let isApple: Bool
@@ -43,7 +43,7 @@ public struct BinaryAnalysis: Sendable {
     public let teamId: String?
   }
 
-  public struct MachOSummary: Sendable {
+  public struct MachOSummary: Sendable, Codable, Equatable {
     public let fileType: UInt32
     public let dylibCount: Int
     public let weakDylibCount: Int
@@ -51,13 +51,13 @@ public struct BinaryAnalysis: Sendable {
     public let reexportCount: Int
   }
 
-  public struct EntropySummary: Sendable {
+  public struct EntropySummary: Sendable, Codable, Equatable {
     public let entropy: Double
     public let chiSquare: Double
     public let isEncrypted: Bool
   }
 
-  public struct SuspiciousString: Sendable {
+  public struct SuspiciousString: Sendable, Codable, Equatable {
     public let value: String
     public let category: StringCategory
   }

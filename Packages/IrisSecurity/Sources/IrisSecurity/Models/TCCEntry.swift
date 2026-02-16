@@ -10,6 +10,12 @@ public struct TCCEntry: Identifiable, Sendable, Codable, Equatable {
     public let authReason: Int
     public let indirect: Bool
     public let lastModified: Date?
+    /// TCC flags bitmask (0 = default, nonzero may indicate special policy)
+    public let flags: Int
+    /// Whether a code signing requirement is attached (csreq blob non-null)
+    public let hasCodeRequirement: Bool
+    /// PID at time of grant (forensic use — identifies which process triggered the grant)
+    public let grantPid: Int?
     public let isSuspicious: Bool
     public let suspicionReason: String?
 
@@ -22,6 +28,9 @@ public struct TCCEntry: Identifiable, Sendable, Codable, Equatable {
         authReason: Int,
         indirect: Bool = false,
         lastModified: Date? = nil,
+        flags: Int = 0,
+        hasCodeRequirement: Bool = true,
+        grantPid: Int? = nil,
         isSuspicious: Bool = false,
         suspicionReason: String? = nil
     ) {
@@ -33,6 +42,9 @@ public struct TCCEntry: Identifiable, Sendable, Codable, Equatable {
         self.authReason = authReason
         self.indirect = indirect
         self.lastModified = lastModified
+        self.flags = flags
+        self.hasCodeRequirement = hasCodeRequirement
+        self.grantPid = grantPid
         self.isSuspicious = isSuspicious
         self.suspicionReason = suspicionReason
     }

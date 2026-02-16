@@ -308,11 +308,11 @@ typedef unsigned int swift_uint4  __attribute__((__ext_vector_type__(4)));
 
 @class NSString;
 @class NEAppProxyFlow;
-/// App Proxy Provider that intercepts network flows for HTTP/HTTPS inspection.
-/// Uses NEAppProxyProvider to capture TCP connections and route them through
-/// the local proxy server for TLS interception and HTTP parsing.
+/// Transparent proxy that intercepts all outbound network traffic.
+/// TCP port 80/443: HTTP parsing + MITM. All other TCP: passthrough relay.
+/// UDP: datagram relay. All flows get metadata captured for the proxy monitor.
 SWIFT_CLASS("_TtC30com_wudan_iris_proxy_extension16AppProxyProvider")
-@interface AppProxyProvider : NEAppProxyProvider
+@interface AppProxyProvider : NETransparentProxyProvider
 - (void)startProxyWithOptions:(NSDictionary<NSString *, id> * _Nullable)options completionHandler:(void (^ _Nonnull)(NSError * _Nullable))completionHandler;
 - (void)stopProxyWithReason:(NEProviderStopReason)reason completionHandler:(void (^ _Nonnull)(void))completionHandler;
 - (BOOL)handleNewFlow:(NEAppProxyFlow * _Nonnull)flow SWIFT_WARN_UNUSED_RESULT;
@@ -320,21 +320,73 @@ SWIFT_CLASS("_TtC30com_wudan_iris_proxy_extension16AppProxyProvider")
 @end
 
 @class NSData;
-/// XPC protocol for proxy extension communication.
-SWIFT_PROTOCOL("_TtP30com_wudan_iris_proxy_extension25ProxyExtensionXPCProtocol_")
-@protocol ProxyExtensionXPCProtocol
-/// Gets the current proxy status.
+/// XPC protocol for communication between the main app and the DNS Proxy Extension.
+/// Single source of truth — compiled into BOTH the app and extension targets.
+SWIFT_PROTOCOL("_TtP30com_wudan_iris_proxy_extension14DNSXPCProtocol_")
+@protocol DNSXPCProtocol
 - (void)getStatusWithReply:(void (^ _Nonnull)(NSDictionary<NSString *, id> * _Nonnull))reply;
-/// Gets all captured HTTP flows.
+- (void)getQueriesWithLimit:(NSInteger)limit reply:(void (^ _Nonnull)(NSArray<NSData *> * _Nonnull))reply;
+/// Delta fetch: returns only queries with sequenceNumber > sinceSeq.
+/// Reply includes the current max sequence number and the new queries.
+- (void)getQueriesSince:(uint64_t)sinceSeq limit:(NSInteger)limit reply:(void (^ _Nonnull)(uint64_t, NSArray<NSData *> * _Nonnull))reply;
+- (void)clearQueriesWithReply:(void (^ _Nonnull)(BOOL))reply;
+- (void)setEnabled:(BOOL)enabled reply:(void (^ _Nonnull)(BOOL))reply;
+- (void)isEnabledWithReply:(void (^ _Nonnull)(BOOL))reply;
+- (void)setServer:(NSString * _Nonnull)serverName reply:(void (^ _Nonnull)(BOOL))reply;
+- (void)getServerWithReply:(void (^ _Nonnull)(NSString * _Nonnull))reply;
+- (void)getStatisticsWithReply:(void (^ _Nonnull)(NSDictionary<NSString *, id> * _Nonnull))reply;
+@end
+
+/// XPC protocol for communication between the main app and the Endpoint Security Extension.
+/// Single source of truth — compiled into BOTH the app and extension targets.
+SWIFT_PROTOCOL("_TtP30com_wudan_iris_proxy_extension19EndpointXPCProtocol_")
+@protocol EndpointXPCProtocol
+- (void)getProcessesWithReply:(void (^ _Nonnull)(NSArray<NSData *> * _Nonnull))reply;
+- (void)getProcessWithPid:(int32_t)pid reply:(void (^ _Nonnull)(NSData * _Nullable))reply;
+- (void)getRecentEventsWithLimit:(NSInteger)limit reply:(void (^ _Nonnull)(NSArray<NSData *> * _Nonnull))reply;
+/// Delta fetch: returns security events with sequenceNumber > sinceSeq.
+/// Reply includes the current max sequence number and the new events as JSON Data.
+- (void)getSecurityEventsSince:(uint64_t)sinceSeq limit:(NSInteger)limit reply:(void (^ _Nonnull)(uint64_t, NSArray<NSData *> * _Nonnull))reply;
+- (void)getStatusWithReply:(void (^ _Nonnull)(NSDictionary<NSString *, id> * _Nonnull))reply;
+- (void)isEndpointSecurityAvailableWithReply:(void (^ _Nonnull)(BOOL))reply;
+@end
+
+/// XPC protocol for communication between the main app and the Network Extension.
+/// Single source of truth — compiled into BOTH the app and extension targets.
+SWIFT_PROTOCOL("_TtP30com_wudan_iris_proxy_extension18NetworkXPCProtocol_")
+@protocol NetworkXPCProtocol
+- (void)getConnectionsWithReply:(void (^ _Nonnull)(NSArray<NSData *> * _Nonnull))reply;
+- (void)getConnectionsForPid:(int32_t)pid reply:(void (^ _Nonnull)(NSArray<NSData *> * _Nonnull))reply;
+- (void)getRulesWithReply:(void (^ _Nonnull)(NSArray<NSData *> * _Nonnull))reply;
+- (void)addRule:(NSData * _Nonnull)ruleData reply:(void (^ _Nonnull)(BOOL, NSString * _Nullable))reply;
+- (void)updateRule:(NSData * _Nonnull)ruleData reply:(void (^ _Nonnull)(BOOL, NSString * _Nullable))reply;
+- (void)removeRule:(NSString * _Nonnull)ruleId reply:(void (^ _Nonnull)(BOOL))reply;
+- (void)toggleRule:(NSString * _Nonnull)ruleId reply:(void (^ _Nonnull)(BOOL))reply;
+- (void)cleanupExpiredRulesWithReply:(void (^ _Nonnull)(NSInteger))reply;
+- (void)getStatusWithReply:(void (^ _Nonnull)(NSDictionary<NSString *, id> * _Nonnull))reply;
+- (void)setFilteringEnabled:(BOOL)enabled reply:(void (^ _Nonnull)(BOOL))reply;
+- (void)getConnectionRawData:(NSString * _Nonnull)connectionId reply:(void (^ _Nonnull)(NSData * _Nullable, NSData * _Nullable))reply;
+- (void)getConnectionConversation:(NSString * _Nonnull)connectionId reply:(void (^ _Nonnull)(NSData * _Nullable))reply;
+- (void)setCaptureMemoryBudget:(NSInteger)bytes reply:(void (^ _Nonnull)(BOOL))reply;
+- (void)getCaptureStatsWithReply:(void (^ _Nonnull)(NSDictionary<NSString *, id> * _Nonnull))reply;
+@end
+
+/// XPC protocol for communication between the main app and the Proxy Extension.
+/// Single source of truth — compiled into BOTH the app and extension targets.
+SWIFT_PROTOCOL("_TtP30com_wudan_iris_proxy_extension16ProxyXPCProtocol_")
+@protocol ProxyXPCProtocol
+- (void)getStatusWithReply:(void (^ _Nonnull)(NSDictionary<NSString *, id> * _Nonnull))reply;
 - (void)getFlowsWithReply:(void (^ _Nonnull)(NSArray<NSData *> * _Nonnull))reply;
-/// Gets a specific flow by ID.
+/// Delta fetch: returns only flows with sequenceNumber > sinceSeq.
+- (void)getFlowsSince:(uint64_t)sinceSeq reply:(void (^ _Nonnull)(uint64_t, NSArray<NSData *> * _Nonnull))reply;
 - (void)getFlow:(NSString * _Nonnull)flowId reply:(void (^ _Nonnull)(NSData * _Nullable))reply;
-/// Clears all captured flows.
 - (void)clearFlowsWithReply:(void (^ _Nonnull)(BOOL))reply;
-/// Sets whether interception is enabled.
 - (void)setInterceptionEnabled:(BOOL)enabled reply:(void (^ _Nonnull)(BOOL))reply;
-/// Gets interception enabled state.
 - (void)isInterceptionEnabledWithReply:(void (^ _Nonnull)(BOOL))reply;
+/// Send CA certificate and private key to the extension for TLS MITM.
+- (void)setCA:(NSData * _Nonnull)certData keyData:(NSData * _Nonnull)keyData reply:(void (^ _Nonnull)(BOOL))reply;
+/// Update byte counts and completion status for a flow.
+- (void)updateFlowBytes:(NSString * _Nonnull)flowId bytesIn:(int64_t)bytesIn bytesOut:(int64_t)bytesOut ended:(BOOL)ended error:(NSString * _Nullable)error reply:(void (^ _Nonnull)(BOOL))reply;
 @end
 
 /// XPC Service for the proxy extension.
@@ -349,13 +401,16 @@ SWIFT_CLASS("_TtC30com_wudan_iris_proxy_extension15ProxyXPCService")
 - (BOOL)listener:(NSXPCListener * _Nonnull)listener shouldAcceptNewConnection:(NSXPCConnection * _Nonnull)newConnection SWIFT_WARN_UNUSED_RESULT;
 @end
 
-@interface ProxyXPCService (SWIFT_EXTENSION(com_wudan_iris_proxy_extension)) <ProxyExtensionXPCProtocol>
+@interface ProxyXPCService (SWIFT_EXTENSION(com_wudan_iris_proxy_extension)) <ProxyXPCProtocol>
 - (void)getStatusWithReply:(void (^ _Nonnull)(NSDictionary<NSString *, id> * _Nonnull))reply;
 - (void)getFlowsWithReply:(void (^ _Nonnull)(NSArray<NSData *> * _Nonnull))reply;
+- (void)getFlowsSince:(uint64_t)sinceSeq reply:(void (^ _Nonnull)(uint64_t, NSArray<NSData *> * _Nonnull))reply;
 - (void)getFlow:(NSString * _Nonnull)flowId reply:(void (^ _Nonnull)(NSData * _Nullable))reply;
 - (void)clearFlowsWithReply:(void (^ _Nonnull)(BOOL))reply;
 - (void)setInterceptionEnabled:(BOOL)enabled reply:(void (^ _Nonnull)(BOOL))reply;
 - (void)isInterceptionEnabledWithReply:(void (^ _Nonnull)(BOOL))reply;
+- (void)setCA:(NSData * _Nonnull)certData keyData:(NSData * _Nonnull)keyData reply:(void (^ _Nonnull)(BOOL))reply;
+- (void)updateFlowBytes:(NSString * _Nonnull)flowId bytesIn:(int64_t)bytesIn bytesOut:(int64_t)bytesOut ended:(BOOL)ended error:(NSString * _Nullable)error reply:(void (^ _Nonnull)(BOOL))reply;
 @end
 
 #endif

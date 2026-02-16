@@ -25,8 +25,8 @@ SecurityAssessor.assess() only calls SystemSecurityChecks.runAll() (8 checks). 1
 | ProcessIntegrityChecker | T1055, T1574.006 | 80% | FIXED: TASK_DYLD_INFO + fallback |
 | CredentialAccessDetector | T1552, T1555 | 45% | FIXED: browser FP filter, shell-wrapped detection |
 | StealthScanner (9 techniques) | T1564, T1546, T1556, T1548 | 45% | FIXED: emond critical, 11 SUID dirs |
-| NetworkAnomalyDetector | T1571, T1573, T1071 | 60% | FIXED: SecurityStore data + lsof fallback |
-| TCCMonitor | T1557, T1005 | 50% | FIXED: FDA+sqlite3 CLI, deny→allow detection |
+| NetworkAnomalyDetector | T1571, T1573, T1071 | 70% | FIXED: SecurityStore data + native SocketEnumerator (proc_pidfdinfo) |
+| TCCMonitor | T1557, T1005 | 65% | FIXED: native SQLiteReader, csreq/flags/pid columns, deny→allow + missing-csreq detection |
 | SupplyChainAuditor | T1195 | 50% | FIXED: legacy plugin note, custom toolchains |
 | XPCServiceAuditor | T1559 | 40% | No known-good whitelist |
 | KextAnomalyDetector | T1547.006 | 40% | FIXED: macOS malware names |
@@ -40,7 +40,7 @@ SecurityAssessor.assess() only calls SystemSecurityChecks.runAll() (8 checks). 1
 
 **BROKEN (must rewrite):**
 1. **TCCMonitor** — SIP prevents TCC.db reads without FDA. STATUS: FIXED (SIP disabled, FDA granted, timestamp bug fixed, deny→allow detection added)
-2. **NetworkAnomalyDetector** — macOS netstat has no PIDs. STATUS: FIXED (uses SecurityStore data from NEFilter, lsof fallback retained)
+2. **NetworkAnomalyDetector** — macOS netstat has no PIDs. STATUS: FIXED (uses SecurityStore data from NEFilter, native SocketEnumerator via proc_pidfdinfo replaces lsof)
 3. **PersistenceMonitor** — Zero ES integration, polling-only. **Fix: Wire to ESClient events.** STATUS: OPEN
 
 **SIGNIFICANT (fix in place):**
@@ -57,7 +57,7 @@ SecurityAssessor.assess() only calls SystemSecurityChecks.runAll() (8 checks). 1
 
 **CODE QUALITY:**
 - ProcessEnumeration shared helper extracted. STATUS: FIXED (Session B2)
-- 3+ files exceed 300-line limit. STATUS: OPEN
+- 3+ files exceed 300-line limit. STATUS: FIXED (P0 splits: SupplyChainAuditor→5 files, HTTPParser+Streaming→3 files, ProxyXPCProtocol→4 files)
 - Zero tests for IrisSecurity. STATUS: OPEN
 
 ### Scanner Logic Bugs
@@ -104,7 +104,7 @@ SecurityAssessor.assess() only calls SystemSecurityChecks.runAll() (8 checks). 1
 **P12.** Certificate cache lookup/insert race. STATUS: FIXED (Session B1)
 **P13.** Port 443 hard-coded as only HTTPS. STATUS: OPEN
 **P14.** UDP flow relay fundamentally broken. STATUS: OPEN
-**P15.** Only first HTTP request/response captured per connection. STATUS: FIXED (message boundary tracking in RelayState)
+**P15.** Only first HTTP request/response captured per connection. STATUS: FIXED (message boundary tracking in RelayState + capturePipelinedRequest for pipelining)
 **P16.** RelayState request buffer grows without bound. STATUS: FIXED (Session B1)
 **P17.** receiveFromServer timeout double-resume. STATUS: OPEN
 **P18.** Passthrough relay doesn't close flow on server disconnect. STATUS: OPEN
@@ -163,7 +163,7 @@ SecurityAssessor.assess() only calls SystemSecurityChecks.runAll() (8 checks). 1
 
 ## Architectural Issues
 
-**A1.** SecurityAssessor only runs 8 of 30 checks. STATUS: OPEN
+**A1.** SecurityAssessor only runs 8 of 30 checks. STATUS: FIXED (49 scanners wired via ScannerRegistry, 3-tier async execution)
 **A2.** PersistenceScanner+System marks ALL cron jobs suspicious. STATUS: FIXED (Session B1)
 
 ---

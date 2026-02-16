@@ -121,8 +121,12 @@ public actor TCCMonitor {
   /// Read TCC entries via native SQLite C API (no shell-out).
   private func readTCCEntries(path: String) async -> [TCCEntry] {
     guard let db = SQLiteReader(path: path) else { return [] }
-    let rows = db.query(
-      "SELECT service, client, client_type, auth_value, auth_reason, indirect_object_identifier, last_modified FROM access;")
+    let sql = """
+      SELECT service, client, client_type, auth_value, auth_reason,
+             indirect_object_identifier, last_modified, flags, LENGTH(csreq), pid
+      FROM access;
+      """
+    let rows = db.query(sql)
 
     return rows.compactMap { row in
       guard row.count >= 5 else { return nil }
@@ -134,27 +138,29 @@ public actor TCCMonitor {
       let authReason = Int(row[4] ?? "") ?? 0
       let indirect = row.count > 5 && row[5] != nil && !row[5]!.isEmpty
       let lastMod: Date? = row.count > 6 ? dateFromTimestamp(row[6] ?? "") : nil
+      let flags = row.count > 7 ? Int(row[7] ?? "") ?? 0 : 0
+      let hasCSReq = row.count > 8 && (Int(row[8] ?? "") ?? 0) > 0
+      let grantPid: Int? = row.count > 9 ? Int(row[9] ?? "") : nil
 
-      // Determine suspicion
       var suspicious = false
-      var reason: String?
+      var reasons: [String] = []
 
-      // Flag: high-risk service granted to unknown bundle
       if highRiskServices.contains(service) && authValue == 2 {
-        // Check if client exists on disk
         if clientType == 0 {
-          // Bundle ID — check if app exists
           let appPath = findAppPath(bundleID: client)
           if appPath == nil {
             suspicious = true
-            reason = "High-risk permission granted to non-existent app: \(client)"
+            reasons.append("High-risk permission granted to non-existent app: \(client)")
           }
         }
-        // Flag if authReason is not user-initiated
         if authReason != 1 && authReason != 2 {
           suspicious = true
-          reason =
-            (reason ?? "") + " Permission granted via non-user mechanism (reason: \(authReason))"
+          reasons.append("Permission via non-user mechanism (reason: \(authReason))")
+        }
+        // No code signing requirement — any binary with this bundle ID inherits the grant
+        if !hasCSReq {
+          suspicious = true
+          reasons.append("No code signing requirement — grant not tied to specific binary")
         }
       }
 
@@ -166,8 +172,11 @@ public actor TCCMonitor {
         authReason: authReason,
         indirect: indirect,
         lastModified: lastMod,
+        flags: flags,
+        hasCodeRequirement: hasCSReq,
+        grantPid: grantPid,
         isSuspicious: suspicious,
-        suspicionReason: reason
+        suspicionReason: reasons.isEmpty ? nil : reasons.joined(separator: "; ")
       )
     }
   }

@@ -1,0 +1,23 @@
+{
+  "/Users/tal/wudan/dojo/crash3/iris/IrisProxyExtension/FlowHandler+UDPRelay.swift" : {
+    "const-values" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/FlowHandler+UDPRelay.swiftconstvalues",
+    "dependencies" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/FlowHandler+UDPRelay.d",
+    "diagnostics" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/FlowHandler+UDPRelay.dia",
+    "object" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/FlowHandler+UDPRelay.o",
+    "swift-dependencies" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/FlowHandler+UDPRelay.swiftdeps"
+  },
+  "/Users/tal/wudan/dojo/crash3/iris/IrisProxyExtension/ProxyXPCService.swift" : {
+    "const-values" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/ProxyXPCService.swiftconstvalues",
+    "dependencies" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/ProxyXPCService.d",
+    "diagnostics" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/ProxyXPCService.dia",
+    "object" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/ProxyXPCService.o",
+    "swift-dependencies" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/ProxyXPCService.swiftdeps"
+  },
+  "/Users/tal/wudan/dojo/crash3/iris/IrisProxyExtension/main.swift" : {
+    "const-values" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/main.swiftconstvalues",
+    "dependencies" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/main.d",
+    "diagnostics" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/main.dia",
+    "object" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/main.o",
+    "swift-dependencies" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/main.swiftdeps"
+  }
+}

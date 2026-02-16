@@ -1,0 +1,23 @@
+{
+  "/Users/tal/wudan/dojo/crash3/iris/Shared/AtomicFlag.swift" : {
+    "const-values" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/AtomicFlag.swiftconstvalues",
+    "dependencies" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/AtomicFlag.d",
+    "diagnostics" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/AtomicFlag.dia",
+    "object" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/AtomicFlag.o",
+    "swift-dependencies" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/AtomicFlag.swiftdeps"
+  },
+  "/Users/tal/wudan/dojo/crash3/iris/Shared/CaptureSegment.swift" : {
+    "const-values" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/CaptureSegment.swiftconstvalues",
+    "dependencies" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/CaptureSegment.d",
+    "diagnostics" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/CaptureSegment.dia",
+    "object" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/CaptureSegment.o",
+    "swift-dependencies" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/CaptureSegment.swiftdeps"
+  },
+  "/Users/tal/wudan/dojo/crash3/iris/Shared/DEREncoder.swift" : {
+    "const-values" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/DEREncoder.swiftconstvalues",
+    "dependencies" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/DEREncoder.d",
+    "diagnostics" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/DEREncoder.dia",
+    "object" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/DEREncoder.o",
+    "swift-dependencies" : "/Users/tal/wudan/dojo/crash3/iris/build/Iris.build/Debug/IrisProxyExtension.build/Objects-normal/arm64/DEREncoder.swiftdeps"
+  }
+}

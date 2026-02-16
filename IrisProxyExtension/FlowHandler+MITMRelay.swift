@@ -129,6 +129,12 @@ extension FlowHandler {
                 } else {
                   state.resetForNextRequest()
                   parsedResponseHeaders = nil
+                  // Re-parse leftover buffer for pipelined requests
+                  Self.capturePipelinedRequest(
+                    state: state, host: host, port: port,
+                    processName: processName, isSecure: true,
+                    xpcService: xpcService
+                  )
                 }
               }
             }
