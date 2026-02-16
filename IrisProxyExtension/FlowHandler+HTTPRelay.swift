@@ -47,7 +47,7 @@ extension FlowHandler {
           state.appendToRequestBuffer(data)
 
           if !state.hasRequest {
-            if let request = state.withRequestBuffer({ HTTPParser.parseRequest(from: $0) }) {
+            if let request = state.withRequestBuffer({ RustHTTPParser.parseRequest(from: $0) }) {
               let scheme = isSecure ? "https" : "http"
               let url = "\(scheme)://\(host)\(request.path)"
               let body = state.withRequestBuffer {
@@ -87,6 +87,7 @@ extension FlowHandler {
       group.addTask { [weak self] in
         guard let self = self else { return }
         var parsedResponseHeaders: HTTPParser.ParsedResponse?
+        var shouldCloseAfterWrite = false
         while true {
           do {
             let serverData = try await Self.receiveFromServer(serverConnection)
@@ -97,18 +98,17 @@ extension FlowHandler {
             // Step 1: Parse response headers (once per request/response cycle)
             if state.hasRequest && !state.hasResponse && parsedResponseHeaders == nil {
               parsedResponseHeaders = state.withResponseBuffer({
-                HTTPParser.parseResponse(from: $0)
+                RustHTTPParser.parseResponse(from: $0)
               })
               if let response = parsedResponseHeaders {
-                // Set message size based on body type
-                let noBody = response.statusCode == 204 || response.statusCode == 304
-                if noBody {
+                if !response.hasBody {
                   state.setResponseMessageSize(response.headerEndIndex)
                   state.markResponseBodyComplete(actualSize: response.headerEndIndex)
                 } else if let contentLength = response.contentLength {
                   state.setResponseMessageSize(response.headerEndIndex + contentLength)
                 }
                 // Chunked: size unknown until terminal chunk — tracked in step 2
+                // No framing: body ends when server closes connection — captured in catch block
               }
             }
 
@@ -116,7 +116,6 @@ extension FlowHandler {
             if let response = parsedResponseHeaders, !state.hasResponse {
               let bodyComplete: Bool
               if response.isChunked {
-                // Walk chunked encoding to find terminal 0-length chunk
                 bodyComplete = state.withResponseBuffer { buf in
                   let bodyData = Data(buf.dropFirst(response.headerEndIndex))
                   return HTTPParser.isChunkedBodyComplete(bodyData)
@@ -125,32 +124,40 @@ extension FlowHandler {
                   let actualSize = state.withResponseBuffer({ $0.count })
                   state.markResponseBodyComplete(actualSize: actualSize)
                 }
-              } else {
+              } else if response.hasFraming {
                 bodyComplete = state.isResponseComplete()
+              } else {
+                // No Content-Length, not chunked — body ends on connection close (RFC 7230 §3.3.3)
+                bodyComplete = false
               }
 
               if bodyComplete {
-                let elapsed = CFAbsoluteTimeGetCurrent() - startTime
-                let body = state.withResponseBuffer {
-                  Self.extractResponseBody(from: $0, response: response)
-                }
-                let capturedResponse = ProxyCapturedResponse(
-                  statusCode: response.statusCode, reason: response.reason,
-                  httpVersion: response.httpVersion,
-                  headers: response.headers, body: body, duration: elapsed
+                Self.captureResponse(
+                  state: state, response: response, flowId: flowId,
+                  startTime: startTime, xpcService: xpcService
                 )
-                let updateId = state.currentFlowId ?? flowId
-                state.markResponseCaptured()
-                xpcService?.updateFlow(updateId, response: capturedResponse)
-                state.resetForNextRequest()
-                parsedResponseHeaders = nil
+                // Connection: close or HTTP/1.0 — don't reuse connection
+                if response.shouldClose {
+                  shouldCloseAfterWrite = true
+                } else {
+                  state.resetForNextRequest()
+                  parsedResponseHeaders = nil
+                }
               }
             }
 
             await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
               flow.write(serverData) { _ in continuation.resume() }
             }
+            if shouldCloseAfterWrite { break }
           } catch {
+            // Connection closed — capture unframed response body if pending
+            if let response = parsedResponseHeaders, state.hasRequest, !state.hasResponse {
+              Self.captureResponse(
+                state: state, response: response, flowId: flowId,
+                startTime: startTime, xpcService: xpcService
+              )
+            }
             flow.closeWriteWithError(nil)
             break
           }

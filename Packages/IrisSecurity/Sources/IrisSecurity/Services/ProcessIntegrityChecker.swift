@@ -43,7 +43,7 @@ public actor ProcessIntegrityChecker {
         let processName = URL(fileURLWithPath: binaryPath).lastPathComponent
 
         // Get dylibs declared in Mach-O
-        guard let machInfo = MachOParser.parse(binaryPath) else { return [] }
+        guard let machInfo = RustMachOParser.parse(binaryPath) else { return [] }
         let declaredDylibs = Set(machInfo.loadDylibs.map { resolveDylibPath($0) })
 
         // Get dylibs actually loaded via proc_regionfilename or dyld info

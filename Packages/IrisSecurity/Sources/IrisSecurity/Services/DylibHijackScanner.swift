@@ -18,7 +18,7 @@ public actor DylibHijackScanner {
         for pid in snap.pids {
             let path = snap.path(for: pid)
             guard !path.isEmpty, !isProtectedPath(path) else { continue }
-            guard let info = MachOParser.parse(path) else { continue }
+            guard let info = RustMachOParser.parse(path) else { continue }
             // Only scan executables
             guard info.fileType == MH_EXECUTE else { continue }
 
@@ -42,7 +42,7 @@ public actor DylibHijackScanner {
                 continue
             }
             guard fm.isExecutableFile(atPath: path) else { continue }
-            guard let info = MachOParser.parse(path) else { continue }
+            guard let info = RustMachOParser.parse(path) else { continue }
             guard info.fileType == MH_EXECUTE else { continue }
 
             let hijacks = analyzeLoadInfo(info)

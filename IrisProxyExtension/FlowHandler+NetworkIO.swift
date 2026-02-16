@@ -74,4 +74,22 @@ extension FlowHandler {
         }
         return nil
     }
+
+    /// Captures a completed HTTP response to the XPC flow store.
+    static func captureResponse(
+        state: RelayState, response: HTTPParser.ParsedResponse,
+        flowId: UUID, startTime: CFAbsoluteTime,
+        xpcService: ProxyXPCService?
+    ) {
+        let elapsed = CFAbsoluteTimeGetCurrent() - startTime
+        let body = extractResponseBody(from: state.getResponseBuffer(), response: response)
+        let capturedResponse = ProxyCapturedResponse(
+            statusCode: response.statusCode, reason: response.reason,
+            httpVersion: response.httpVersion,
+            headers: response.headers, body: body, duration: elapsed
+        )
+        let updateId = state.currentFlowId ?? flowId
+        state.markResponseCaptured()
+        xpcService?.updateFlow(updateId, response: capturedResponse)
+    }
 }

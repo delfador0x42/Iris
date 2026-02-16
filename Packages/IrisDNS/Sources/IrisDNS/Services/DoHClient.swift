@@ -102,10 +102,10 @@ public actor DoHClient {
     /// Sends a parsed DNS query and returns a parsed response.
     /// This is a convenience method that handles serialization.
     public func query(message: DNSMessage) async throws -> DNSMessage {
-        let queryData = DNSMessageParser.serialize(message)
+        let queryData = RustDNSParser.serialize(message)
         let responseData = try await query(queryData)
 
-        guard let response = DNSMessageParser.parse(responseData) else {
+        guard let response = RustDNSParser.parse(responseData) else {
             throw DoHError.parseError
         }
 

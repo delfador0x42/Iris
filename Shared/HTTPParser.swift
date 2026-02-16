@@ -50,5 +50,27 @@ final class HTTPParser: @unchecked Sendable {
         let headerEndIndex: Int
         let contentLength: Int?
         let isChunked: Bool
+
+        /// Whether the server indicated this connection should close after the response.
+        /// True for HTTP/1.0 without explicit keep-alive, or any version with Connection: close.
+        var shouldClose: Bool {
+            let connHeader = headers.first { $0.name.lowercased() == "connection" }?.value.lowercased()
+            if connHeader == "close" { return true }
+            // HTTP/1.0 defaults to close unless Connection: keep-alive
+            if httpVersion == "HTTP/1.0" && connHeader != "keep-alive" { return true }
+            return false
+        }
+
+        /// Whether this response has a body (RFC 7230 §3.3)
+        var hasBody: Bool {
+            // 1xx, 204, 304 have no body
+            if statusCode < 200 || statusCode == 204 || statusCode == 304 { return false }
+            return true
+        }
+
+        /// Whether the body length is determinate (Content-Length or chunked)
+        var hasFraming: Bool {
+            contentLength != nil || isChunked
+        }
     }
 }

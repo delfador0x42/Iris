@@ -40,7 +40,7 @@ extension FlowHandler {
             state.appendToRequestBuffer(decryptedData)
 
             if !state.hasRequest {
-              if let request = state.withRequestBuffer({ HTTPParser.parseRequest(from: $0) }) {
+              if let request = state.withRequestBuffer({ RustHTTPParser.parseRequest(from: $0) }) {
                 let url = "https://\(host)\(request.path)"
                 let body = state.withRequestBuffer {
                   Self.extractRequestBody(from: $0, request: request)
@@ -75,6 +75,7 @@ extension FlowHandler {
       group.addTask { [weak self] in
         guard let self = self else { return }
         var parsedResponseHeaders: HTTPParser.ParsedResponse?
+        var shouldCloseAfterWrite = false
         do {
           while true {
             let serverData = try await Self.receiveFromServer(serverConnection)
@@ -85,11 +86,10 @@ extension FlowHandler {
             // Step 1: Parse response headers (once per request/response cycle)
             if state.hasRequest && !state.hasResponse && parsedResponseHeaders == nil {
               parsedResponseHeaders = state.withResponseBuffer({
-                HTTPParser.parseResponse(from: $0)
+                RustHTTPParser.parseResponse(from: $0)
               })
               if let response = parsedResponseHeaders {
-                let noBody = response.statusCode == 204 || response.statusCode == 304
-                if noBody {
+                if !response.hasBody {
                   state.setResponseMessageSize(response.headerEndIndex)
                   state.markResponseBodyComplete(actualSize: response.headerEndIndex)
                 } else if let contentLength = response.contentLength {
@@ -110,34 +110,40 @@ extension FlowHandler {
                   let actualSize = state.withResponseBuffer({ $0.count })
                   state.markResponseBodyComplete(actualSize: actualSize)
                 }
-              } else {
+              } else if response.hasFraming {
                 bodyComplete = state.isResponseComplete()
+              } else {
+                bodyComplete = false
               }
 
               if bodyComplete {
-                let elapsed = CFAbsoluteTimeGetCurrent() - startTime
-                let body = state.withResponseBuffer {
-                  Self.extractResponseBody(from: $0, response: response)
-                }
-                let capturedResponse = ProxyCapturedResponse(
-                  statusCode: response.statusCode, reason: response.reason,
-                  httpVersion: response.httpVersion,
-                  headers: response.headers, body: body, duration: elapsed
+                Self.captureResponse(
+                  state: state, response: response, flowId: flowId,
+                  startTime: startTime, xpcService: xpcService
                 )
-                let updateId = state.currentFlowId ?? flowId
-                state.markResponseCaptured()
-                xpcService?.updateFlow(updateId, response: capturedResponse)
-                state.resetForNextRequest()
-                parsedResponseHeaders = nil
                 self.logger.info(
-                  "MITM response: \(response.statusCode) for \(host) (\(String(format: "%.0f", elapsed * 1000))ms)"
+                  "MITM response: \(response.statusCode) for \(host) (\(String(format: "%.0f", (CFAbsoluteTimeGetCurrent() - startTime) * 1000))ms)"
                 )
+                if response.shouldClose {
+                  shouldCloseAfterWrite = true
+                } else {
+                  state.resetForNextRequest()
+                  parsedResponseHeaders = nil
+                }
               }
             }
 
             try await clientTLS.write(serverData)
+            if shouldCloseAfterWrite { break }
           }
         } catch {
+          // Connection closed — capture unframed response body if pending
+          if let response = parsedResponseHeaders, state.hasRequest, !state.hasResponse {
+            Self.captureResponse(
+              state: state, response: response, flowId: flowId,
+              startTime: startTime, xpcService: xpcService
+            )
+          }
           self.logger.debug("Server→Client relay ended for \(host)")
           clientTLS.close()
         }
