@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Main findings view — streams results as scanners complete.
-/// Organized by severity: correlations first, then critical/high/medium/low.
+/// Groups duplicates by (technique, processName). Uses ThemedScrollView for styled scrollbar.
 struct ScanResultsView: View {
   @ObservedObject var session: ScanSession
 
@@ -13,7 +13,7 @@ struct ScanResultsView: View {
       } else if session.scannerResults.isEmpty {
         emptyState
       } else {
-        ScrollView {
+        ThemedScrollView {
           LazyVStack(spacing: 0) {
             correlationsSection
             anomalySection(severity: .critical)
@@ -23,7 +23,8 @@ struct ScanResultsView: View {
             anomalySection(severity: .medium)
             anomalySection(severity: .low)
           }
-          .padding(.bottom, 40)
+          .padding(.bottom, 20)
+          .onAppear { FindingAnalyzer.registerAll() }
         }
       }
     }
@@ -34,7 +35,7 @@ struct ScanResultsView: View {
   private var scanningPlaceholder: some View {
     VStack(spacing: 12) {
       ProgressView().controlSize(.regular).tint(.cyan)
-      Text("Running 50 scanners...")
+      Text("Running \(ScannerEntry.all.count) scanners...")
         .font(.system(size: 13, weight: .medium, design: .monospaced))
         .foregroundColor(.cyan.opacity(0.7))
     }
@@ -63,10 +64,11 @@ struct ScanResultsView: View {
 
   @ViewBuilder
   private func anomalySection(severity: AnomalySeverity) -> some View {
-    let items = allAnomalies.filter { $0.severity == severity }
-    if !items.isEmpty {
-      sectionHeader(severity.label.capitalized, count: items.count, color: severityColor(severity))
-      ForEach(items) { a in AnomalyRow(anomaly: a) }
+    let all = allAnomalies.filter { $0.severity == severity }
+    let groups = AnomalyGroup.group(all)
+    if !groups.isEmpty {
+      sectionHeader(severity.label.capitalized, count: all.count, color: severityColor(severity))
+      ForEach(groups) { g in AnomalyGroupRow(group: g) }
     }
   }
 
@@ -105,7 +107,7 @@ struct ScanResultsView: View {
         .foregroundColor(color.opacity(0.5))
       Spacer()
     }
-    .padding(.horizontal, 20).padding(.top, 16).padding(.bottom, 4)
+    .padding(.horizontal, 20).padding(.top, 10).padding(.bottom, 4)
   }
 
   private func severityColor(_ s: AnomalySeverity) -> Color {

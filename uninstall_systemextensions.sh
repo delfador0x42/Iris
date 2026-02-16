@@ -28,23 +28,23 @@ rm -rf /Applications/Iris.app && echo "[app] removed from /Applications"
 rm -rf "$BUILD_DIR" && echo "[clean] build dir removed"
 
 # 5. Build
-echo "[build] building..."
-cd "$PROJECT_DIR"
-xcodebuild build \
-  -scheme Iris \
-  -configuration Debug \
-  -destination 'platform=macOS' \
-  -derivedDataPath "$DERIVED" \
-  2>&1 | tail -5
-
-if [ ! -d "$APP_SRC" ]; then
-  echo "[build] FAILED — Iris.app not found"
-  exit 1
-fi
-echo "[build] succeeded"
-
-# 6. Copy to /Applications
-cp -R "$APP_SRC" /Applications/Iris.app
-echo "[install] copied to /Applications/Iris.app"
-
-echo "=== Done. Launch Iris to activate system extensions. ==="
+#echo "[build] building..."
+#cd "$PROJECT_DIR"
+#xcodebuild build \
+#  -scheme Iris \
+#  -configuration Debug \
+#  -destination 'platform=macOS' \
+#  -derivedDataPath "$DERIVED" \
+#  2>&1 | tail -5
+#
+#if [ ! -d "$APP_SRC" ]; then
+#  echo "[build] FAILED — Iris.app not found"
+#  exit 1
+#fi
+#echo "[build] succeeded"
+#
+## 6. Copy to /Applications
+#cp -R "$APP_SRC" /Applications/Iris.app
+#echo "[install] copied to /Applications/Iris.app"
+#
+#echo "=== Done. Launch Iris to activate system extensions. ==="
