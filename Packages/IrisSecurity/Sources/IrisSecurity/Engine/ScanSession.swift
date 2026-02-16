@@ -49,6 +49,9 @@ public final class ScanSession: ObservableObject {
 
     // Fire-and-forget VT hash checks (display-only, no trust signal)
     Task { await checkVirusTotal(result.anomalies) }
+
+    // Auto-carve memory for suspicious processes (hidden, fileless, injected)
+    Task { await carveMemoryForSuspicious(result.anomalies) }
   }
 
   /// Load cached result without running a new scan.
@@ -84,6 +87,31 @@ public final class ScanSession: ObservableObject {
   /// Get VT verdict for a file path, if available.
   public func vtVerdict(for path: String) -> VTVerdict? {
     vtResults[path]
+  }
+
+  /// Carve executable memory from suspicious processes for offline analysis.
+  /// Targets: hidden processes, deleted binaries, injection findings.
+  private func carveMemoryForSuspicious(_ anomalies: [ProcessAnomaly]) async {
+    let carveTargets = Set(["Hidden Process", "Deleted Binary Still Running",
+                            "Hidden Process (kill brute-force)",
+                            "Hidden Process (Mach task walk)"])
+    let pids = Set(anomalies.filter { carveTargets.contains($0.technique) && $0.pid > 0 }.map(\.pid))
+    guard !pids.isEmpty else { return }
+    for pid in pids {
+      if let carved = MemoryCarver.carve(pid: pid) {
+        await MainActor.run {
+          vtResults["carved:\(pid)"] = nil // placeholder for future VT check
+        }
+        // Check carved hash against VT
+        if await VirusTotalService.shared.loadKey() {
+          let verdict = await VirusTotalService.shared.checkHash(carved.sha256)
+          if let v = verdict {
+            await MainActor.run { vtResults["carved:\(pid)"] = v }
+          }
+        }
+      }
+    }
+    MemoryCarver.cleanup()
   }
 
   /// Current results (complete or in-progress). Enables export during scan.

@@ -1,47 +1,102 @@
 import Foundation
 import os.log
 
-/// Detects hidden processes by cross-referencing enumeration methods.
-/// If a PID exists (responds to kill(0)) but isn't in the process list,
-/// it may be hidden by a rootkit. Covers hunt scripts: hidden_processes, pid_bruteforce.
+/// Detects hidden processes by cross-referencing THREE enumeration methods:
+/// 1. sysctl(KERN_PROC_ALL) — standard process list (ProcessSnapshot)
+/// 2. kill(pid, 0) brute-force — finds PIDs that respond but aren't listed
+/// 3. processor_set_tasks() — Mach kernel task port walk (deepest, requires root)
+/// Any PID found by one method but not another is suspicious.
 public actor HiddenProcessDetector {
     public static let shared = HiddenProcessDetector()
     private let logger = Logger(subsystem: "com.wudan.iris", category: "HiddenProcess")
 
     public func scan(snapshot: ProcessSnapshot) async -> [ProcessAnomaly] {
         var anomalies: [ProcessAnomaly] = []
-        let knownPids = Set(snapshot.pids)
+        let sysctlPids = Set(snapshot.pids)
 
-        // Brute-force PID range looking for hidden processes
+        // Layer 1: kill(0) brute-force vs sysctl
         let maxPid = pidMax()
+        var killPids = Set<pid_t>()
         var pid: pid_t = 1
         while pid < maxPid {
-            if !knownPids.contains(pid) && processExists(pid) {
-                // PID responds to signal 0 but isn't in our snapshot
-                let name = procName(pid) ?? "unknown"
-                // Skip kernel-only PIDs (they're expected to be invisible)
-                if name != "kernel_task" && name != "launchd" {
-                    let pathStr = procPath(pid) ?? ""
-                    anomalies.append(.forProcess(
-                        pid: pid, name: name, path: pathStr,
-                        technique: "Hidden Process",
-                        description: "PID \(pid) (\(name)) exists but not visible in process list. Possible rootkit.",
-                        severity: .critical, mitreID: "T1014",
-                        scannerId: "hidden_process",
-                        enumMethod: "kill(pid,0) brute-force PID scan [1..\(maxPid)]",
-                        evidence: [
-                            "detection: kill(\(pid), 0) → \(kill(pid, 0) == 0 ? "success" : "EPERM (exists, no perms)")",
-                            "not_in: sysctl(KERN_PROC_ALL) snapshot (\(knownPids.count) PIDs)",
-                            "proc_path: \(pathStr.isEmpty ? "(empty — no binary on disk?)" : pathStr)",
-                        ]
-                    ))
-                }
-            }
+            if processExists(pid) { killPids.insert(pid) }
             pid += 1
         }
+        let hiddenFromSysctl = killPids.subtracting(sysctlPids)
+        for hidden in hiddenFromSysctl {
+            let name = procName(hidden) ?? "unknown"
+            if name == "kernel_task" || name == "launchd" { continue }
+            let pathStr = procPath(hidden) ?? ""
+            anomalies.append(.forProcess(
+                pid: hidden, name: name, path: pathStr,
+                technique: "Hidden Process (kill brute-force)",
+                description: "PID \(hidden) (\(name)) responds to kill(0) but missing from sysctl. Possible rootkit.",
+                severity: .critical, mitreID: "T1014",
+                scannerId: "hidden_process",
+                enumMethod: "kill(pid,0) brute-force [1..\(maxPid)] vs sysctl(KERN_PROC_ALL)",
+                evidence: [
+                    "detection: kill(\(hidden), 0) success",
+                    "not_in: sysctl snapshot (\(sysctlPids.count) PIDs)",
+                    "proc_path: \(pathStr.isEmpty ? "(no binary on disk)" : pathStr)",
+                ]
+            ))
+        }
 
-        // Also check for duplicate system process names (masquerading)
+        // Layer 2: Mach processor_set_tasks() vs sysctl (deepest)
+        let machTasks = MachTaskEnumerator.enumerateAll()
+        let machPids = Set(machTasks.map(\.pid))
+
+        // PIDs in Mach but not in sysctl — hidden from userland
+        let machOnly = machPids.subtracting(sysctlPids)
+        for machPid in machOnly {
+            if machPid == 0 { continue } // kernel_task
+            let task = machTasks.first { $0.pid == machPid }
+            let name = task?.name ?? "unknown"
+            if name == "kernel_task" || name == "launchd" { continue }
+            let pathStr = task?.path ?? ""
+            // Don't double-report if already found by kill brute-force
+            if hiddenFromSysctl.contains(machPid) { continue }
+            anomalies.append(.forProcess(
+                pid: machPid, name: name, path: pathStr,
+                technique: "Hidden Process (Mach task walk)",
+                description: "PID \(machPid) (\(name)) found via processor_set_tasks() but not in sysctl. Deep rootkit.",
+                severity: .critical, mitreID: "T1014",
+                scannerId: "hidden_process",
+                enumMethod: "processor_set_tasks() vs sysctl(KERN_PROC_ALL)",
+                evidence: [
+                    "detection: processor_set_tasks() → pid_for_task()",
+                    "not_in: sysctl snapshot (\(sysctlPids.count) PIDs)",
+                    "mach_total: \(machTasks.count) tasks",
+                    "proc_path: \(pathStr.isEmpty ? "(no binary on disk)" : pathStr)",
+                ]
+            ))
+        }
+
+        // PIDs in sysctl but not in Mach — possible DKOM (task list manipulation)
+        let sysctlOnly = sysctlPids.subtracting(machPids)
+        for sPid in sysctlOnly where sPid > 0 {
+            let name = snapshot.name(for: sPid)
+            let path = snapshot.path(for: sPid)
+            anomalies.append(.forProcess(
+                pid: sPid, name: name, path: path,
+                technique: "Ghost Process (DKOM suspected)",
+                description: "PID \(sPid) (\(name)) in sysctl but not in Mach task list. Possible DKOM.",
+                severity: .high, mitreID: "T1014",
+                scannerId: "hidden_process",
+                enumMethod: "sysctl(KERN_PROC_ALL) vs processor_set_tasks()",
+                evidence: [
+                    "in_sysctl: true",
+                    "in_mach: false",
+                    "sysctl_count: \(sysctlPids.count)",
+                    "mach_count: \(machTasks.count)",
+                ]
+            ))
+        }
+
+        // Layer 3: Duplicate system process names (masquerading)
         anomalies.append(contentsOf: checkDuplicateSystemProcesses(snapshot: snapshot))
+
+        logger.info("Scan complete: sysctl=\(sysctlPids.count), kill=\(killPids.count), mach=\(machTasks.count), findings=\(anomalies.count)")
         return anomalies
     }
 
@@ -84,7 +139,7 @@ public actor HiddenProcessDetector {
     private func pidMax() -> pid_t {
         var val: Int32 = 0; var size = MemoryLayout<Int32>.size
         sysctlbyname("kern.maxproc", &val, &size, nil, 0)
-        return min(val, 99999) // cap for performance
+        return min(val, 99999)
     }
 
     private func procName(_ pid: pid_t) -> String? {

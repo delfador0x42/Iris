@@ -82,33 +82,57 @@ public actor ProcessIntegrityChecker {
         return anomalies
     }
 
-    /// Check code signing flags for anomalies
+    /// Check code signing flags for anomalies (two layers: proc_bsdinfo + csops kernel)
     private func checkCodeSigningFlags(pid: pid_t, path: String) -> [ProcessAnomaly] {
         var anomalies: [ProcessAnomaly] = []
         let processName = URL(fileURLWithPath: path).lastPathComponent
 
+        // Layer 1: proc_bsdinfo flags
         var info = proc_bsdinfo()
         let size = proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, Int32(MemoryLayout<proc_bsdinfo>.size))
         guard size > 0 else { return [] }
 
         let csFlags = info.pbi_flags
-
         let flagsHex = String(format: "0x%08X", csFlags)
 
-        if csFlags & 0x0800 != 0 {
+        // Layer 2: Kernel CS flags via csops() syscall (deeper than proc_bsdinfo)
+        let kernelCS = CodeSignValidator.kernelCSInfo(pid: pid)
+
+        if csFlags & 0x0800 != 0 || kernelCS?.isDebugged == true {
             anomalies.append(.forProcess(
                 pid: pid, name: processName, path: path,
                 technique: "Process Has Been Debugged/Injected",
-                description: "Process \(processName) (PID \(pid)) has CS_DEBUGGED flag set. This means task_for_pid was used on it — possible code injection.",
+                description: "Process \(processName) (PID \(pid)) has CS_DEBUGGED flag. task_for_pid was used — possible code injection.",
                 severity: .high, mitreID: "T1055",
                 scannerId: "process_integrity",
-                enumMethod: "proc_pidinfo(PROC_PIDTBSDINFO) → pbi_flags",
+                enumMethod: "csops(CS_OPS_STATUS) + proc_pidinfo(PROC_PIDTBSDINFO)",
                 evidence: [
-                    "cs_flags: \(flagsHex)",
-                    "CS_DEBUGGED (0x0800): SET",
+                    "pbi_flags: \(flagsHex)",
+                    "kernel_cs: \(kernelCS?.flagsHex ?? "unavailable")",
+                    "CS_DEBUGGED: SET",
                     "binary: \(path)",
                 ]
             ))
+        }
+
+        // Non-system process running without CS_VALID — unsigned/tampered code running
+        if let ks = kernelCS, !ks.isValid && !path.isEmpty {
+            if !path.hasPrefix("/System/") && !path.hasPrefix("/usr/lib/") {
+                anomalies.append(.forProcess(
+                    pid: pid, name: processName, path: path,
+                    technique: "Invalid Code Signature (Kernel)",
+                    description: "\(processName) (PID \(pid)) kernel reports CS_VALID=false. Code signature invalid at kernel level.",
+                    severity: .critical, mitreID: "T1036.001",
+                    scannerId: "process_integrity",
+                    enumMethod: "csops(CS_OPS_STATUS)",
+                    evidence: [
+                        "kernel_cs: \(ks.flagsHex)",
+                        "CS_VALID: false",
+                        "flags: \(ks.flagDescriptions.joined(separator: ", "))",
+                        "binary: \(path)",
+                    ]
+                ))
+            }
         }
 
         if path.hasPrefix("/System/") || path.hasPrefix("/usr/") {
@@ -116,14 +140,15 @@ public actor ProcessIntegrityChecker {
                 anomalies.append(.forProcess(
                     pid: pid, name: processName, path: path,
                     technique: "Missing Hardened Runtime Flags",
-                    description: "System binary \(processName) missing CS_HARD|CS_KILL flags. May have been patched or replaced.",
+                    description: "System binary \(processName) missing CS_HARD|CS_KILL flags. May have been patched.",
                     severity: .high, mitreID: "T1574",
                     scannerId: "process_integrity",
-                    enumMethod: "proc_pidinfo(PROC_PIDTBSDINFO) → pbi_flags",
+                    enumMethod: "csops(CS_OPS_STATUS) + proc_pidinfo(PROC_PIDTBSDINFO)",
                     evidence: [
-                        "cs_flags: \(flagsHex)",
-                        "CS_HARD (0x0100): \(csFlags & 0x0100 != 0 ? "SET" : "MISSING")",
-                        "CS_KILL (0x0200): \(csFlags & 0x0200 != 0 ? "SET" : "MISSING")",
+                        "pbi_flags: \(flagsHex)",
+                        "kernel_cs: \(kernelCS?.flagsHex ?? "unavailable")",
+                        "CS_HARD: \(csFlags & 0x0100 != 0 ? "SET" : "MISSING")",
+                        "CS_KILL: \(csFlags & 0x0200 != 0 ? "SET" : "MISSING")",
                         "binary: \(path)",
                     ]
                 ))
