@@ -48,6 +48,8 @@ enum SecurityEventType: String, Codable {
     case setuid, setgid, sudo
     // Code injection
     case remoteThreadCreate, getTask, ptrace
+    // Memory/Execution (code injection detection)
+    case mmap, mprotect, procSuspendResume
     // System changes
     case kextLoad, mount, tccModify, xpcConnect, btmLaunchItemAdd
     // Authentication

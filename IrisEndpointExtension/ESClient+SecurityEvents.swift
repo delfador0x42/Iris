@@ -57,6 +57,54 @@ extension ESClient {
         recordSecurityEvent(.ptrace, process: info, targetProcess: targetInfo)
     }
 
+    // MARK: - Memory/Execution
+
+    func handleMmap(_ message: UnsafePointer<es_message_t>) {
+        let event = message.pointee.event.mmap
+        let prot = event.protection
+        // Only log executable mappings — these are potential code loads
+        guard prot & 0x04 != 0 else { return } // VM_PROT_EXECUTE
+        let sourcePath = esStringToSwift(event.source.pointee.path)
+        // Skip system framework loads (extremely high volume)
+        if sourcePath.hasPrefix("/System/") || sourcePath.hasPrefix("/usr/lib/") { return }
+        let proc = message.pointee.process.pointee
+        let info = extractBasicProcessInfo(from: proc)
+        let flags = String(format: "prot=0x%x max=0x%x flags=0x%x", prot, event.max_protection, event.flags)
+        recordSecurityEvent(.mmap, process: info, targetPath: sourcePath, detail: flags)
+    }
+
+    func handleMprotect(_ message: UnsafePointer<es_message_t>) {
+        let event = message.pointee.event.mprotect
+        let prot = event.protection
+        // Only log when adding EXECUTE permission — classic W→X shellcode pattern
+        guard prot & 0x04 != 0 else { return } // VM_PROT_EXECUTE
+        let proc = message.pointee.process.pointee
+        let procPath = esStringToSwift(proc.executable.pointee.path)
+        // Skip system processes doing legitimate JIT
+        if procPath.hasPrefix("/System/") || procPath.hasPrefix("/usr/lib/") { return }
+        let info = extractBasicProcessInfo(from: proc)
+        let detail = String(format: "prot=0x%x addr=0x%llx size=0x%llx", prot, event.address, event.size)
+        recordSecurityEvent(.mprotect, process: info, detail: detail)
+    }
+
+    func handleProcSuspendResume(_ message: UnsafePointer<es_message_t>) {
+        let proc = message.pointee.process.pointee
+        let info = extractBasicProcessInfo(from: proc)
+        let event = message.pointee.event.proc_suspend_resume
+        let typeStr: String
+        switch event.type {
+        case ES_PROC_SUSPEND_RESUME_TYPE_SUSPEND: typeStr = "suspend"
+        case ES_PROC_SUSPEND_RESUME_TYPE_RESUME: typeStr = "resume"
+        case ES_PROC_SUSPEND_RESUME_TYPE_SHUTDOWN_SOCKETS: typeStr = "shutdown_sockets"
+        default: typeStr = "unknown(\(event.type.rawValue))"
+        }
+        var targetInfo: ESProcessInfo? = nil
+        if let target = event.target {
+            targetInfo = extractBasicProcessInfo(from: target.pointee)
+        }
+        recordSecurityEvent(.procSuspendResume, process: info, targetProcess: targetInfo, detail: typeStr)
+    }
+
     // MARK: - System Changes
 
     func handleKextLoad(_ message: UnsafePointer<es_message_t>) {

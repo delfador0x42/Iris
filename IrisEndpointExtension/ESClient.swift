@@ -121,6 +121,10 @@ class ESClient {
             ES_EVENT_TYPE_NOTIFY_REMOTE_THREAD_CREATE,
             ES_EVENT_TYPE_NOTIFY_GET_TASK,
             ES_EVENT_TYPE_NOTIFY_TRACE,
+            // Memory/Execution (code injection, shellcode, JIT abuse)
+            ES_EVENT_TYPE_NOTIFY_MMAP,
+            ES_EVENT_TYPE_NOTIFY_MPROTECT,
+            ES_EVENT_TYPE_NOTIFY_PROC_SUSPEND_RESUME,
             // System changes
             ES_EVENT_TYPE_NOTIFY_KEXTLOAD,
             ES_EVENT_TYPE_NOTIFY_MOUNT,
@@ -204,6 +208,11 @@ class ESClient {
         case ES_EVENT_TYPE_NOTIFY_REMOTE_THREAD_CREATE: handleRemoteThreadCreate(message)
         case ES_EVENT_TYPE_NOTIFY_GET_TASK: handleGetTask(message)
         case ES_EVENT_TYPE_NOTIFY_TRACE: handleTrace(message)
+
+        // Memory/Execution
+        case ES_EVENT_TYPE_NOTIFY_MMAP: handleMmap(message)
+        case ES_EVENT_TYPE_NOTIFY_MPROTECT: handleMprotect(message)
+        case ES_EVENT_TYPE_NOTIFY_PROC_SUSPEND_RESUME: handleProcSuspendResume(message)
 
         // System changes
         case ES_EVENT_TYPE_NOTIFY_KEXTLOAD: handleKextLoad(message)
