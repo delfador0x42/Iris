@@ -81,11 +81,7 @@ struct ScannerStatusGrid: View {
   }
 
   private func tierLabel(_ tier: ScannerTier) -> String {
-    switch tier {
-    case .fast: return "FAST"
-    case .medium: return "MED"
-    case .slow: return "SLOW"
-    }
+    tier.label.uppercased()
   }
 
   private func tierColor(_ tier: ScannerTier) -> Color {

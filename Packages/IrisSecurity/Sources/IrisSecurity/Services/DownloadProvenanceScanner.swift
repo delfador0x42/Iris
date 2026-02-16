@@ -3,35 +3,29 @@ import os.log
 
 /// Checks download provenance via quarantine extended attributes.
 /// Files downloaded from the internet should have com.apple.quarantine xattr.
-/// Missing quarantine = bypassed Gatekeeper. Covers: downloads_provenance.sh.
+/// Missing quarantine = bypassed Gatekeeper. Uses native getxattr() C API.
 public actor DownloadProvenanceScanner {
   public static let shared = DownloadProvenanceScanner()
   private let logger = Logger(subsystem: "com.wudan.iris", category: "DownloadProvenance")
 
-  /// Directories to check for downloaded files
-  private static let downloadDirs = [
-    "Downloads", "Desktop", "Documents",
-  ]
+  private static let downloadDirs = ["Downloads", "Desktop", "Documents"]
 
-  /// Extensions that should have quarantine if downloaded
   private static let executableExts: Set<String> = [
     "app", "dmg", "pkg", "command", "sh", "py", "rb",
     "dylib", "bundle", "kext", "plugin", "action",
   ]
 
-  public func scan() async -> [ProcessAnomaly] {
+  public func scan() -> [ProcessAnomaly] {
     var anomalies: [ProcessAnomaly] = []
     let home = NSHomeDirectory()
     for dir in Self.downloadDirs {
-      anomalies.append(contentsOf: await scanDirectory("\(home)/\(dir)"))
+      anomalies.append(contentsOf: scanDirectory("\(home)/\(dir)"))
     }
-    // Also check /tmp for staged downloads
-    anomalies.append(contentsOf: await scanDirectory("/tmp"))
+    anomalies.append(contentsOf: scanDirectory("/tmp"))
     return anomalies
   }
 
-  /// Scan directory for executable files missing quarantine
-  private func scanDirectory(_ dir: String) async -> [ProcessAnomaly] {
+  private func scanDirectory(_ dir: String) -> [ProcessAnomaly] {
     var anomalies: [ProcessAnomaly] = []
     let fm = FileManager.default
     guard let entries = try? fm.contentsOfDirectory(atPath: dir) else { return [] }
@@ -41,15 +35,11 @@ public actor DownloadProvenanceScanner {
       guard Self.executableExts.contains(ext) else { continue }
       let path = "\(dir)/\(entry)"
 
-      // Check quarantine xattr
-      let xattrOutput = await runCommand(
-        "/usr/bin/xattr", args: ["-p", "com.apple.quarantine", path])
-      if xattrOutput.isEmpty || xattrOutput.contains("No such xattr") {
-        // Executable without quarantine — suspicious if in user-facing directory
+      let quarantine = readXattr(path: path, name: "com.apple.quarantine")
+      if quarantine == nil {
         let attrs = try? fm.attributesOfItem(atPath: path)
         let modDate = attrs?[.modificationDate] as? Date ?? Date.distantPast
         let age = Date().timeIntervalSince(modDate)
-        // Only flag recent files (last 30 days)
         guard age < 30 * 86400 else { continue }
         anomalies.append(.filesystem(
           name: entry, path: path,
@@ -57,12 +47,10 @@ public actor DownloadProvenanceScanner {
           description: "\(entry) — executable without quarantine (Gatekeeper bypassed)",
           severity: .medium, mitreID: "T1553.001"
         ))
-      } else if xattrOutput.contains(";") {
-        // Parse quarantine attribute for origin URL
-        let parts = xattrOutput.components(separatedBy: ";")
+      } else if let value = quarantine, value.contains(";") {
+        let parts = value.components(separatedBy: ";")
         if parts.count >= 3 {
           let origin = parts.last?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-          // Check if origin is suspicious
           let suspiciousOrigins = ["pastebin.com", "raw.githubusercontent.com", "ngrok.io"]
           for suspicious in suspiciousOrigins where origin.contains(suspicious) {
             anomalies.append(.filesystem(
@@ -78,17 +66,13 @@ public actor DownloadProvenanceScanner {
     return anomalies
   }
 
-  private func runCommand(_ path: String, args: [String]) async -> String {
-    await withCheckedContinuation { continuation in
-      let process = Process(); let pipe = Pipe()
-      process.executableURL = URL(fileURLWithPath: path)
-      process.arguments = args
-      process.standardOutput = pipe; process.standardError = pipe
-      do {
-        try process.run(); process.waitUntilExit()
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        continuation.resume(returning: String(data: data, encoding: .utf8) ?? "")
-      } catch { continuation.resume(returning: "") }
-    }
+  /// Read extended attribute via native getxattr() C API.
+  private func readXattr(path: String, name: String) -> String? {
+    let size = getxattr(path, name, nil, 0, 0, XATTR_NOFOLLOW)
+    guard size > 0 else { return nil }
+    var buffer = [UInt8](repeating: 0, count: size)
+    let read = getxattr(path, name, &buffer, size, 0, XATTR_NOFOLLOW)
+    guard read > 0 else { return nil }
+    return String(bytes: buffer.prefix(read), encoding: .utf8)
   }
 }

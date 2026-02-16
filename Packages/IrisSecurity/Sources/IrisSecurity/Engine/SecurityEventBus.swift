@@ -1,68 +1,115 @@
 import Foundation
 import os.log
 
-/// Event bus that polls XPC extensions for new events and feeds
-/// them to the DetectionEngine. Uses delta-fetch (sequence numbers)
-/// to avoid re-processing events.
+/// Event bus that polls ES extension for security events via XPC
+/// and feeds them to the DetectionEngine in real time.
+/// Uses delta-fetch (sequence numbers) to avoid re-processing.
 public actor SecurityEventBus {
-    public static let shared = SecurityEventBus()
+  public static let shared = SecurityEventBus()
 
-    private let logger = Logger(subsystem: "com.wudan.iris", category: "EventBus")
-    private var esSequence: UInt64 = 0
-    private var isRunning = false
-    private var pollTask: Task<Void, Never>?
+  private let logger = Logger(subsystem: "com.wudan.iris", category: "EventBus")
+  private let serviceName = "99HGW2AR62.com.wudan.iris.endpoint.xpc"
+  private let decoder = JSONDecoder()
 
-    /// Start polling all event sources
-    public func start() {
-        guard !isRunning else { return }
-        isRunning = true
+  private var esSequence: UInt64 = 0
+  private var isRunning = false
+  private var pollTask: Task<Void, Never>?
+  private var connection: NSXPCConnection?
+  private var totalIngested: UInt64 = 0
 
-        pollTask = Task { [weak self] in
-            guard let self else { return }
-            await self.pollLoop()
-        }
-        logger.info("[BUS] Event bus started")
+  /// Start polling all event sources
+  public func start() {
+    guard !isRunning else { return }
+    isRunning = true
+    pollTask = Task { await pollLoop() }
+    logger.info("[BUS] Event bus started")
+  }
+
+  /// Stop polling
+  public func stop() {
+    isRunning = false
+    pollTask?.cancel()
+    pollTask = nil
+    connection?.invalidate()
+    connection = nil
+    logger.info("[BUS] Event bus stopped")
+  }
+
+  /// Current stats
+  public func stats() -> (running: Bool, ingested: UInt64, seq: UInt64) {
+    (isRunning, totalIngested, esSequence)
+  }
+
+  /// Feed events from an external source (e.g. ProcessStore)
+  public func ingest(_ events: [SecurityEvent]) async {
+    guard !events.isEmpty else { return }
+    totalIngested += UInt64(events.count)
+    await DetectionEngine.shared.processBatch(events)
+  }
+
+  /// Feed a single event
+  public func ingest(_ event: SecurityEvent) async {
+    totalIngested += 1
+    await DetectionEngine.shared.process(event)
+  }
+
+  // MARK: - Polling
+
+  private func pollLoop() async {
+    while isRunning && !Task.isCancelled {
+      await pollEndpointSecurity()
+      try? await Task.sleep(nanoseconds: 1_000_000_000)
+    }
+  }
+
+  /// Poll ES extension for new security events via XPC
+  private func pollEndpointSecurity() async {
+    let conn = getConnection()
+    guard let proxy = conn.remoteObjectProxyWithErrorHandler({ [weak self] error in
+      Task { [weak self] in
+        await self?.handleXPCError(error)
+      }
+    }) as? ESXPCBridge else { return }
+
+    let sinceSeq = esSequence
+    let events: (UInt64, [Data]) = await withCheckedContinuation { cont in
+      proxy.getSecurityEventsSince(sinceSeq, limit: 500) { maxSeq, data in
+        cont.resume(returning: (maxSeq, data))
+      }
     }
 
-    /// Stop polling
-    public func stop() {
-        isRunning = false
-        pollTask?.cancel()
-        pollTask = nil
-        logger.info("[BUS] Event bus stopped")
+    let (maxSeq, dataArray) = events
+    guard maxSeq > esSequence else { return }
+    esSequence = maxSeq
+
+    // Decode and convert
+    var secEvents: [SecurityEvent] = []
+    secEvents.reserveCapacity(dataArray.count)
+    for data in dataArray {
+      guard let raw = try? decoder.decode(RawESEvent.self, from: data) else {
+        continue
+      }
+      secEvents.append(raw.toSecurityEvent())
     }
 
-    private func pollLoop() async {
-        while isRunning && !Task.isCancelled {
-            await pollEndpointSecurity()
-            try? await Task.sleep(nanoseconds: 1_000_000_000) // 1s interval
-        }
+    if !secEvents.isEmpty {
+      totalIngested += UInt64(secEvents.count)
+      await DetectionEngine.shared.processBatch(secEvents)
     }
+  }
 
-    /// Poll ES extension for new security events via XPC
-    private func pollEndpointSecurity() async {
-        let serviceName = "99HGW2AR62.com.wudan.iris.endpoint.xpc"
-        let connection = NSXPCConnection(machServiceName: serviceName)
+  private func getConnection() -> NSXPCConnection {
+    if let c = connection { return c }
+    let c = NSXPCConnection(machServiceName: serviceName)
+    c.remoteObjectInterface = NSXPCInterface(with: ESXPCBridge.self)
+    c.resume()
+    connection = c
+    return c
+  }
 
-        // Import the protocol dynamically — the protocol is in Shared/
-        let interface = NSXPCInterface(with: NSObjectProtocol.self)
-        connection.remoteObjectInterface = interface
-        connection.resume()
-
-        // For now, the event bus uses a lightweight poll.
-        // Full integration requires importing EndpointXPCProtocol which is
-        // in the Shared target. We'll bridge via the ProcessStore in Phase 7.
-        connection.invalidate()
-    }
-
-    /// Feed events from an external source (e.g. ProcessStore polling)
-    public func ingest(_ events: [SecurityEvent]) async {
-        guard !events.isEmpty else { return }
-        await DetectionEngine.shared.processBatch(events)
-    }
-
-    /// Feed a single event
-    public func ingest(_ event: SecurityEvent) async {
-        await DetectionEngine.shared.process(event)
-    }
+  private func handleXPCError(_ error: Error) {
+    logger.error("[BUS] XPC error: \(error.localizedDescription)")
+    connection?.invalidate()
+    connection = nil
+  }
 }

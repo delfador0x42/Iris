@@ -70,6 +70,14 @@ public actor SecurityAssessor {
         status: .fail, severity: CheckSeverity(change.severity))
     })
 
+    // Correlations → SecurityCheck (multi-scanner high-confidence threats)
+    checks.append(contentsOf: result.correlations.map { correlation in
+      SecurityCheck(
+        category: .threats, name: "Correlation: \(correlation.name)",
+        description: correlation.description,
+        status: .fail, severity: CheckSeverity(correlation.severity))
+    })
+
     return checks
   }
 }

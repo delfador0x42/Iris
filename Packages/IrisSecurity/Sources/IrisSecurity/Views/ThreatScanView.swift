@@ -68,6 +68,13 @@ public struct ThreatScanView: View {
 
     return ThemedScrollView {
       LazyVStack(alignment: .leading, spacing: 2) {
+        // Correlated threats (highest-confidence findings)
+        if !r.correlations.isEmpty {
+          sectionHeader("Correlated Threats", count: r.correlations.count)
+          ForEach(r.correlations) { c in
+            CorrelationRow(correlation: c)
+          }
+        }
         if !anomalies.isEmpty {
           sectionHeader("Process & System Anomalies", count: anomalies.count)
           ForEach(anomalies) { anomaly in AnomalyRow(anomaly: anomaly) }

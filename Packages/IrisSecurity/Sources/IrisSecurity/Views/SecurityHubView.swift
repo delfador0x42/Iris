@@ -79,8 +79,14 @@ public struct SecurityHubView: View {
               Text(r.totalFindings == 0 ? "System Clean" : "\(r.totalFindings) findings")
                 .font(.system(size: 12, weight: .bold, design: .monospaced))
                 .foregroundColor(r.totalFindings == 0 ? .green : .orange)
-              Text("\(r.scannerCount) engines \u{00B7} \(String(format: "%.1f", r.scanDuration))s \u{00B7} \(timeAgo(r.timestamp))")
-                .font(.system(size: 9, design: .monospaced)).foregroundColor(.gray)
+              HStack(spacing: 4) {
+                Text("\(r.scannerCount) engines \u{00B7} \(String(format: "%.1f", r.scanDuration))s \u{00B7} \(timeAgo(r.timestamp))")
+                  .font(.system(size: 9, design: .monospaced)).foregroundColor(.gray)
+                if !r.correlations.isEmpty {
+                  Text("\u{00B7} \(r.correlations.count) correlated")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced)).foregroundColor(.red)
+                }
+              }
             }
           } else {
             Image(systemName: "play.fill").foregroundColor(.cyan)
@@ -105,6 +111,28 @@ public struct SecurityHubView: View {
       // Scanner status grid
       if session.isScanning || session.scanResult != nil {
         ScannerStatusGrid(session: session).padding(.horizontal, 4)
+      }
+
+      // Export button
+      if let r = session.scanResult, !session.isScanning {
+        HStack(spacing: 8) {
+          Button(action: { exportReport(r, format: .json) }) {
+            Label("JSON", systemImage: "doc.text")
+              .font(.system(size: 9, weight: .medium, design: .monospaced))
+              .foregroundColor(.gray.opacity(0.6))
+          }.buttonStyle(.plain)
+          Button(action: { exportReport(r, format: .html) }) {
+            Label("HTML", systemImage: "doc.richtext")
+              .font(.system(size: 9, weight: .medium, design: .monospaced))
+              .foregroundColor(.gray.opacity(0.6))
+          }.buttonStyle(.plain)
+          Spacer()
+          if session.allowlistSuppressedCount > 0 {
+            Text("\(session.allowlistSuppressedCount) suppressed")
+              .font(.system(size: 9, design: .monospaced))
+              .foregroundColor(.gray.opacity(0.4))
+          }
+        }
       }
 
       // Timing toggle
@@ -171,6 +199,7 @@ public struct SecurityHubView: View {
     case .avMonitor: AVMonitorView()
     case .tccPermissions: TCCMonitorView()
     case .ransomware: RansomwareCheckView()
+    case .allowlist: AllowlistView()
     }
   }
 
@@ -179,6 +208,14 @@ public struct SecurityHubView: View {
   private func autoScan() async {
     await session.loadCached()
     if session.scanResult == nil { await session.runScan() }
+  }
+
+  private func exportReport(
+    _ result: ThreatScanResult, format: ScanReportExporter.ExportFormat
+  ) {
+    if let url = ScanReportExporter.save(result, format: format) {
+      NSWorkspace.shared.selectFile(url.path, inFileViewerRootedAtPath: "")
+    }
   }
 
   private func timeAgo(_ date: Date) -> String {

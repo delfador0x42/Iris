@@ -108,6 +108,55 @@ struct FSChangeRow: View {
     }
 }
 
+// MARK: - Correlation Row
+
+struct CorrelationRow: View {
+    let correlation: CorrelationEngine.Correlation
+    @State private var isExpanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 10) {
+                SeverityBadge(severity: correlation.severity)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(correlation.name)
+                        .font(.system(size: 12, weight: .bold)).foregroundColor(.white)
+                    Text("\(correlation.scannerIds.count) scanners · \(correlation.anomalies.count) anomalies")
+                        .font(.system(size: 10, design: .monospaced)).foregroundColor(.gray)
+                }
+                Spacer()
+                MITREBadge(id: correlation.mitreChain)
+                ExpandChevron(isExpanded: isExpanded)
+            }
+            .padding(.horizontal, 20).padding(.vertical, 8)
+            .contentShape(Rectangle())
+            .onTapGesture { withAnimation { isExpanded.toggle() } }
+
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(correlation.description)
+                        .font(.system(size: 11)).foregroundColor(.white.opacity(0.8))
+                    Text("Scanners: \(correlation.scannerIds.joined(separator: ", "))")
+                        .font(.system(size: 10, design: .monospaced)).foregroundColor(.cyan.opacity(0.7))
+                    ForEach(correlation.anomalies.prefix(5)) { a in
+                        HStack(spacing: 4) {
+                            Circle().fill(Color.orange).frame(width: 3, height: 3)
+                            Text("\(a.processName): \(a.technique)")
+                                .font(.system(size: 10, design: .monospaced)).foregroundColor(.gray)
+                        }
+                    }
+                    if correlation.anomalies.count > 5 {
+                        Text("+\(correlation.anomalies.count - 5) more")
+                            .font(.system(size: 9, design: .monospaced)).foregroundColor(.gray.opacity(0.5))
+                    }
+                }
+                .padding(.horizontal, 50).padding(.bottom, 8)
+            }
+        }
+        .background(backgroundFor(correlation.severity))
+    }
+}
+
 // MARK: - Supply Chain Row
 
 struct SupplyChainRow: View {

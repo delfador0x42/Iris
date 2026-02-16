@@ -10,6 +10,14 @@ public enum ScannerTier: Int, Comparable, Sendable {
   public static func < (lhs: ScannerTier, rhs: ScannerTier) -> Bool {
     lhs.rawValue < rhs.rawValue
   }
+
+  public var label: String {
+    switch self {
+    case .fast: return "fast"
+    case .medium: return "medium"
+    case .slow: return "slow"
+    }
+  }
 }
 
 /// Context passed to every scanner — shared resources captured once per scan.

@@ -15,6 +15,7 @@ enum SecurityModule: String, CaseIterable, Identifiable {
   case tccPermissions = "TCC Permissions"
   case ransomware = "Ransomware Check"
   case packageInventory = "Package Inventory"
+  case allowlist = "Allowlist"
 
   var id: String { rawValue }
 
@@ -32,6 +33,7 @@ enum SecurityModule: String, CaseIterable, Identifiable {
     case .tccPermissions: return "hand.raised.fill"
     case .ransomware: return "lock.trianglebadge.exclamationmark"
     case .packageInventory: return "archivebox"
+    case .allowlist: return "list.bullet.rectangle.portrait"
     }
   }
 
@@ -49,6 +51,7 @@ enum SecurityModule: String, CaseIterable, Identifiable {
     case .tccPermissions: return "FDA \u{00B7} screen \u{00B7} accessibility"
     case .ransomware: return "entropy \u{00B7} chi-square \u{00B7} pi"
     case .packageInventory: return "brew \u{00B7} app store \u{00B7} pkgutil"
+    case .allowlist: return "suppress false positives"
     }
   }
 
@@ -66,6 +69,7 @@ enum SecurityModule: String, CaseIterable, Identifiable {
     case .tccPermissions: return .mint
     case .ransomware: return Color(red: 0.8, green: 0.2, blue: 0.2)
     case .packageInventory: return .indigo
+    case .allowlist: return .gray
     }
   }
 }

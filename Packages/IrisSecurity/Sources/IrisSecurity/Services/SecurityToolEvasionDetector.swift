@@ -66,11 +66,11 @@ public actor SecurityToolEvasionDetector {
     }
 
     // Check if any security tools have been killed recently
+    let runningNames = Set(snapshot.pids.map { snapshot.name(for: $0) })
     for tool in Self.securityTools {
-      let running = await runCommand("/usr/bin/pgrep", args: ["-x", tool.name])
       let installed = FileManager.default.fileExists(
         atPath: "/Applications/\(tool.name).app")
-      if installed && running.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      if installed && !runningNames.contains(tool.name) {
         anomalies.append(.filesystem(
           name: tool.name, path: "/Applications/\(tool.name).app",
           technique: "Security Tool Not Running",
@@ -89,19 +89,5 @@ public actor SecurityToolEvasionDetector {
     var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, pid]
     guard sysctl(&mib, 3, &args, &size, nil, 0) == 0 else { return "" }
     return String(bytes: args.prefix(size), encoding: .utf8) ?? ""
-  }
-
-  private func runCommand(_ path: String, args: [String]) async -> String {
-    await withCheckedContinuation { continuation in
-      let process = Process(); let pipe = Pipe()
-      process.executableURL = URL(fileURLWithPath: path)
-      process.arguments = args
-      process.standardOutput = pipe; process.standardError = pipe
-      do {
-        try process.run(); process.waitUntilExit()
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        continuation.resume(returning: String(data: data, encoding: .utf8) ?? "")
-      } catch { continuation.resume(returning: "") }
-    }
   }
 }

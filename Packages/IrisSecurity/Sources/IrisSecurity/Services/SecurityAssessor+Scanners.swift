@@ -6,6 +6,8 @@ public struct ThreatScanResult: Sendable {
   public let supplyChainFindings: [SupplyChainFinding]
   public let fsChanges: [FileSystemChange]
   public let scannerResults: [ScannerResult]
+  public let correlations: [CorrelationEngine.Correlation]
+  public let allowlistSuppressed: Int
   public let scanDuration: TimeInterval
   public let scannerCount: Int
   public let timestamp: Date
@@ -17,12 +19,14 @@ public struct ThreatScanResult: Sendable {
   public var criticalCount: Int {
     anomalies.filter { $0.severity == .critical }.count
       + fsChanges.filter { $0.severity == .critical }.count
+      + correlations.filter { $0.severity == .critical }.count
   }
 
   public var highCount: Int {
     anomalies.filter { $0.severity == .high }.count
       + supplyChainFindings.filter { $0.severity == .high }.count
       + fsChanges.filter { $0.severity == .high }.count
+      + correlations.filter { $0.severity == .high }.count
   }
 }
 
@@ -54,41 +58,54 @@ extension SecurityAssessor {
     async let fsChanges = FileSystemBaseline.shared.diff()
 
     // Run registry scanners tier by tier (fast results arrive first)
+    let allowlist = AllowlistStore.shared
     var allResults: [ScannerResult] = []
+    var totalSuppressed = 0
     allResults.reserveCapacity(ScannerEntry.all.count)
 
     for tier in [ScannerTier.fast, .medium, .slow] {
       let entries = ScannerEntry.all.filter { $0.tier == tier }
-      let tierResults = await withTaskGroup(of: ScannerResult.self) { group in
+      let tierResults = await withTaskGroup(of: (ScannerResult, Int).self) { group in
         for entry in entries {
           group.addTask {
             let t = Date()
-            let anomalies = await entry.run(ctx)
-            return ScannerResult(
+            let rawAnomalies = await entry.run(ctx)
+            let filtered = await allowlist.filter(rawAnomalies, scannerId: entry.id)
+            let suppressed = rawAnomalies.count - filtered.count
+            let result = ScannerResult(
               id: entry.id, name: entry.name, tier: entry.tier,
-              anomalies: anomalies, duration: Date().timeIntervalSince(t),
+              anomalies: filtered, duration: Date().timeIntervalSince(t),
               timestamp: Date())
+            return (result, suppressed)
           }
         }
-        var results: [ScannerResult] = []
+        var results: [(ScannerResult, Int)] = []
         results.reserveCapacity(entries.count)
-        for await result in group {
-          results.append(result)
+        for await pair in group {
+          results.append(pair)
           onProgress?(ScannerProgress(
             completed: allResults.count + results.count,
             total: ScannerEntry.all.count,
-            latestResult: result))
+            latestResult: pair.0))
         }
         return results
       }
-      allResults.append(contentsOf: tierResults)
+      for (result, suppressed) in tierResults {
+        allResults.append(result)
+        totalSuppressed += suppressed
+      }
     }
+
+    // Cross-scanner correlation
+    let correlations = CorrelationEngine.correlate(allResults)
 
     let result = ThreatScanResult(
       anomalies: allResults.flatMap(\.anomalies).sorted { $0.severity > $1.severity },
       supplyChainFindings: await scFindings,
       fsChanges: await fsChanges,
       scannerResults: allResults,
+      correlations: correlations,
+      allowlistSuppressed: totalSuppressed,
       scanDuration: Date().timeIntervalSince(start),
       scannerCount: allResults.count,
       timestamp: Date())

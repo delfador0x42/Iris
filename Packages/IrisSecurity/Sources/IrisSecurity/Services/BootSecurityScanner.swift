@@ -2,104 +2,117 @@ import Foundation
 import os.log
 
 /// Scans boot chain security: NVRAM variables, Secure Boot, firmware.
-/// Covers: eficheck, nvram_boot, preboot_scan, sep_coprocessor hunt scripts.
+/// Covers: eficheck, nvram_boot, preboot_scan, sep_coprocessor.
 /// Firmware implants survive OS reinstall — critical to verify.
+/// Uses IOKit + SysctlHelper for NVRAM/SEP. bputil still shells out.
 public actor BootSecurityScanner {
   public static let shared = BootSecurityScanner()
   private let logger = Logger(subsystem: "com.wudan.iris", category: "BootSecurity")
 
   public func scan() async -> [ProcessAnomaly] {
     var anomalies: [ProcessAnomaly] = []
-    anomalies.append(contentsOf: await scanNVRAM())
+    anomalies.append(contentsOf: scanNVRAM())
     anomalies.append(contentsOf: await scanSecureBoot())
-    anomalies.append(contentsOf: await scanPrebootVolume())
-    anomalies.append(contentsOf: await scanSEPStatus())
+    anomalies.append(contentsOf: scanPrebootVolume())
+    anomalies.append(contentsOf: scanSEPStatus())
     return anomalies
   }
 
-  /// Check NVRAM for suspicious boot arguments
-  private func scanNVRAM() async -> [ProcessAnomaly] {
+  /// Check NVRAM for suspicious boot arguments via IOKit
+  private func scanNVRAM() -> [ProcessAnomaly] {
     var anomalies: [ProcessAnomaly] = []
-    let output = await runCommand("/usr/sbin/nvram", args: ["-p"])
-    let suspiciousArgs: [(pattern: String, desc: String)] = [
-      ("boot-args.*amfi_get_out_of_my_way", "AMFI disabled via boot-args"),
-      ("boot-args.*-v", "Verbose boot (unusual for production)"),
-      ("boot-args.*debug", "Kernel debug mode enabled"),
-      ("boot-args.*rootless=0", "SIP disabled via NVRAM"),
-      ("boot-args.*kext-dev-mode", "Kext dev mode — unsigned kexts allowed"),
-      ("csr-active-config", "Custom SIP configuration"),
+    let nvram = IOKitHelper.nvramVariables()
+
+    // Read boot-args (can be Data or String)
+    let bootArgs: String
+    if let str = nvram["boot-args"] as? String {
+      bootArgs = str
+    } else if let data = nvram["boot-args"] as? Data {
+      bootArgs = String(data: data, encoding: .utf8) ?? ""
+    } else {
+      bootArgs = ""
+    }
+
+    let checks: [(pattern: String, desc: String)] = [
+      ("amfi_get_out_of_my_way", "AMFI disabled via boot-args"),
+      ("-v", "Verbose boot (unusual for production)"),
+      ("debug", "Kernel debug mode enabled"),
+      ("rootless=0", "SIP disabled via NVRAM"),
+      ("kext-dev-mode", "Kext dev mode — unsigned kexts allowed"),
     ]
-    for (pattern, desc) in suspiciousArgs {
-      if output.range(of: pattern, options: .regularExpression) != nil {
-        anomalies.append(.filesystem(
-          name: "nvram", path: "",
-          technique: "Suspicious NVRAM Setting",
-          description: desc,
-          severity: .high, mitreID: "T1542"
-        ))
-      }
+    for (pattern, desc) in checks where bootArgs.contains(pattern) {
+      anomalies.append(.filesystem(
+        name: "nvram", path: "",
+        technique: "Suspicious NVRAM Setting",
+        description: desc,
+        severity: .high, mitreID: "T1542"))
+    }
+
+    // Check csr-active-config (custom SIP configuration)
+    if nvram["csr-active-config"] != nil {
+      anomalies.append(.filesystem(
+        name: "nvram", path: "",
+        technique: "Suspicious NVRAM Setting",
+        description: "Custom SIP configuration (csr-active-config present)",
+        severity: .high, mitreID: "T1542"))
     }
     return anomalies
   }
 
-  /// Verify Secure Boot policy status
+  /// Verify Secure Boot policy — bputil has no native API
   private func scanSecureBoot() async -> [ProcessAnomaly] {
     let output = await runCommand(
       "/usr/sbin/bputil", args: ["--display-all-policies"])
-    if output.contains("Permissive Security") || output.contains("Reduced Security") {
+    if output.contains("Permissive Security")
+      || output.contains("Reduced Security")
+    {
       return [.filesystem(
         name: "SecureBoot", path: "",
         technique: "Reduced Secure Boot",
-        description: "Secure Boot is not at Full Security — boot chain less protected",
-        severity: .medium, mitreID: "T1542"
-      )]
+        description: "Secure Boot not at Full Security",
+        severity: .medium, mitreID: "T1542")]
     }
     return []
   }
 
   /// Scan Preboot volume for unexpected modifications
-  private func scanPrebootVolume() async -> [ProcessAnomaly] {
+  private func scanPrebootVolume() -> [ProcessAnomaly] {
     var anomalies: [ProcessAnomaly] = []
-    let prebootPath = "/System/Volumes/Preboot"
     let fm = FileManager.default
-    guard let entries = try? fm.contentsOfDirectory(atPath: prebootPath) else { return [] }
+    guard let entries = try? fm.contentsOfDirectory(
+      atPath: "/System/Volumes/Preboot"
+    ) else { return [] }
+    let suspiciousExts = [".sh", ".py", ".dylib", ".so", ".exe"]
     for entry in entries {
-      let fullPath = "\(prebootPath)/\(entry)"
-      // Check for non-standard files in Preboot
-      if entry.hasSuffix(".sh") || entry.hasSuffix(".py") || entry.hasSuffix(".dylib") {
+      if suspiciousExts.contains(where: { entry.hasSuffix($0) }) {
         anomalies.append(.filesystem(
-          name: entry, path: fullPath,
+          name: entry, path: "/System/Volumes/Preboot/\(entry)",
           technique: "Suspicious Preboot File",
           description: "Unexpected file in Preboot volume: \(entry)",
-          severity: .critical, mitreID: "T1542"
-        ))
+          severity: .critical, mitreID: "T1542"))
       }
     }
     return anomalies
   }
 
-  /// Check Secure Enclave / coprocessor status via IORegistry
-  private func scanSEPStatus() async -> [ProcessAnomaly] {
-    var anomalies: [ProcessAnomaly] = []
-    let output = await runCommand(
-      "/usr/sbin/ioreg", args: ["-l", "-p", "IODeviceTree", "-n", "sep"])
-    if output.isEmpty {
-      // No SEP in IORegistry — may be a VM or tampered system
-      let hwOutput = await runCommand(
-        "/usr/sbin/sysctl", args: ["-n", "hw.model"])
-      if !hwOutput.contains("Virtual") {
-        anomalies.append(.filesystem(
-          name: "SEP", path: "",
-          technique: "Missing Secure Enclave",
-          description: "SEP not found in IORegistry — hardware integrity concern",
-          severity: .medium, mitreID: "T1542"
-        ))
-      }
+  /// Check Secure Enclave status via IOKit device tree
+  private func scanSEPStatus() -> [ProcessAnomaly] {
+    let hasSEP = IOKitHelper.entryExists(
+      plane: "IODeviceTree", path: "sep")
+    if !hasSEP && !SysctlHelper.isVirtualMachine {
+      return [.filesystem(
+        name: "SEP", path: "",
+        technique: "Missing Secure Enclave",
+        description: "SEP not found in IORegistry",
+        severity: .medium, mitreID: "T1542")]
     }
-    return anomalies
+    return []
   }
 
-  private func runCommand(_ path: String, args: [String]) async -> String {
+  /// bputil has no native API — keep this one shell-out
+  private func runCommand(
+    _ path: String, args: [String]
+  ) async -> String {
     await withCheckedContinuation { continuation in
       let process = Process(); let pipe = Pipe()
       process.executableURL = URL(fileURLWithPath: path)
@@ -108,7 +121,8 @@ public actor BootSecurityScanner {
       do {
         try process.run(); process.waitUntilExit()
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        continuation.resume(returning: String(data: data, encoding: .utf8) ?? "")
+        continuation.resume(
+          returning: String(data: data, encoding: .utf8) ?? "")
       } catch { continuation.resume(returning: "") }
     }
   }

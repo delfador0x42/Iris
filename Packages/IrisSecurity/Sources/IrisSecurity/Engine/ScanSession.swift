@@ -12,6 +12,8 @@ public final class ScanSession: ObservableObject {
   @Published public var latestScanner = ""
   @Published public var scanResult: ThreatScanResult?
   @Published public var diff: FindingsDiff?
+  @Published public var correlations: [CorrelationEngine.Correlation] = []
+  @Published public var allowlistSuppressedCount = 0
 
   public init() {}
 
@@ -36,6 +38,8 @@ public final class ScanSession: ObservableObject {
     }
 
     scanResult = result
+    correlations = result.correlations
+    allowlistSuppressedCount = result.allowlistSuppressed
     if let previous = previousResult {
       diff = FindingsDiff.compute(current: result, previous: previous)
     }

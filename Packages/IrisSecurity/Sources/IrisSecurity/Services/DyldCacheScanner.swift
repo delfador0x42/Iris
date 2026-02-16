@@ -15,10 +15,10 @@ public actor DyldCacheScanner {
     "/System/Library/dyld/dyld_shared_cache_x86_64",
   ]
 
-  public func scan() async -> [ProcessAnomaly] {
+  public func scan() -> [ProcessAnomaly] {
     var anomalies: [ProcessAnomaly] = []
     anomalies.append(contentsOf: scanCacheFiles())
-    anomalies.append(contentsOf: await scanDyldEnvironment())
+    anomalies.append(contentsOf: scanDyldEnvironment())
     return anomalies
   }
 
@@ -60,33 +60,26 @@ public actor DyldCacheScanner {
     return anomalies
   }
 
-  /// Check for DYLD_SHARED_REGION override
-  private func scanDyldEnvironment() async -> [ProcessAnomaly] {
+  /// Check all running processes for DYLD_SHARED_REGION / DYLD_SHARED_CACHE_DIR
+  private func scanDyldEnvironment() -> [ProcessAnomaly] {
+    let dangerousVars = ["DYLD_SHARED_REGION", "DYLD_SHARED_CACHE_DIR"]
     var anomalies: [ProcessAnomaly] = []
-    let output = await runCommand(
-      "/usr/bin/env", args: [])
-    if output.contains("DYLD_SHARED_REGION") || output.contains("DYLD_SHARED_CACHE_DIR") {
-      anomalies.append(.filesystem(
-        name: "dyld", path: "",
-        technique: "Dyld Cache Override",
-        description: "DYLD_SHARED_REGION or DYLD_SHARED_CACHE_DIR is set — cache hijacking",
-        severity: .critical, mitreID: "T1574"
-      ))
+    let snapshot = ProcessSnapshot.capture()
+
+    for pid in snapshot.pids {
+      guard pid > 0 else { continue }
+      let envVars = ProcessEnumeration.getProcessEnvironment(pid)
+      for (key, value) in envVars where dangerousVars.contains(key) {
+        let path = snapshot.path(for: pid)
+        let name = snapshot.name(for: pid)
+        anomalies.append(.forProcess(
+          pid: pid, name: name, path: path,
+          technique: "Dyld Cache Override",
+          description: "\(name) (PID \(pid)) has \(key)=\(value) — shared cache hijacking",
+          severity: .critical, mitreID: "T1574"
+        ))
+      }
     }
     return anomalies
-  }
-
-  private func runCommand(_ path: String, args: [String]) async -> String {
-    await withCheckedContinuation { continuation in
-      let process = Process(); let pipe = Pipe()
-      process.executableURL = URL(fileURLWithPath: path)
-      process.arguments = args
-      process.standardOutput = pipe; process.standardError = pipe
-      do {
-        try process.run(); process.waitUntilExit()
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        continuation.resume(returning: String(data: data, encoding: .utf8) ?? "")
-      } catch { continuation.resume(returning: "") }
-    }
   }
 }
