@@ -49,7 +49,14 @@ public actor MemoryScanner {
                 pid: pid, name: name, path: path,
                 technique: "RWX Memory Regions",
                 description: "\(name) has \(rwxCount) RWX memory region(s). Potential shellcode or injected code.",
-                severity: .high, mitreID: "T1055.012")]
+                severity: .high, mitreID: "T1055.012",
+                scannerId: "memory",
+                enumMethod: "vmmap -summary",
+                evidence: [
+                    "pid: \(pid)",
+                    "rwx_region_count: \(rwxCount)",
+                    "process: \(name)",
+                ])]
         }
         return []
     }
@@ -66,7 +73,14 @@ public actor MemoryScanner {
                 pid: pid, name: name, path: path,
                 technique: "Anomalous Thread Count",
                 description: "\(name) has \(threads) threads. May indicate thread injection or mining.",
-                severity: .medium, mitreID: "T1055")]
+                severity: .medium, mitreID: "T1055",
+                scannerId: "memory",
+                enumMethod: "proc_pidinfo(PROC_PIDTASKINFO)",
+                evidence: [
+                    "pid: \(pid)",
+                    "thread_count: \(threads)",
+                    "threshold: 100",
+                ])]
         }
         return []
     }

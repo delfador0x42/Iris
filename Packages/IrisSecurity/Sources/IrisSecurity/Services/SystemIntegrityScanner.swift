@@ -28,7 +28,10 @@ public actor SystemIntegrityScanner {
                 result.append(.filesystem(
                     name: "AMFI", path: "sysctl:security.mac.amfi.enabled",
                     technique: "AMFI Disabled", description: "Apple Mobile File Integrity is disabled. Code signing enforcement bypassed.",
-                    severity: .critical, mitreID: "T1553.006"))
+                    severity: .critical, mitreID: "T1553.006",
+                    scannerId: "system_integrity",
+                    enumMethod: "sysctlbyname(security.mac.amfi.enabled)",
+                    evidence: ["amfi_enabled: 0"]))
             }
         }
         return result
@@ -42,7 +45,10 @@ public actor SystemIntegrityScanner {
             result.append(.filesystem(
                 name: "SecureKernel", path: "sysctl:kern.secure_kernel",
                 technique: "Insecure Kernel", description: "kern.secure_kernel=0. Kernel task port may be accessible.",
-                severity: .high, mitreID: "T1014"))
+                severity: .high, mitreID: "T1014",
+                scannerId: "system_integrity",
+                enumMethod: "sysctlbyname(kern.secure_kernel)",
+                evidence: ["secure_kernel: 0"]))
         }
         return result
     }
@@ -63,7 +69,13 @@ public actor SystemIntegrityScanner {
                 result.append(.filesystem(
                     name: flag, path: "sysctl:kern.bootargs",
                     technique: "Dangerous Boot Arg", description: desc,
-                    severity: .critical, mitreID: "T1542"))
+                    severity: .critical, mitreID: "T1542",
+                    scannerId: "system_integrity",
+                    enumMethod: "sysctlbyname(kern.bootargs)",
+                    evidence: [
+                        "boot_flag: \(flag)",
+                        "boot_args: \(args)",
+                    ]))
             }
         }
         return result
@@ -84,7 +96,13 @@ public actor SystemIntegrityScanner {
                 result.append(.filesystem(
                     name: URL(fileURLWithPath: kc).lastPathComponent, path: kc,
                     technique: "Recent KC Modification", description: "Kernel collection modified recently. May indicate kext tampering.",
-                    severity: .high, mitreID: "T1547.006"))
+                    severity: .high, mitreID: "T1547.006",
+                    scannerId: "system_integrity",
+                    enumMethod: "FileManager.attributesOfItem(.modificationDate)",
+                    evidence: [
+                        "path: \(kc)",
+                        "modified: \(mod)",
+                    ]))
             }
         }
         return result
@@ -98,7 +116,10 @@ public actor SystemIntegrityScanner {
             result.append(.filesystem(
                 name: "SIP", path: "csrutil",
                 technique: "SIP Disabled", description: "System Integrity Protection is disabled.",
-                severity: .critical, mitreID: "T1553.006"))
+                severity: .critical, mitreID: "T1553.006",
+                scannerId: "system_integrity",
+                enumMethod: "csrutil status",
+                evidence: ["csrutil_output: \(output.trimmingCharacters(in: .whitespacesAndNewlines))"]))
         }
         return result
     }

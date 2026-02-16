@@ -68,7 +68,10 @@ struct ScanResultsView: View {
     let groups = AnomalyGroup.group(all)
     if !groups.isEmpty {
       sectionHeader(severity.label.capitalized, count: all.count, color: severityColor(severity))
-      ForEach(groups) { g in AnomalyGroupRow(group: g) }
+      ForEach(groups) { g in
+        let path = g.anomalies.first?.processPath ?? ""
+        AnomalyGroupRow(group: g, vtVerdict: session.vtVerdict(for: path))
+      }
     }
   }
 

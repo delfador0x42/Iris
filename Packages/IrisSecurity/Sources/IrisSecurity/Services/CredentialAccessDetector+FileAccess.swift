@@ -73,7 +73,15 @@ extension CredentialAccessDetector {
                         pid: pid, name: name, path: path,
                         technique: "Open Handle to Credential File",
                         description: "Process \(name) (PID \(pid)) has open file descriptor to \(credPath). This may indicate credential harvesting.",
-                        severity: .high, mitreID: "T1555"
+                        severity: .high, mitreID: "T1555",
+                        scannerId: "credential_access",
+                        enumMethod: "proc_pidfdinfo(PROC_PIDFDVNODEPATHINFO)",
+                        evidence: [
+                            "pid: \(pid)",
+                            "process: \(name)",
+                            "credential_file: \(credPath)",
+                            "fd: \(fd.proc_fd)",
+                        ]
                     ))
                 }
             }
@@ -113,7 +121,14 @@ extension CredentialAccessDetector {
                     name: URL(fileURLWithPath: path).lastPathComponent, path: path,
                     technique: "Exposed Credential File",
                     description: "Credential file \(path) has overly permissive permissions: \(String(perms, radix: 8)). Expected max: \(String(maxPerms, radix: 8)).",
-                    severity: .medium, mitreID: "T1552.004"
+                    severity: .medium, mitreID: "T1552.004",
+                    scannerId: "credential_access",
+                    enumMethod: "FileManager.attributesOfItem(.posixPermissions)",
+                    evidence: [
+                        "file: \(path)",
+                        "actual_perms: 0o\(String(perms, radix: 8))",
+                        "max_perms: 0o\(String(maxPerms, radix: 8))",
+                    ]
                 ))
             }
         }
@@ -125,7 +140,10 @@ extension CredentialAccessDetector {
                 name: ".netrc", path: netrc,
                 technique: "Plaintext Credential File",
                 description: ".netrc file exists with plaintext credentials for FTP/HTTP authentication.",
-                severity: .medium, mitreID: "T1552.001"
+                severity: .medium, mitreID: "T1552.001",
+                scannerId: "credential_access",
+                enumMethod: "FileManager.fileExists(atPath:)",
+                evidence: ["path: \(netrc)"]
             ))
         }
 
@@ -142,7 +160,13 @@ extension CredentialAccessDetector {
                     name: URL(fileURLWithPath: path).lastPathComponent, path: path,
                     technique: "\(service) Credentials on Disk",
                     description: "\(service) credential file found at \(path). Cloud credentials on disk are high-value targets for APTs.",
-                    severity: .low, mitreID: "T1552.001"
+                    severity: .low, mitreID: "T1552.001",
+                    scannerId: "credential_access",
+                    enumMethod: "FileManager.fileExists(atPath:)",
+                    evidence: [
+                        "path: \(path)",
+                        "cloud_service: \(service)",
+                    ]
                 ))
             }
         }
@@ -193,10 +217,12 @@ extension CredentialAccessDetector {
             let args = ProcessEnumeration.getProcessArguments(pid)
             let argsJoined = args.joined(separator: " ").lowercased()
 
+            // Only match specific credential file paths/names — NOT generic browser names
+            // "chrome", "firefox", "safari" caused false positives on browser automation scripts
             let credKeywords = [
                 "keychain", "login data", "cookies.binarycookies",
                 "cookies.sqlite", "key4.db", "logins.json",
-                "chrome", "firefox", "safari",
+                "signedinstorage", "web data",
             ]
 
             for keyword in credKeywords where argsJoined.contains(keyword) {
@@ -204,7 +230,15 @@ extension CredentialAccessDetector {
                     pid: pid, name: name, path: path,
                     technique: "Script Accessing Browser Credentials",
                     description: "Script interpreter \(name) (PID \(pid)) appears to reference browser credential material: matched '\(keyword)' in args.",
-                    severity: .critical, mitreID: "T1539"
+                    severity: .critical, mitreID: "T1539",
+                    scannerId: "credential_access",
+                    enumMethod: "sysctl(KERN_PROCARGS2) argument parsing",
+                    evidence: [
+                        "pid: \(pid)",
+                        "interpreter: \(name)",
+                        "matched_keyword: \(keyword)",
+                        "args: \(argsJoined.prefix(200))",
+                    ]
                 ))
                 break
             }

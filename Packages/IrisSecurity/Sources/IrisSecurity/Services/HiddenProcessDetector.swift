@@ -21,11 +21,20 @@ public actor HiddenProcessDetector {
                 let name = procName(pid) ?? "unknown"
                 // Skip kernel-only PIDs (they're expected to be invisible)
                 if name != "kernel_task" && name != "launchd" {
+                    let pathStr = procPath(pid) ?? ""
                     anomalies.append(.forProcess(
-                        pid: pid, name: name, path: "",
+                        pid: pid, name: name, path: pathStr,
                         technique: "Hidden Process",
                         description: "PID \(pid) (\(name)) exists but not visible in process list. Possible rootkit.",
-                        severity: .critical, mitreID: "T1014"))
+                        severity: .critical, mitreID: "T1014",
+                        scannerId: "hidden_process",
+                        enumMethod: "kill(pid,0) brute-force PID scan [1..\(maxPid)]",
+                        evidence: [
+                            "detection: kill(\(pid), 0) → \(kill(pid, 0) == 0 ? "success" : "EPERM (exists, no perms)")",
+                            "not_in: sysctl(KERN_PROC_ALL) snapshot (\(knownPids.count) PIDs)",
+                            "proc_path: \(pathStr.isEmpty ? "(empty — no binary on disk?)" : pathStr)",
+                        ]
+                    ))
                 }
             }
             pid += 1
@@ -51,7 +60,16 @@ public actor HiddenProcessDetector {
                             pid: pid, name: name, path: path,
                             technique: "Duplicate System Process",
                             description: "Multiple '\(name)' processes. PID \(pid) at non-system path: \(path)",
-                            severity: .critical, mitreID: "T1036.004"))
+                            severity: .critical, mitreID: "T1036.004",
+                            scannerId: "hidden_process",
+                            enumMethod: "sysctl(KERN_PROC_ALL) name dedup",
+                            evidence: [
+                                "expected_singleton: \(name)",
+                                "instance_count: \(pids.count)",
+                                "pids: \(pids.map(String.init).joined(separator: ", "))",
+                                "non_system_path: \(path)",
+                            ]
+                        ))
                     }
                 }
             }
@@ -76,5 +94,12 @@ public actor HiddenProcessDetector {
         return withUnsafeBytes(of: info.pbi_name) { buf in
             String(cString: buf.baseAddress!.assumingMemoryBound(to: CChar.self))
         }
+    }
+
+    private func procPath(_ pid: pid_t) -> String? {
+        var buf = [CChar](repeating: 0, count: Int(MAXPATHLEN))
+        let r = proc_pidpath(pid, &buf, UInt32(MAXPATHLEN))
+        guard r > 0 else { return nil }
+        return String(cString: buf)
     }
 }

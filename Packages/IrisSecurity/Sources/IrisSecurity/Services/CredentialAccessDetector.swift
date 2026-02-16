@@ -22,6 +22,22 @@ public actor CredentialAccessDetector {
         "klist": ("Kerberos ticket listing", "T1558"),
         "kinit": ("Kerberos ticket acquisition", "T1558"),
         "kdestroy": ("Kerberos ticket destruction", "T1070.004"),
+        "sqlite3": ("Database access tool", "T1539"),
+    ]
+
+    /// Browser processes that legitimately access their own credential DBs
+    private static let browserProcesses: Set<String> = [
+        "Google Chrome", "Google Chrome Helper", "Google Chrome Helper (Renderer)",
+        "firefox", "Firefox", "Safari", "SafariServices",
+        "Microsoft Edge", "Microsoft Edge Helper",
+        "Brave Browser", "Brave Browser Helper", "Arc", "Arc Helper",
+        "Opera", "Opera Helper", "Vivaldi", "Vivaldi Helper",
+        "com.apple.WebKit.WebContent", "com.apple.WebKit.Networking",
+    ]
+
+    /// Shell interpreters that may wrap credential access tools
+    private static let shellInterpreters: Set<String> = [
+        "bash", "sh", "zsh", "dash", "fish", "tcsh", "csh",
     ]
 
     /// Suspicious argument patterns for credential tools
@@ -77,25 +93,69 @@ public actor CredentialAccessDetector {
             let name = URL(fileURLWithPath: path).lastPathComponent
 
             // Check if this is a known credential access binary
-            guard let credInfo = Self.credentialBinaries[name] else { continue }
+            if let credInfo = Self.credentialBinaries[name] {
+                // sqlite3: skip if parent is a browser (legitimate cookie/login DB access)
+                if name == "sqlite3" {
+                    let ppid = snapshot.parent(of: pid)
+                    let parentName = ppid > 0 ? snapshot.name(for: ppid) : ""
+                    if Self.browserProcesses.contains(parentName) { continue }
+                }
 
-            // Get process arguments
+                let args = ProcessEnumeration.getProcessArguments(pid)
+                let argsJoined = args.joined(separator: " ").lowercased()
+
+                for pattern in Self.suspiciousArgs where pattern.binary == name {
+                    if argsJoined.contains(pattern.pattern.lowercased()) {
+                        let ppid = snapshot.parent(of: pid)
+                        let parentName = ppid > 0 ? snapshot.name(for: ppid) : "unknown"
+                        anomalies.append(ProcessAnomaly(
+                            pid: pid, processName: name, processPath: path,
+                            parentPID: ppid, parentName: parentName,
+                            technique: "Credential Access: \(pattern.description)",
+                            description: "Process \(name) (PID \(pid)) invoked with suspicious args: \(argsJoined.prefix(200)). Parent: \(parentName).",
+                            severity: .high, mitreID: credInfo.mitreID,
+                            scannerId: "credential_access",
+                            enumMethod: "sysctl(KERN_PROCARGS2) argument parsing",
+                            evidence: [
+                                "pid: \(pid)",
+                                "binary: \(name)",
+                                "matched_pattern: \(pattern.pattern)",
+                                "args: \(argsJoined.prefix(200))",
+                                "parent: \(parentName) (PID \(ppid))",
+                            ]
+                        ))
+                    }
+                }
+                continue
+            }
+
+            // Shell-wrapped credential access: bash -c "security dump-keychain"
+            guard Self.shellInterpreters.contains(name) else { continue }
             let args = ProcessEnumeration.getProcessArguments(pid)
             let argsJoined = args.joined(separator: " ").lowercased()
 
-            // Check for suspicious argument patterns
-            for pattern in Self.suspiciousArgs where pattern.binary == name {
-                if argsJoined.contains(pattern.pattern.lowercased()) {
+            for pattern in Self.suspiciousArgs {
+                if argsJoined.contains(pattern.binary) &&
+                   argsJoined.contains(pattern.pattern.lowercased()) {
                     let ppid = snapshot.parent(of: pid)
                     let parentName = ppid > 0 ? snapshot.name(for: ppid) : "unknown"
-
-                    anomalies.append(ProcessAnomaly(
-                        pid: pid, processName: name, processPath: path,
-                        parentPID: ppid, parentName: parentName,
-                        technique: "Credential Access: \(pattern.description)",
-                        description: "Process \(name) (PID \(pid)) invoked with suspicious args: \(argsJoined.prefix(200)). Parent: \(parentName).",
-                        severity: .high, mitreID: credInfo.mitreID
+                    anomalies.append(.forProcess(
+                        pid: pid, name: name, path: path,
+                        technique: "Shell-Wrapped Credential Access: \(pattern.description)",
+                        description: "Shell \(name) (PID \(pid)) executing credential tool: '\(pattern.binary) \(pattern.pattern)'. Parent: \(parentName).",
+                        severity: .high, mitreID: "T1059.004",
+                        scannerId: "credential_access",
+                        enumMethod: "sysctl(KERN_PROCARGS2) argument parsing",
+                        evidence: [
+                            "pid: \(pid)",
+                            "shell: \(name)",
+                            "wrapped_binary: \(pattern.binary)",
+                            "matched_pattern: \(pattern.pattern)",
+                            "args: \(argsJoined.prefix(200))",
+                            "parent: \(parentName) (PID \(ppid))",
+                        ]
                     ))
+                    break
                 }
             }
         }

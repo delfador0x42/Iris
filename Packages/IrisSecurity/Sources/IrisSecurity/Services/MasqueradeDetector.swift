@@ -61,7 +61,14 @@ public actor MasqueradeDetector {
                         technique: "Process Masquerade",
                         description: "\(name) running from \(path) (expected: \(expectedPaths.joined(separator: ", ")))",
                         severity: .high,
-                        mitreID: "T1036.004"
+                        mitreID: "T1036.004",
+                        scannerId: "masquerade",
+                        enumMethod: "sysctl(KERN_PROCARGS2) path comparison",
+                        evidence: [
+                            "process: \(name)",
+                            "actual_path: \(path)",
+                            "expected_prefixes: \(expectedPaths.joined(separator: ", "))",
+                        ]
                     ))
                 }
             }

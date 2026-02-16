@@ -23,22 +23,34 @@ public actor BinaryIntegrityScanner {
       let info = CodeSignValidator.validate(path: path)
       let name = snapshot.name(for: pid)
 
-      // Unsigned binary
       if !info.isSigned {
         anomalies.append(.forProcess(
           pid: pid, name: name, path: path,
           technique: "Unsigned Binary",
           description: "Running unsigned binary: \(name)",
-          severity: .high, mitreID: "T1036"))
+          severity: .high, mitreID: "T1036",
+          scannerId: "binary_integrity",
+          enumMethod: "SecStaticCodeCreateWithPath → SecStaticCodeCheckValidity",
+          evidence: [
+            "signed: false",
+            "binary: \(path)",
+          ]))
       } else if info.isAdHoc {
         anomalies.append(.forProcess(
           pid: pid, name: name, path: path,
           technique: "Ad-hoc Signed",
           description: "Running ad-hoc signed binary: \(name). No verified identity.",
-          severity: .medium, mitreID: "T1553.002"))
+          severity: .medium, mitreID: "T1553.002",
+          scannerId: "binary_integrity",
+          enumMethod: "SecStaticCodeCreateWithPath → kSecCodeInfoFlags",
+          evidence: [
+            "signed: true",
+            "ad_hoc: true",
+            "team_id: (none)",
+            "binary: \(path)",
+          ]))
       }
 
-      // Dangerous entitlements
       let dangerous = CodeSignValidator.dangerousEntitlements(path: path)
       for ent in dangerous {
         let isCritical = ent.contains("task_for_pid") || ent.contains("rootless")
@@ -46,7 +58,13 @@ public actor BinaryIntegrityScanner {
           pid: pid, name: name, path: path,
           technique: "Dangerous Entitlement",
           description: "\(name) has entitlement: \(ent)",
-          severity: isCritical ? .critical : .high, mitreID: "T1548"))
+          severity: isCritical ? .critical : .high, mitreID: "T1548",
+          scannerId: "binary_integrity",
+          enumMethod: "SecCodeCopySigningInformation → kSecCodeInfoEntitlementsDict",
+          evidence: [
+            "entitlement: \(ent)",
+            "binary: \(path)",
+          ]))
       }
     }
     return anomalies

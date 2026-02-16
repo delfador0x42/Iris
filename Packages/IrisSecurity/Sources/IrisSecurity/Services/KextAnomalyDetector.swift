@@ -97,7 +97,13 @@ public actor KextAnomalyDetector {
                 name: bundleID, path: "",
                 technique: "Loaded Kernel Extension",
                 description: description,
-                severity: severity, mitreID: "T1547.006"
+                severity: severity, mitreID: "T1547.006",
+                scannerId: "kext",
+                enumMethod: "kextstat -l",
+                evidence: [
+                    "bundle_id: \(bundleID)",
+                    "known_malicious: \(isKnownMalicious)",
+                ]
             ))
         }
 
@@ -128,14 +134,26 @@ public actor KextAnomalyDetector {
                         name: item, path: kextPath,
                         technique: "Unsigned Kernel Extension",
                         description: "Unsigned kext found at \(kextPath). Unsigned kernel extensions are extremely dangerous — they execute with full kernel privileges.",
-                        severity: .critical, mitreID: "T1547.006"
+                        severity: .critical, mitreID: "T1547.006",
+                        scannerId: "kext",
+                        enumMethod: "codesign --verify",
+                        evidence: [
+                            "path: \(kextPath)",
+                            "signing_status: unsigned",
+                        ]
                     ))
                 } else if status == .invalid {
                     anomalies.append(.filesystem(
                         name: item, path: kextPath,
                         technique: "Invalid Kext Signature",
                         description: "Kernel extension at \(kextPath) has an INVALID signature. This kext may have been tampered with.",
-                        severity: .critical, mitreID: "T1553.002"
+                        severity: .critical, mitreID: "T1553.002",
+                        scannerId: "kext",
+                        enumMethod: "codesign --verify",
+                        evidence: [
+                            "path: \(kextPath)",
+                            "signing_status: invalid",
+                        ]
                     ))
                 }
 
@@ -161,7 +179,15 @@ public actor KextAnomalyDetector {
                                     name: item, path: kextPath,
                                     technique: "Kext Hooks \(suspicious)",
                                     description: "Kext \(item) personality '\(name)' hooks IOKit class \(ioClass). This enables deep system interception.",
-                                    severity: .high, mitreID: "T1014"
+                                    severity: .high, mitreID: "T1014",
+                                    scannerId: "kext",
+                                    enumMethod: "Info.plist IOKitPersonalities parsing",
+                                    evidence: [
+                                        "kext: \(item)",
+                                        "personality: \(name)",
+                                        "io_class: \(ioClass)",
+                                        "hooked_subsystem: \(suspicious)",
+                                    ]
                                 ))
                             }
                         }
@@ -200,7 +226,15 @@ public actor KextAnomalyDetector {
                             name: bundleID, path: containingPath,
                             technique: "Orphaned System Extension",
                             description: "System extension \(bundleID) is active but its containing app at \(containingPath) no longer exists. Orphaned extensions may be remnants of removed malware.",
-                            severity: .high, mitreID: "T1547.006"
+                            severity: .high, mitreID: "T1547.006",
+                            scannerId: "kext",
+                            enumMethod: "NSDictionary(contentsOfFile:) db.plist parsing",
+                            evidence: [
+                                "bundle_id: \(bundleID)",
+                                "state: \(state)",
+                                "containing_path: \(containingPath)",
+                                "app_exists: false",
+                            ]
                         ))
                     }
                 }
@@ -240,7 +274,13 @@ public actor KextAnomalyDetector {
                             name: "kernel", path: "/System/Library/Kernels/kernel",
                             technique: "Suspicious Boot Argument",
                             description: "Boot argument '\(flag)' detected: \(desc). This weakens system security and may indicate tampering.",
-                            severity: .critical, mitreID: "T1562.001"
+                            severity: .critical, mitreID: "T1562.001",
+                            scannerId: "kext",
+                            enumMethod: "sysctlbyname(kern.bootargs)",
+                            evidence: [
+                                "boot_flag: \(flag)",
+                                "boot_args: \(bootArgs)",
+                            ]
                         ))
                     }
                 }

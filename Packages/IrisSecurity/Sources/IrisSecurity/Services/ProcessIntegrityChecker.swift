@@ -46,8 +46,8 @@ public actor ProcessIntegrityChecker {
         guard let machInfo = RustMachOParser.parse(binaryPath) else { return [] }
         let declaredDylibs = Set(machInfo.loadDylibs.map { resolveDylibPath($0) })
 
-        // Get dylibs actually loaded via proc_regionfilename or dyld info
-        let loadedImages = getLoadedImages(pid: pid)
+        // Get dylibs actually loaded (TASK_DYLD_INFO primary, VM regions fallback)
+        let loadedImages = DylibEnumerator.loadedImages(for: pid)
 
         for image in loadedImages {
             let imageName = URL(fileURLWithPath: image).lastPathComponent
@@ -62,12 +62,19 @@ public actor ProcessIntegrityChecker {
             }
 
             if !isDeclared {
-                // This dylib was NOT in the original binary — injected
                 anomalies.append(.forProcess(
                     pid: pid, name: processName, path: binaryPath,
                     technique: "Dylib Injection Detected",
                     description: "Process \(processName) (PID \(pid)) has loaded \(image) which is NOT declared in its Mach-O headers. Possible DYLD_INSERT_LIBRARIES or task_for_pid injection.",
-                    severity: .critical, mitreID: "T1055.001"
+                    severity: .critical, mitreID: "T1055.001",
+                    scannerId: "process_integrity",
+                    enumMethod: "task_info(TASK_DYLD_INFO) → dyld_all_image_infos",
+                    evidence: [
+                        "injected_dylib: \(image)",
+                        "declared_count: \(declaredDylibs.count)",
+                        "loaded_count: \(loadedImages.count)",
+                        "binary: \(binaryPath)",
+                    ]
                 ))
             }
         }
@@ -86,25 +93,39 @@ public actor ProcessIntegrityChecker {
 
         let csFlags = info.pbi_flags
 
-        // CS_DEBUGGED (0x0800) — process has been debugged/injected
+        let flagsHex = String(format: "0x%08X", csFlags)
+
         if csFlags & 0x0800 != 0 {
             anomalies.append(.forProcess(
                 pid: pid, name: processName, path: path,
                 technique: "Process Has Been Debugged/Injected",
                 description: "Process \(processName) (PID \(pid)) has CS_DEBUGGED flag set. This means task_for_pid was used on it — possible code injection.",
-                severity: .high, mitreID: "T1055"
+                severity: .high, mitreID: "T1055",
+                scannerId: "process_integrity",
+                enumMethod: "proc_pidinfo(PROC_PIDTBSDINFO) → pbi_flags",
+                evidence: [
+                    "cs_flags: \(flagsHex)",
+                    "CS_DEBUGGED (0x0800): SET",
+                    "binary: \(path)",
+                ]
             ))
         }
 
-        // CS_HARD (0x0100) and CS_KILL (0x0200) should be set on hardened runtime processes
-        // If they're missing on an Apple binary, something stripped them
         if path.hasPrefix("/System/") || path.hasPrefix("/usr/") {
             if csFlags & 0x0100 == 0 && csFlags & 0x0200 == 0 {
                 anomalies.append(.forProcess(
                     pid: pid, name: processName, path: path,
                     technique: "Missing Hardened Runtime Flags",
                     description: "System binary \(processName) missing CS_HARD|CS_KILL flags. May have been patched or replaced.",
-                    severity: .high, mitreID: "T1574"
+                    severity: .high, mitreID: "T1574",
+                    scannerId: "process_integrity",
+                    enumMethod: "proc_pidinfo(PROC_PIDTBSDINFO) → pbi_flags",
+                    evidence: [
+                        "cs_flags: \(flagsHex)",
+                        "CS_HARD (0x0100): \(csFlags & 0x0100 != 0 ? "SET" : "MISSING")",
+                        "CS_KILL (0x0200): \(csFlags & 0x0200 != 0 ? "SET" : "MISSING")",
+                        "binary: \(path)",
+                    ]
                 ))
             }
         }
@@ -136,53 +157,25 @@ public actor ProcessIntegrityChecker {
         if path.hasPrefix("/System/") || path.hasPrefix("/usr/") {
             let daysSinceModified = Date().timeIntervalSince(modDate) / 86400
             if daysSinceModified < 7 {
+                let fmt = DateFormatter()
+                fmt.dateFormat = "yyyy-MM-dd HH:mm:ss"
                 return .forProcess(
                     pid: pid, name: processName, path: path,
                     technique: "Recently Modified System Binary",
                     description: "System binary \(path) was modified \(String(format: "%.1f", daysSinceModified)) days ago. System binaries should only change during OS updates.",
-                    severity: .high, mitreID: "T1554"
+                    severity: .high, mitreID: "T1554",
+                    scannerId: "process_integrity",
+                    enumMethod: "FileManager.attributesOfItem → modificationDate",
+                    evidence: [
+                        "modified: \(fmt.string(from: modDate))",
+                        "days_ago: \(String(format: "%.1f", daysSinceModified))",
+                        "binary: \(path)",
+                    ]
                 )
             }
         }
 
         return nil
-    }
-
-    /// Get list of loaded dylib/framework images for a process.
-    /// Uses PROC_PIDREGIONPATHINFO to walk VM regions by actual size (not page stepping).
-    /// Catches non-shared-cache dylibs (injected dylibs are never in the cache).
-    private func getLoadedImages(pid: pid_t) -> [String] {
-        var images = Set<String>()
-        var address: UInt64 = 0
-
-        // Walk all VM regions using their actual sizes
-        for _ in 0..<50000 { // safety limit (typical process: 500-2000 regions)
-            var rwpi = proc_regionwithpathinfo()
-            let size = proc_pidinfo(
-                pid, PROC_PIDREGIONPATHINFO, address,
-                &rwpi, Int32(MemoryLayout<proc_regionwithpathinfo>.size)
-            )
-            guard size > 0 else { break }
-
-            // Extract the file path from vnode info
-            let path = withUnsafePointer(to: rwpi.prp_vip.vip_path) { ptr in
-                ptr.withMemoryRebound(to: CChar.self, capacity: Int(MAXPATHLEN)) {
-                    String(cString: $0)
-                }
-            }
-
-            // Collect dylibs and frameworks (skip data files)
-            if !path.isEmpty && (path.hasSuffix(".dylib") || path.contains(".framework/")) {
-                images.insert(path)
-            }
-
-            // Advance past this region
-            let regionEnd = rwpi.prp_prinfo.pri_address + rwpi.prp_prinfo.pri_size
-            guard regionEnd > address else { break } // prevent infinite loop
-            address = regionEnd
-        }
-
-        return Array(images)
     }
 
     private func resolveDylibPath(_ path: String) -> String {

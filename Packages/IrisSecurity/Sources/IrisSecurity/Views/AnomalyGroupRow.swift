@@ -5,6 +5,7 @@ import SwiftUI
 /// Expanded: two-column layout — details left, analysis right.
 struct AnomalyGroupRow: View {
   let group: AnomalyGroup
+  var vtVerdict: VTVerdict?
   @State private var isExpanded = false
 
   var body: some View {
@@ -23,8 +24,15 @@ struct AnomalyGroupRow: View {
       VStack(alignment: .leading, spacing: 2) {
         Text(group.technique)
           .font(.system(size: 12, weight: .medium)).foregroundColor(.white)
-        Text(group.processName)
-          .font(.system(size: 10, design: .monospaced)).foregroundColor(.gray)
+        HStack(spacing: 6) {
+          Text(group.processName)
+            .font(.system(size: 10, design: .monospaced)).foregroundColor(.gray)
+          if let sid = group.anomalies.first?.scannerId, !sid.isEmpty {
+            Text(sid)
+              .font(.system(size: 8, design: .monospaced))
+              .foregroundColor(.purple.opacity(0.6))
+          }
+        }
       }
       Spacer()
       if group.isGrouped {
@@ -52,7 +60,8 @@ struct AnomalyGroupRow: View {
       detailsColumn
       AnalysisPanel(
         technique: group.technique, processName: group.processName,
-        severity: group.severity, count: group.count
+        severity: group.severity, count: group.count,
+        anomalies: group.anomalies, vtVerdict: vtVerdict
       )
       .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -65,11 +74,13 @@ struct AnomalyGroupRow: View {
         VStack(alignment: .leading, spacing: 1) {
           Text(a.description)
             .font(.system(size: 10)).foregroundColor(.white.opacity(0.8))
-          if !a.processPath.isEmpty && !group.isGrouped {
+          if !a.processPath.isEmpty {
             Text(a.processPath)
-              .font(.system(size: 9, design: .monospaced)).foregroundColor(.gray.opacity(0.6))
+              .font(.system(size: 9, design: .monospaced))
+              .foregroundColor(.gray.opacity(0.6))
+              .textSelection(.enabled)
           }
-          if a.pid > 0 && !group.isGrouped {
+          if a.pid > 0 {
             Text("PID: \(a.pid) | Parent: \(a.parentName) (\(a.parentPID))")
               .font(.system(size: 9, design: .monospaced)).foregroundColor(.gray.opacity(0.5))
           }

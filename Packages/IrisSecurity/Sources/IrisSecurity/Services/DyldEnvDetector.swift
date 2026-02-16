@@ -69,7 +69,14 @@ public actor DyldEnvDetector {
                         pid: pid, name: name, path: path,
                         technique: "\(key) Injection",
                         description: "Process \(name) (PID \(pid)) has \(key)=\(value.prefix(200)). \(dangerVar.description).",
-                        severity: severity, mitreID: "T1574.006"
+                        severity: severity, mitreID: "T1574.006",
+                        scannerId: "dyld_env",
+                        enumMethod: "sysctl(KERN_PROCARGS2) env parsing",
+                        evidence: [
+                            "pid: \(pid)",
+                            "env_var: \(key)=\(value.prefix(200))",
+                            "is_system_process: \(isSystem)",
+                        ]
                     ))
                 }
             }
@@ -101,7 +108,14 @@ public actor DyldEnvDetector {
                                 name: file, path: path,
                                 technique: "Plist \(key) Injection",
                                 description: "LaunchAgent/Daemon \(file) sets \(key)=\(value.prefix(200)). Every process launched by this plist will have this dylib injected.",
-                                severity: .critical, mitreID: "T1574.006"
+                                severity: .critical, mitreID: "T1574.006",
+                                scannerId: "dyld_env",
+                                enumMethod: "NSDictionary(contentsOfFile:) plist parsing",
+                                evidence: [
+                                    "plist: \(path)",
+                                    "env_var: \(key)=\(value.prefix(200))",
+                                    "directory: \(dir)",
+                                ]
                             ))
                         }
                     }
@@ -139,7 +153,14 @@ public actor DyldEnvDetector {
                             name: URL(fileURLWithPath: profile).lastPathComponent, path: profile,
                             technique: "Shell Profile \(dangerVar.name)",
                             description: "Shell profile \(profile) line \(lineNum + 1) sets \(dangerVar.name). Every shell session will inherit this injection.",
-                            severity: dangerVar.severity, mitreID: "T1574.006"
+                            severity: dangerVar.severity, mitreID: "T1574.006",
+                            scannerId: "dyld_env",
+                            enumMethod: "String(contentsOfFile:) line scan",
+                            evidence: [
+                                "file: \(profile)",
+                                "line: \(lineNum + 1)",
+                                "content: \(String(trimmed.prefix(200)))",
+                            ]
                         ))
                     }
                 }
@@ -161,7 +182,14 @@ public actor DyldEnvDetector {
                     parentPID: getppid(), parentName: "",
                     technique: "Iris Has \(key)",
                     description: "Iris itself has \(key)=\(value.prefix(200)) in its environment. Someone may be injecting code into Iris to evade detection.",
-                    severity: .critical, mitreID: "T1562.001"
+                    severity: .critical, mitreID: "T1562.001",
+                    scannerId: "dyld_env",
+                    enumMethod: "ProcessInfo.processInfo.environment",
+                    evidence: [
+                        "env_var: \(key)=\(value.prefix(200))",
+                        "iris_pid: \(getpid())",
+                        "parent_pid: \(getppid())",
+                    ]
                 ))
             }
         }

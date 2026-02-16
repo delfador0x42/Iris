@@ -43,7 +43,14 @@ public actor EntitlementScanner {
           pid: pid, name: name, path: path,
           technique: "Dangerous Entitlement",
           description: "\(name) has \(key): \(desc)",
-          severity: severity, mitreID: "T1068"))
+          severity: severity, mitreID: "T1068",
+          scannerId: "entitlement",
+          enumMethod: "SecCodeCopySigningInformation → entitlements dict",
+          evidence: [
+            "entitlement: \(key)",
+            "effect: \(desc)",
+            "binary: \(path)",
+          ]))
       }
     }
     return anomalies

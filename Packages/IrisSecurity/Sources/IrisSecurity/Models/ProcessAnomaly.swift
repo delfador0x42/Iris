@@ -34,6 +34,12 @@ public struct ProcessAnomaly: Identifiable, Sendable, Codable, Equatable {
     public let severity: AnomalySeverity
     public let mitreID: String?
     public let timestamp: Date
+    /// Which scanner module produced this finding (e.g. "process_integrity")
+    public let scannerId: String
+    /// How the finding was discovered (e.g. "task_info(TASK_DYLD_INFO)")
+    public let enumMethod: String
+    /// Supporting evidence lines (dylib paths, flag values, hashes, etc.)
+    public let evidence: [String]
 
     public init(
         id: UUID = UUID(),
@@ -46,7 +52,10 @@ public struct ProcessAnomaly: Identifiable, Sendable, Codable, Equatable {
         description: String,
         severity: AnomalySeverity,
         mitreID: String? = nil,
-        timestamp: Date = Date()
+        timestamp: Date = Date(),
+        scannerId: String = "",
+        enumMethod: String = "",
+        evidence: [String] = []
     ) {
         self.id = id
         self.pid = pid
@@ -59,19 +68,24 @@ public struct ProcessAnomaly: Identifiable, Sendable, Codable, Equatable {
         self.severity = severity
         self.mitreID = mitreID
         self.timestamp = timestamp
+        self.scannerId = scannerId
+        self.enumMethod = enumMethod
+        self.evidence = evidence
     }
 
     /// Factory for filesystem-based findings (no running process).
     public static func filesystem(
         name: String, path: String,
         technique: String, description: String,
-        severity: AnomalySeverity, mitreID: String
+        severity: AnomalySeverity, mitreID: String,
+        scannerId: String = "", enumMethod: String = "", evidence: [String] = []
     ) -> ProcessAnomaly {
         ProcessAnomaly(
             pid: 0, processName: name, processPath: path,
             parentPID: 0, parentName: "",
             technique: technique, description: description,
-            severity: severity, mitreID: mitreID
+            severity: severity, mitreID: mitreID,
+            scannerId: scannerId, enumMethod: enumMethod, evidence: evidence
         )
     }
 
@@ -79,13 +93,15 @@ public struct ProcessAnomaly: Identifiable, Sendable, Codable, Equatable {
     public static func forProcess(
         pid: pid_t, name: String, path: String,
         technique: String, description: String,
-        severity: AnomalySeverity, mitreID: String
+        severity: AnomalySeverity, mitreID: String,
+        scannerId: String = "", enumMethod: String = "", evidence: [String] = []
     ) -> ProcessAnomaly {
         ProcessAnomaly(
             pid: pid, processName: name, processPath: path,
             parentPID: 0, parentName: "",
             technique: technique, description: description,
-            severity: severity, mitreID: mitreID
+            severity: severity, mitreID: mitreID,
+            scannerId: scannerId, enumMethod: enumMethod, evidence: evidence
         )
     }
 }

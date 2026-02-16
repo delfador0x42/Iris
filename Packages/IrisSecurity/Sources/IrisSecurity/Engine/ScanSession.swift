@@ -14,6 +14,8 @@ public final class ScanSession: ObservableObject {
   @Published public var diff: FindingsDiff?
   @Published public var correlations: [CorrelationEngine.Correlation] = []
   @Published public var allowlistSuppressedCount = 0
+  @Published public var vtResults: [String: VTVerdict] = [:]
+  @Published public var vtChecking = false
 
   public init() {}
 
@@ -44,6 +46,9 @@ public final class ScanSession: ObservableObject {
       diff = FindingsDiff.compute(current: result, previous: previous)
     }
     isScanning = false
+
+    // Fire-and-forget VT hash checks (display-only, no trust signal)
+    Task { await checkVirusTotal(result.anomalies) }
   }
 
   /// Load cached result without running a new scan.
@@ -64,6 +69,21 @@ public final class ScanSession: ObservableObject {
   /// Get result for a specific scanner.
   public func result(for id: String) -> ScannerResult? {
     scannerResults.first { $0.id == id }
+  }
+
+  /// Check findings against VirusTotal (display-only, not a trust signal).
+  private func checkVirusTotal(_ anomalies: [ProcessAnomaly]) async {
+    let vt = VirusTotalService.shared
+    guard await vt.loadKey() else { return }
+    vtChecking = true
+    let results = await vt.checkFindings(anomalies)
+    vtResults = results
+    vtChecking = false
+  }
+
+  /// Get VT verdict for a file path, if available.
+  public func vtVerdict(for path: String) -> VTVerdict? {
+    vtResults[path]
   }
 
   /// Current results (complete or in-progress). Enables export during scan.

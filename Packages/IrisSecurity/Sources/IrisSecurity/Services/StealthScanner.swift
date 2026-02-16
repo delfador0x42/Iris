@@ -46,14 +46,22 @@ public actor StealthScanner {
                     name: file, path: "\(dir)/\(file)",
                     technique: "Hidden LaunchAgent/Daemon",
                     description: "Dot-prefixed plist hidden from Finder: \(dir)/\(file). This is a common APT technique.",
-                    severity: .critical, mitreID: "T1564.001"
+                    severity: .critical, mitreID: "T1564.001",
+                    scannerId: "stealth",
+                    enumMethod: "FileManager.contentsOfDirectory → dot-prefix filter",
+                    evidence: [
+                        "plist: \(dir)/\(file)",
+                        "hidden: dot-prefixed (invisible in Finder)",
+                        "directory: \(dir)",
+                    ]
                 ))
             }
         }
         return anomalies
     }
 
-    /// Emond rules — obscure persistence via /etc/emond.d/
+    /// Emond rules — deprecated since macOS 10.11 but still checked.
+    /// If emond rules exist on a modern system, that's EXTRA suspicious.
     private func scanEmondRules() async -> [ProcessAnomaly] {
         var anomalies: [ProcessAnomaly] = []
         let emondDir = "/etc/emond.d/rules"
@@ -65,12 +73,11 @@ public actor StealthScanner {
 
         for file in files where file.hasSuffix(".plist") {
             let path = "\(emondDir)/\(file)"
-            // Any emond rule is suspicious — it's almost never used legitimately
             anomalies.append(.filesystem(
                 name: file, path: path,
                 technique: "Emond Rule Persistence",
-                description: "Event Monitor daemon rule found. Emond is rarely used legitimately and is a known persistence mechanism.",
-                severity: .high, mitreID: "T1546.014"
+                description: "Event Monitor daemon rule found. Emond is deprecated since macOS 10.11 — any rules present are highly suspicious.",
+                severity: .critical, mitreID: "T1546.014"
             ))
         }
         return anomalies
@@ -223,7 +230,14 @@ public actor StealthScanner {
                         pid: pid, name: name, path: path,
                         technique: "DYLD Environment Injection",
                         description: "Process \(name) (PID \(pid)) has \(key)=\(value). Library injection detected.",
-                        severity: .critical, mitreID: "T1574.006"
+                        severity: .critical, mitreID: "T1574.006",
+                        scannerId: "stealth",
+                        enumMethod: "ProcessEnumeration.getProcessEnvironment(pid)",
+                        evidence: [
+                            "env_key: \(key)",
+                            "env_value: \(value)",
+                            "binary: \(path)",
+                        ]
                     ))
                 }
             }
@@ -262,22 +276,37 @@ public actor StealthScanner {
     /// Find SUID/SGID binaries in non-standard locations
     private func scanSUIDBinaries() async -> [ProcessAnomaly] {
         var anomalies: [ProcessAnomaly] = []
-        let suspiciousDirs = ["/tmp", "/var/tmp", "/Users/Shared",
-                              "/Library/Caches", "/usr/local/bin"]
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let suspiciousDirs = [
+            "/tmp", "/var/tmp", "/Users/Shared",
+            "/Library/Caches", "/usr/local/bin", "/usr/local/sbin",
+            "/opt", "/private/tmp", "\(home)/Downloads",
+            "\(home)/Desktop", "\(home)/Documents",
+        ]
         let fm = FileManager.default
 
         for dir in suspiciousDirs {
-            guard let enumerator = fm.enumerator(atPath: dir) else { continue }
-            while let file = enumerator.nextObject() as? String {
-                let path = "\(dir)/\(file)"
-                guard let attrs = try? fm.attributesOfItem(atPath: path),
-                      let perms = attrs[.posixPermissions] as? UInt16 else { continue }
+            guard let enumerator = fm.enumerator(
+                at: URL(fileURLWithPath: dir),
+                includingPropertiesForKeys: [.isSymbolicLinkKey],
+                options: [.skipsPackageDescendants]
+            ) else { continue }
+            while let url = enumerator.nextObject() as? URL {
+                // Depth guard: skip 3+ levels deep
+                if enumerator.level > 3 { enumerator.skipDescendants(); continue }
+                let path = url.path
+                let file = url.lastPathComponent
+                guard let vals = try? url.resourceValues(forKeys: [.isSymbolicLinkKey]),
+                      let isLink = vals.isSymbolicLink, !isLink,
+                      let attrs = try? fm.attributesOfItem(atPath: path),
+                      let perms = attrs[.posixPermissions] as? Int else { continue }
+                let perms16 = UInt16(perms)
                 // Check SUID (04000) or SGID (02000)
-                if perms & 0o4000 != 0 || perms & 0o2000 != 0 {
+                if perms16 & 0o4000 != 0 || perms16 & 0o2000 != 0 {
                     anomalies.append(.filesystem(
                         name: file, path: path,
                         technique: "SUID/SGID in Suspicious Location",
-                        description: "SUID/SGID binary in non-standard location: \(path) (perms: \(String(perms, radix: 8)))",
+                        description: "SUID/SGID binary in non-standard location: \(path) (perms: \(String(perms16, radix: 8)))",
                         severity: .critical, mitreID: "T1548.001"
                     ))
                 }
