@@ -1,16 +1,30 @@
 import Foundation
 import MachO
+import os.log
 
 /// Enumerates loaded dylibs for a process.
 /// Primary: task_info(TASK_DYLD_INFO) — reads dyld's image list (requires root).
 /// Fallback: PROC_PIDREGIONPATHINFO — walks VM regions (no root, misses shared cache).
 enum DylibEnumerator {
 
-    static func loadedImages(for pid: pid_t) -> [String] {
+    /// Enumeration method used — callers should note when coverage is incomplete.
+    enum Method: String { case dyld, vmRegion }
+    struct Result { let images: [String]; let method: Method }
+
+    private static let logger = Logger(subsystem: "com.wudan.iris", category: "DylibEnumerator")
+
+    /// Returns loaded images with method metadata.
+    static func loadedImagesWithMethod(for pid: pid_t) -> Result {
         if let images = loadedImagesDyld(pid: pid), !images.isEmpty {
-            return images
+            return Result(images: images, method: .dyld)
         }
-        return loadedImagesRegions(pid: pid)
+        logger.info("PID \(pid): TASK_DYLD_INFO failed, falling back to VM region scan (incomplete)")
+        return Result(images: loadedImagesRegions(pid: pid), method: .vmRegion)
+    }
+
+    /// Legacy convenience — returns just the image list.
+    static func loadedImages(for pid: pid_t) -> [String] {
+        loadedImagesWithMethod(for: pid).images
     }
 
     // MARK: - TASK_DYLD_INFO (complete coverage, needs root)

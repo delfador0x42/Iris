@@ -52,7 +52,8 @@ public actor ProcessIntegrityChecker {
         let declaredDylibs = Set(machInfo.loadDylibs.map { resolveDylibPath($0) })
 
         // Get dylibs actually loaded (TASK_DYLD_INFO primary, VM regions fallback)
-        let loadedImages = DylibEnumerator.loadedImages(for: pid)
+        let enumResult = DylibEnumerator.loadedImagesWithMethod(for: pid)
+        let loadedImages = enumResult.images
 
         for image in loadedImages {
             let imageName = URL(fileURLWithPath: image).lastPathComponent
@@ -73,9 +74,12 @@ public actor ProcessIntegrityChecker {
                     description: "Process \(processName) (PID \(pid)) has loaded \(image) which is NOT declared in its Mach-O headers. Possible DYLD_INSERT_LIBRARIES or task_for_pid injection.",
                     severity: .critical, mitreID: "T1055.001",
                     scannerId: "process_integrity",
-                    enumMethod: "task_info(TASK_DYLD_INFO) → dyld_all_image_infos",
+                    enumMethod: enumResult.method == .dyld
+                        ? "task_info(TASK_DYLD_INFO) → dyld_all_image_infos"
+                        : "PROC_PIDREGIONPATHINFO (incomplete — shared cache missed)",
                     evidence: [
                         "injected_dylib: \(image)",
+                        "enum_method: \(enumResult.method.rawValue)",
                         "declared_count: \(declaredDylibs.count)",
                         "loaded_count: \(loadedImages.count)",
                         "binary: \(binaryPath)",
