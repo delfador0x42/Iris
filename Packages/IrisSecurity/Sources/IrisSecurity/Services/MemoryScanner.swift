@@ -1,9 +1,12 @@
 import Foundation
 import os.log
+import CryptoKit
 
-/// Scans process memory for RWX regions and suspicious memory layouts.
-/// RWX = read-write-execute = shellcode. Legitimate only with JIT entitlement.
-/// Covers hunt scripts: rwx_regions, vmmap_deep, thread_count.
+/// Scans process memory via native Mach APIs (no shell-outs).
+/// Three detection layers:
+/// 1. RWX regions via mach_vm_region (shellcode, JIT abuse)
+/// 2. Mach-O headers in anonymous regions (reflective loading)
+/// 3. Thread count anomalies (injected threads)
 public actor MemoryScanner {
     public static let shared = MemoryScanner()
     private let logger = Logger(subsystem: "com.wudan.iris", category: "MemoryScanner")
@@ -18,78 +21,87 @@ public actor MemoryScanner {
     public func scan(snapshot: ProcessSnapshot) async -> [ProcessAnomaly] {
         var anomalies: [ProcessAnomaly] = []
         for pid in snapshot.pids {
+            guard pid > 0 else { continue }
             let name = snapshot.name(for: pid)
             let path = snapshot.path(for: pid)
             if path.hasPrefix("/System/") || path.hasPrefix("/usr/") { continue }
-            anomalies.append(contentsOf: scanRWXRegions(pid: pid, name: name, path: path))
+            anomalies.append(contentsOf: scanMemoryRegions(pid: pid, name: name, path: path))
             anomalies.append(contentsOf: checkThreadCount(pid: pid, name: name, path: path))
         }
         return anomalies
     }
 
-    /// Use proc_pidinfo to check for regions with rwx protection
-    private func scanRWXRegions(pid: pid_t, name: String, path: String) -> [ProcessAnomaly] {
+    /// Walk VM regions via mach_vm_region — detect RWX + Mach-O in anonymous memory.
+    private func scanMemoryRegions(pid: pid_t, name: String, path: String) -> [ProcessAnomaly] {
         if jitProcesses.contains(name) { return [] }
+        var task: mach_port_t = 0
+        guard task_for_pid(mach_task_self_, pid, &task) == KERN_SUCCESS else { return [] }
+        defer { mach_port_deallocate(mach_task_self_, task) }
 
-        guard let output = runCmd("/usr/bin/vmmap", args: ["-summary", "\(pid)"]) else { return [] }
-
+        var address: mach_vm_address_t = 0
         var rwxCount = 0
-        for line in output.split(separator: "\n") {
-            let s = String(line)
-            // Look for regions with r-x or rwx in the protection column
-            if s.contains("r-x/rwx") || s.contains("rwx/rwx") {
-                if !s.contains("MALLOC") && !s.contains("__TEXT") {
-                    rwxCount += 1
+        var machoInAnon = false
+        var anomalies: [ProcessAnomaly] = []
+
+        while true {
+            var size: mach_vm_size_t = 0
+            var info = vm_region_basic_info_data_64_t()
+            var infoCount = mach_msg_type_number_t(
+                MemoryLayout<vm_region_basic_info_data_64_t>.size / MemoryLayout<Int32>.size)
+            var objectName: mach_port_t = 0
+            let kr = withUnsafeMutablePointer(to: &info) { ptr in
+                ptr.withMemoryRebound(to: Int32.self, capacity: Int(infoCount)) {
+                    mach_vm_region(task, &address, &size,
+                                  VM_REGION_BASIC_INFO_64, $0, &infoCount, &objectName)
                 }
             }
+            guard kr == KERN_SUCCESS else { break }
+
+            let isExec = info.protection & VM_PROT_EXECUTE != 0
+            let isWrite = info.protection & VM_PROT_WRITE != 0
+            let maxExec = info.max_protection & VM_PROT_EXECUTE != 0
+            let maxWrite = info.max_protection & VM_PROT_WRITE != 0
+
+            // RWX: current protection has both write and execute
+            if isExec && isWrite { rwxCount += 1 }
+            // Max RWX: region can be made writable+executable (potential JIT abuse)
+            else if isExec && maxWrite && maxExec { rwxCount += 1 }
+
+            // Check for Mach-O magic in executable anonymous regions
+            if isExec && !machoInAnon {
+                machoInAnon = checkMachOMagic(task: task, addr: address, size: size)
+            }
+
+            address += size
+            if address == 0 { break }
         }
 
         if rwxCount > 0 {
-            return [.forProcess(
+            anomalies.append(.forProcess(
                 pid: pid, name: name, path: path,
                 technique: "RWX Memory Regions",
-                description: "\(name) has \(rwxCount) RWX memory region(s). Potential shellcode or injected code.",
+                description: "\(name) has \(rwxCount) RWX region(s). Potential shellcode.",
                 severity: .high, mitreID: "T1055.012",
                 scannerId: "memory",
-                enumMethod: "vmmap -summary",
+                enumMethod: "mach_vm_region(VM_REGION_BASIC_INFO_64)",
                 evidence: [
-                    "pid: \(pid)",
-                    "rwx_region_count: \(rwxCount)",
-                    "process: \(name)",
-                ])]
+                    "pid: \(pid)", "rwx_count: \(rwxCount)", "process: \(name)",
+                ]))
         }
-        return []
-    }
 
-    /// High thread count may indicate injection (injected threads)
-    private func checkThreadCount(pid: pid_t, name: String, path: String) -> [ProcessAnomaly] {
-        var info = proc_taskinfo()
-        let size = proc_pidinfo(pid, PROC_PIDTASKINFO, 0, &info, Int32(MemoryLayout<proc_taskinfo>.size))
-        guard size > 0 else { return [] }
-        let threads = Int(info.pti_threadnum)
-
-        if threads > 100 {
-            return [.forProcess(
+        if machoInAnon {
+            anomalies.append(.forProcess(
                 pid: pid, name: name, path: path,
-                technique: "Anomalous Thread Count",
-                description: "\(name) has \(threads) threads. May indicate thread injection or mining.",
-                severity: .medium, mitreID: "T1055",
+                technique: "Reflective Code Loading",
+                description: "\(name) has Mach-O headers in anonymous executable memory. Possible reflective injection.",
+                severity: .critical, mitreID: "T1620",
                 scannerId: "memory",
-                enumMethod: "proc_pidinfo(PROC_PIDTASKINFO)",
+                enumMethod: "mach_vm_region + mach_vm_read_overwrite (magic check)",
                 evidence: [
-                    "pid: \(pid)",
-                    "thread_count: \(threads)",
-                    "threshold: 100",
-                ])]
+                    "pid: \(pid)", "macho_magic: detected in anonymous region",
+                    "process: \(name)",
+                ]))
         }
-        return []
-    }
-
-    private func runCmd(_ path: String, args: [String]) -> String? {
-        let proc = Process(); proc.executableURL = URL(fileURLWithPath: path)
-        proc.arguments = args
-        let pipe = Pipe(); proc.standardOutput = pipe; proc.standardError = pipe
-        try? proc.run(); proc.waitUntilExit()
-        return String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
+        return anomalies
     }
 }

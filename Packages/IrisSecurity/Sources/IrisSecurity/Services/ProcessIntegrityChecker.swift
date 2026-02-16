@@ -32,6 +32,11 @@ public actor ProcessIntegrityChecker {
             // 3. Check for processes with mismatched binary hash
             let hashAnomaly = await checkBinaryHash(pid: pid, path: path)
             if let a = hashAnomaly { anomalies.append(a) }
+
+            // 4. __TEXT integrity: compare on-disk vs in-memory (process hollowing)
+            if let textAnomaly = TextIntegrityChecker.check(pid: pid, binaryPath: path) {
+                anomalies.append(textAnomaly)
+            }
         }
 
         return anomalies.sorted { $0.severity > $1.severity }
