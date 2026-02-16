@@ -69,19 +69,20 @@ public actor CloudC2Detector {
         hostname: String, processName: String,
         signingId: String?, pid: pid_t
     ) -> NetworkAnomaly? {
-        // Skip browsers
-        if let sid = signingId, Self.browserIds.contains(sid) { return nil }
-        let browserNames = ["Safari", "Google Chrome", "Firefox", "Brave Browser"]
-        if browserNames.contains(processName) { return nil }
+        // Browsers get reduced severity, not a free pass.
+        // A hijacked or masquerading browser is still a threat.
+        let isBrowser = signingId.map { Self.browserIds.contains($0) } ?? false
+        let browserSeverity: AnomalySeverity = .low
 
         // Check cloud APIs
         for (host, svc) in Self.cloudAPIs where hostname.contains(host) {
+            let sev: AnomalySeverity = isBrowser ? browserSeverity : .high
             return NetworkAnomaly(
                 type: .rawIPConnection,
                 processName: processName,
                 remoteAddress: hostname,
-                description: "\(processName) (PID \(pid)) connecting to \(svc) API — possible cloud C2/exfil",
-                severity: .high,
+                description: "\(processName) (PID \(pid)) connecting to \(svc) API — possible cloud C2/exfil\(isBrowser ? " [browser — verify identity]" : "")",
+                severity: sev,
                 connectionCount: 1,
                 averageInterval: 0
             )
@@ -89,12 +90,13 @@ public actor CloudC2Detector {
 
         // Check dead drop resolvers
         for (host, svc) in Self.deadDrops where hostname.contains(host) {
+            let sev: AnomalySeverity = isBrowser ? browserSeverity : .high
             return NetworkAnomaly(
                 type: .suspiciousPort,
                 processName: processName,
                 remoteAddress: hostname,
-                description: "\(processName) (PID \(pid)) connecting to \(svc) — possible dead drop resolver",
-                severity: .high,
+                description: "\(processName) (PID \(pid)) connecting to \(svc) — possible dead drop resolver\(isBrowser ? " [browser — verify identity]" : "")",
+                severity: sev,
                 connectionCount: 1,
                 averageInterval: 0
             )

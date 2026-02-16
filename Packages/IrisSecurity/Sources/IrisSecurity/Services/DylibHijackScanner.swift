@@ -7,9 +7,6 @@ public actor DylibHijackScanner {
     private let logger = Logger(subsystem: "com.wudan.iris", category: "DylibHijackScanner")
     private let verifier = SigningVerifier.shared
 
-    /// SIP-protected directories where hijacking is impossible
-    private let sipProtected = ["/System/", "/usr/lib/", "/usr/bin/", "/usr/sbin/"]
-
     /// Scan all running processes for dylib hijack vulnerabilities
     public func scanRunningProcesses(snapshot: ProcessSnapshot? = nil) async -> [DylibHijack] {
         let snap = snapshot ?? ProcessSnapshot.capture()
@@ -17,7 +14,7 @@ public actor DylibHijackScanner {
 
         for pid in snap.pids {
             let path = snap.path(for: pid)
-            guard !path.isEmpty, !isProtectedPath(path) else { continue }
+            guard !path.isEmpty else { continue }
             guard let info = RustMachOParser.parse(path) else { continue }
             // Only scan executables
             guard info.fileType == MH_EXECUTE else { continue }
@@ -84,15 +81,13 @@ public actor DylibHijackScanner {
                 // Missing from all rpaths — vulnerable to planting
                 let firstRpath = info.rpaths.first.map { resolveRuntimePath($0, binaryDir: binaryDir) } ?? ""
                 let targetPath = "\(firstRpath)/\(relativeName)"
-                if !isProtectedPath(targetPath) {
-                    hijacks.append(DylibHijack(
-                        type: .rpathVulnerable,
-                        binaryPath: info.path,
-                        dylibPath: targetPath,
-                        isActiveHijack: false,
-                        details: "\(relativeName) not found in any @rpath directory. Attacker could plant a malicious dylib."
-                    ))
-                }
+                hijacks.append(DylibHijack(
+                    type: .rpathVulnerable,
+                    binaryPath: info.path,
+                    dylibPath: targetPath,
+                    isActiveHijack: false,
+                    details: "\(relativeName) not found in any @rpath directory. Attacker could plant a malicious dylib."
+                ))
             }
         }
 
@@ -109,7 +104,7 @@ public actor DylibHijackScanner {
                 resolvedPath = dylib
             }
 
-            if !fm.fileExists(atPath: resolvedPath) && !isProtectedPath(resolvedPath) {
+            if !fm.fileExists(atPath: resolvedPath) {
                 hijacks.append(DylibHijack(
                     type: .weakVulnerable,
                     binaryPath: info.path,
@@ -142,10 +137,6 @@ public actor DylibHijackScanner {
             return "\(binaryDir)/\(path.dropFirst("@loader_path/".count))"
         }
         return path
-    }
-
-    private func isProtectedPath(_ path: String) -> Bool {
-        sipProtected.contains { path.hasPrefix($0) }
     }
 
 }

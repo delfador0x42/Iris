@@ -9,6 +9,7 @@ struct AnalysisPanel: View {
   let count: Int
   var anomalies: [ProcessAnomaly] = []
   var vtVerdict: VTVerdict?
+  var binaryAnalysis: BinaryAnalysis?
 
   var body: some View {
     let a = FindingAnalyzer.analyze(
@@ -79,6 +80,9 @@ struct AnalysisPanel: View {
       }
       if anomalies.count > 1 {
         groupedPaths
+      }
+      if let ba = binaryAnalysis {
+        BinaryAnalysisSection(analysis: ba)
       }
       if let vt = vtVerdict {
         vtSection(vt)

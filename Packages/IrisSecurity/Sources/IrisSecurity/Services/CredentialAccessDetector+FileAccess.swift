@@ -43,8 +43,9 @@ extension CredentialAccessDetector {
             let path = snapshot.path(for: pid)
             let name = URL(fileURLWithPath: path).lastPathComponent
 
-            // Skip system processes and ourselves
-            if path.hasPrefix("/System/") || path.hasPrefix("/usr/libexec/") { continue }
+            // Only skip ourselves (to avoid self-detection noise).
+            // System processes are NOT exempt — a compromised system binary
+            // accessing credential files is MORE suspicious, not less.
             if name == "Iris" || name == "iris" { continue }
 
             for i in 0..<fdInfoCount {

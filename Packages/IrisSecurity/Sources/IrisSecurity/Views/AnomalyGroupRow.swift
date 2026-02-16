@@ -5,6 +5,7 @@ import SwiftUI
 /// Expanded: two-column layout — details left, analysis right.
 struct AnomalyGroupRow: View {
   let group: AnomalyGroup
+  var binaryAnalysis: BinaryAnalysis?
   @State private var isExpanded = false
   @State private var vtVerdict: VTVerdict?
 
@@ -61,7 +62,8 @@ struct AnomalyGroupRow: View {
       AnalysisPanel(
         technique: group.technique, processName: group.processName,
         severity: group.severity, count: group.count,
-        anomalies: group.anomalies, vtVerdict: vtVerdict
+        anomalies: group.anomalies, vtVerdict: vtVerdict,
+        binaryAnalysis: binaryAnalysis
       )
       .frame(maxWidth: .infinity, alignment: .leading)
     }

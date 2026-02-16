@@ -43,13 +43,13 @@ extension PersistenceScanner {
                 var ev: [Evidence] = []
 
                 if signing == .unsigned && binaryPath != nil {
-                    ev.append(Evidence(factor: "Unsigned binary", weight: 0.5, category: .signing))
+                    ev.append(Evidence(factor: "Unsigned binary", weight: 0.7, category: .signing))
                 }
                 if signing == .adHoc && binaryPath != nil {
-                    ev.append(Evidence(factor: "Ad-hoc signed binary", weight: 0.3, category: .signing))
+                    ev.append(Evidence(factor: "Ad-hoc signed binary (no team ID)", weight: 0.5, category: .signing))
                 }
                 if signing == .invalid {
-                    ev.append(Evidence(factor: "Invalid code signature", weight: 0.6, category: .signing))
+                    ev.append(Evidence(factor: "Invalid code signature", weight: 0.8, category: .signing))
                 }
                 if dir.contains("/Users/") {
                     ev.append(Evidence(factor: "User-level persistence", weight: 0.2, category: .location))

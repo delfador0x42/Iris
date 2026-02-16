@@ -89,11 +89,12 @@ public actor EventTapScanner {
                 reasons.append("Unsigned process with keyboard tap")
             }
 
-            // Remove suspicion for known benign
+            // Reduce (but never eliminate) suspicion for known benign.
+            // Nothing gets a free pass — compromised Apple processes or
+            // trojaned known-good apps are still flagged with context.
             if let id = identifier, knownBenign.contains(id) {
-                reasons.removeAll()
+                reasons = reasons.map { "[\(id)] \($0)" }
             }
-            if apple { reasons.removeAll() }
 
             let targetPath = ProcessEnumeration.getProcessPath(tap.processBeingTapped)
             let targetDesc = isSystemWide ? "All Processes" :

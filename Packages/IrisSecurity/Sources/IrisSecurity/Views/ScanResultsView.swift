@@ -69,7 +69,8 @@ struct ScanResultsView: View {
     if !groups.isEmpty {
       sectionHeader(severity.label.capitalized, count: all.count, color: severityColor(severity))
       ForEach(groups) { g in
-        AnomalyGroupRow(group: g)
+        let path = g.anomalies.first?.processPath ?? ""
+        AnomalyGroupRow(group: g, binaryAnalysis: session.binaryAnalysis(for: path))
       }
     }
   }

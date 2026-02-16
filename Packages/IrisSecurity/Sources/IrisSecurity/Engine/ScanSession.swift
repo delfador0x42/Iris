@@ -16,6 +16,8 @@ public final class ScanSession: ObservableObject {
   @Published public var allowlistSuppressedCount = 0
   @Published public var vtResults: [String: VTVerdict] = [:]
   @Published public var vtChecking = false
+  @Published public var binaryAnalyses: [String: BinaryAnalysis] = [:]
+  @Published public var analyzingBinaries = false
 
   public init() {}
 
@@ -52,6 +54,9 @@ public final class ScanSession: ObservableObject {
 
     // Auto-carve memory for suspicious processes (hidden, fileless, injected)
     Task { await carveMemoryForSuspicious(result.anomalies) }
+
+    // Auto-analyze binaries referenced in findings (static analysis)
+    Task { await analyzeBinaries(result.anomalies) }
   }
 
   /// Load cached result without running a new scan.
@@ -87,6 +92,19 @@ public final class ScanSession: ObservableObject {
   /// Get VT verdict for a file path, if available.
   public func vtVerdict(for path: String) -> VTVerdict? {
     vtResults[path]
+  }
+
+  /// Get binary analysis for a path, if available.
+  public func binaryAnalysis(for path: String) -> BinaryAnalysis? {
+    binaryAnalyses[path]
+  }
+
+  /// Run deep static analysis on all binaries referenced in findings.
+  private func analyzeBinaries(_ anomalies: [ProcessAnomaly]) async {
+    analyzingBinaries = true
+    let results = await BinaryAnalysisEngine.analyze(anomalies: anomalies)
+    binaryAnalyses = results
+    analyzingBinaries = false
   }
 
   /// Carve executable memory from suspicious processes for offline analysis.

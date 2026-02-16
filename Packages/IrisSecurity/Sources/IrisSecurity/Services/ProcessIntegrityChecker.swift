@@ -58,8 +58,6 @@ public actor ProcessIntegrityChecker {
         for image in loadedImages {
             let imageName = URL(fileURLWithPath: image).lastPathComponent
 
-            // Skip system frameworks and standard libraries
-            if image.hasPrefix("/System/") || image.hasPrefix("/usr/lib/") { continue }
             if image == binaryPath { continue }
 
             // Check if this dylib was declared in the binary
@@ -124,24 +122,25 @@ public actor ProcessIntegrityChecker {
             ))
         }
 
-        // Non-system process running without CS_VALID — unsigned/tampered code running
+        // Any process running without CS_VALID — unsigned/tampered code running.
+        // No path exemptions: a rootkit in /System/ with invalid CS is MORE suspicious.
         if let ks = kernelCS, !ks.isValid && !path.isEmpty {
-            if !path.hasPrefix("/System/") && !path.hasPrefix("/usr/lib/") {
-                anomalies.append(.forProcess(
-                    pid: pid, name: processName, path: path,
-                    technique: "Invalid Code Signature (Kernel)",
-                    description: "\(processName) (PID \(pid)) kernel reports CS_VALID=false. Code signature invalid at kernel level.",
-                    severity: .critical, mitreID: "T1036.001",
-                    scannerId: "process_integrity",
-                    enumMethod: "csops(CS_OPS_STATUS)",
-                    evidence: [
-                        "kernel_cs: \(ks.flagsHex)",
-                        "CS_VALID: false",
-                        "flags: \(ks.flagDescriptions.joined(separator: ", "))",
-                        "binary: \(path)",
-                    ]
-                ))
-            }
+            let isSystem = path.hasPrefix("/System/") || path.hasPrefix("/usr/lib/")
+            anomalies.append(.forProcess(
+                pid: pid, name: processName, path: path,
+                technique: "Invalid Code Signature (Kernel)",
+                description: "\(processName) (PID \(pid)) kernel reports CS_VALID=false.\(isSystem ? " SYSTEM BINARY — possible rootkit." : " Code signature invalid at kernel level.")",
+                severity: .critical, mitreID: "T1036.001",
+                scannerId: "process_integrity",
+                enumMethod: "csops(CS_OPS_STATUS)",
+                evidence: [
+                    "kernel_cs: \(ks.flagsHex)",
+                    "CS_VALID: false",
+                    "is_system_path: \(isSystem)",
+                    "flags: \(ks.flagDescriptions.joined(separator: ", "))",
+                    "binary: \(path)",
+                ]
+            ))
         }
 
         if path.hasPrefix("/System/") || path.hasPrefix("/usr/") {
@@ -167,46 +166,37 @@ public actor ProcessIntegrityChecker {
         return anomalies
     }
 
-    /// Check if the on-disk binary hash matches what we'd expect
+    /// Check if a system binary on disk has been modified (no time window — always flag).
     private func checkBinaryHash(pid: pid_t, path: String) async -> ProcessAnomaly? {
         let processName = URL(fileURLWithPath: path).lastPathComponent
+        let isSystem = path.hasPrefix("/System/") || path.hasPrefix("/usr/")
 
-        // For Apple system binaries, check if the binary on disk is still Apple-signed
-        guard path.hasPrefix("/System/") || path.hasPrefix("/usr/") ||
-              path.hasPrefix("/Applications/") else { return nil }
+        // System binaries: check if modified after OS install (no time limit)
+        guard isSystem else { return nil }
 
-        // Check if the binary has been modified (timestamp vs expected)
         let fm = FileManager.default
         guard let attrs = try? fm.attributesOfItem(atPath: path),
               let modDate = attrs[.modificationDate] as? Date else { return nil }
 
-        // System binaries modified after OS install are suspicious
-        // Check against a reasonable OS install date window
-        let calendar = Calendar.current
-        let components = calendar.dateComponents([.year], from: modDate)
-        guard let year = components.year else { return nil }
-
-        // If a system binary was modified very recently (within last 7 days),
-        // and it's not an OS update period, flag it
-        if path.hasPrefix("/System/") || path.hasPrefix("/usr/") {
-            let daysSinceModified = Date().timeIntervalSince(modDate) / 86400
-            if daysSinceModified < 7 {
-                let fmt = DateFormatter()
-                fmt.dateFormat = "yyyy-MM-dd HH:mm:ss"
-                return .forProcess(
-                    pid: pid, name: processName, path: path,
-                    technique: "Recently Modified System Binary",
-                    description: "System binary \(path) was modified \(String(format: "%.1f", daysSinceModified)) days ago. System binaries should only change during OS updates.",
-                    severity: .high, mitreID: "T1554",
-                    scannerId: "process_integrity",
-                    enumMethod: "FileManager.attributesOfItem → modificationDate",
-                    evidence: [
-                        "modified: \(fmt.string(from: modDate))",
-                        "days_ago: \(String(format: "%.1f", daysSinceModified))",
-                        "binary: \(path)",
-                    ]
-                )
-            }
+        // Validate code signature — the ground truth for system binary integrity
+        let signing = CodeSignValidator.validate(path: path)
+        if !signing.isValidSignature {
+            let fmt = DateFormatter()
+            fmt.dateFormat = "yyyy-MM-dd HH:mm:ss"
+            return .forProcess(
+                pid: pid, name: processName, path: path,
+                technique: "Modified System Binary",
+                description: "System binary \(path) has invalid signature. Possible rootkit or tampering.",
+                severity: .critical, mitreID: "T1554",
+                scannerId: "process_integrity",
+                enumMethod: "SecStaticCodeCheckValidity + FileManager.attributesOfItem",
+                evidence: [
+                    "modified: \(fmt.string(from: modDate))",
+                    "signature_valid: false",
+                    "signing_id: \(signing.signingIdentifier ?? "none")",
+                    "binary: \(path)",
+                ]
+            )
         }
 
         return nil

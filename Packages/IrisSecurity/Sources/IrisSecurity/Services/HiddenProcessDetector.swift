@@ -25,7 +25,8 @@ public actor HiddenProcessDetector {
         let hiddenFromSysctl = killPids.subtracting(sysctlPids)
         for hidden in hiddenFromSysctl {
             let name = procName(hidden) ?? "unknown"
-            if name == "kernel_task" || name == "launchd" { continue }
+            // Only skip kernel_task at PID 0, launchd at PID 1 — by PID, never by name alone
+            if hidden == 0 || hidden == 1 { continue }
             let pathStr = procPath(hidden) ?? ""
             anomalies.append(.forProcess(
                 pid: hidden, name: name, path: pathStr,
@@ -49,10 +50,10 @@ public actor HiddenProcessDetector {
         // PIDs in Mach but not in sysctl — hidden from userland
         let machOnly = machPids.subtracting(sysctlPids)
         for machPid in machOnly {
-            if machPid == 0 { continue } // kernel_task
+            // Only skip by PID, never by name (a rootkit can name itself "kernel_task")
+            if machPid == 0 || machPid == 1 { continue }
             let task = machTasks.first { $0.pid == machPid }
             let name = task?.name ?? "unknown"
-            if name == "kernel_task" || name == "launchd" { continue }
             let pathStr = task?.path ?? ""
             // Don't double-report if already found by kill brute-force
             if hiddenFromSysctl.contains(machPid) { continue }
@@ -108,24 +109,26 @@ public actor HiddenProcessDetector {
         for name in singletons {
             let pids = snapshot.pids.filter { snapshot.name(for: $0) == name }
             if pids.count > 1 {
+                // Flag ALL instances — even system-path duplicates are suspicious.
+                // A rootkit can plant in /System/ if SIP is bypassed.
                 for pid in pids {
                     let path = snapshot.path(for: pid)
-                    if !path.hasPrefix("/System/") && !path.hasPrefix("/usr/") {
-                        result.append(.forProcess(
-                            pid: pid, name: name, path: path,
-                            technique: "Duplicate System Process",
-                            description: "Multiple '\(name)' processes. PID \(pid) at non-system path: \(path)",
-                            severity: .critical, mitreID: "T1036.004",
-                            scannerId: "hidden_process",
-                            enumMethod: "sysctl(KERN_PROC_ALL) name dedup",
-                            evidence: [
-                                "expected_singleton: \(name)",
-                                "instance_count: \(pids.count)",
-                                "pids: \(pids.map(String.init).joined(separator: ", "))",
-                                "non_system_path: \(path)",
-                            ]
-                        ))
-                    }
+                    let isSystem = path.hasPrefix("/System/") || path.hasPrefix("/usr/")
+                    result.append(.forProcess(
+                        pid: pid, name: name, path: path,
+                        technique: "Duplicate System Process",
+                        description: "Multiple '\(name)' processes. PID \(pid) at \(path)\(isSystem ? " [system path — verify]" : " [non-system path]")",
+                        severity: .critical, mitreID: "T1036.004",
+                        scannerId: "hidden_process",
+                        enumMethod: "sysctl(KERN_PROC_ALL) name dedup",
+                        evidence: [
+                            "expected_singleton: \(name)",
+                            "instance_count: \(pids.count)",
+                            "pids: \(pids.map(String.init).joined(separator: ", "))",
+                            "path: \(path)",
+                            "is_system_path: \(isSystem)",
+                        ]
+                    ))
                 }
             }
         }
