@@ -8,6 +8,8 @@ import os.log
 extension FilterDataProvider {
 
     override func handleNewFlow(_ flow: NEFilterFlow) -> NEFilterNewFlowVerdict {
+        if !filteringEnabled { return .allow() }
+
         guard let socketFlow = flow as? NEFilterSocketFlow else {
             return .allow()
         }
@@ -87,11 +89,17 @@ extension FilterDataProvider {
         flowToConnection[ObjectIdentifier(flow)] = connectionId
 
         if connections.count > Self.maxConnections {
-            let oldest = connections.min { $0.value.lastActivity < $1.value.lastActivity }
-            if let oldId = oldest?.key {
-                connections.removeValue(forKey: oldId)
-                flowToConnection = flowToConnection.filter { $0.value != oldId }
+            // Batch-evict 10% to avoid O(n) min-find on every new flow
+            let evictCount = max(Self.maxConnections / 10, 1)
+            let sorted = connections.sorted { $0.value.lastActivity < $1.value.lastActivity }
+            let evictIds = Set(sorted.prefix(evictCount).map { $0.key })
+            for id in evictIds {
+                if let tracker = connections[id] {
+                    totalCaptureBytes -= tracker.captureSegments.reduce(0) { $0 + $1.byteCount }
+                }
+                connections.removeValue(forKey: id)
             }
+            flowToConnection = flowToConnection.filter { !evictIds.contains($0.value) }
         }
         connectionsLock.unlock()
 

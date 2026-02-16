@@ -5,8 +5,8 @@ import SwiftUI
 /// Expanded: two-column layout — details left, analysis right.
 struct AnomalyGroupRow: View {
   let group: AnomalyGroup
-  var vtVerdict: VTVerdict?
   @State private var isExpanded = false
+  @State private var vtVerdict: VTVerdict?
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
@@ -66,6 +66,14 @@ struct AnomalyGroupRow: View {
       .frame(maxWidth: .infinity, alignment: .leading)
     }
     .padding(.horizontal, 20).padding(.bottom, 10)
+    .task { await fetchVT() }
+  }
+
+  private func fetchVT() async {
+    guard vtVerdict == nil else { return }
+    guard let path = group.anomalies.first?.processPath, !path.isEmpty else { return }
+    let result = await VirusTotalService.shared.checkFile(path)
+    await MainActor.run { vtVerdict = result }
   }
 
   private var detailsColumn: some View {

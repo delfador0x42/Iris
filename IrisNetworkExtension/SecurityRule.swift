@@ -51,9 +51,8 @@ struct SecurityRule: Codable {
                 if remoteAddress != connection.remoteAddress { return false }
             }
             if let remotePort = remotePort, remotePort != "*" {
-                if let port = UInt16(remotePort), port != connection.remotePort {
-                    return false
-                }
+                guard let port = UInt16(remotePort) else { return false }
+                if port != connection.remotePort { return false }
             }
         }
 

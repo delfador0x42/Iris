@@ -22,15 +22,15 @@ SecurityAssessor.assess() only calls SystemSecurityChecks.runAll() (8 checks). 1
 | FileSystemBaseline (FIM) | T1565, T1036 | 40-50% | S4, depth/symlink |
 | LOLBinDetector | T1059, T1218, T1555, T1005 | 35-40% | FIXED: 44 LOLBins, 8-level ancestry |
 | EventTapScanner | T1056.001 | 30% | FIXED: 30+ benign entries |
-| ProcessIntegrityChecker | T1055, T1574.006 | 25-30% | proc_regionfilename <1% |
-| CredentialAccessDetector | T1552, T1555 | 20% | Browser cookie FPs |
-| StealthScanner (9 techniques) | T1564, T1546, T1556, T1548 | 20% | Emond dead code |
+| ProcessIntegrityChecker | T1055, T1574.006 | 80% | FIXED: TASK_DYLD_INFO + fallback |
+| CredentialAccessDetector | T1552, T1555 | 45% | FIXED: browser FP filter, shell-wrapped detection |
+| StealthScanner (9 techniques) | T1564, T1546, T1556, T1548 | 45% | FIXED: emond critical, 11 SUID dirs |
 | NetworkAnomalyDetector | T1571, T1573, T1071 | 60% | FIXED: SecurityStore data + lsof fallback |
 | TCCMonitor | T1557, T1005 | 50% | FIXED: FDA+sqlite3 CLI, deny→allow detection |
-| SupplyChainAuditor | T1195 | 40% | Xcode plugin obsolete |
+| SupplyChainAuditor | T1195 | 50% | FIXED: legacy plugin note, custom toolchains |
 | XPCServiceAuditor | T1559 | 40% | No known-good whitelist |
 | KextAnomalyDetector | T1547.006 | 40% | FIXED: macOS malware names |
-| PersistenceScanner (13 types) | T1543, T1547, T1053, T1546 | 40% | No content analysis |
+| PersistenceScanner (13 types) | T1543, T1547, T1053, T1546 | 55% | FIXED: shell content analysis |
 | PersistenceMonitor | T1543, T1547 | 10% | BROKEN: no ES wiring |
 | RansomwareDetector + EntropyAnalyzer | T1486 | N/A | Orphaned |
 | AVMonitor | T1123, T1125 | N/A | Orphaned |
@@ -46,14 +46,14 @@ SecurityAssessor.assess() only calls SystemSecurityChecks.runAll() (8 checks). 1
 **SIGNIFICANT (fix in place):**
 4. **EventTapScanner** — flagsMask vs eventsOfInterest bug, benign list short. STATUS: FIXED (Session B2)
 5. **LOLBinDetector** — 1-level ancestry, 33 entries. STATUS: FIXED (Session B2: 8-level, 44 entries)
-6. **ProcessIntegrityChecker** — proc_regionfilename scans <1%. **Fix: task_info(TASK_DYLD_INFO).** STATUS: OPEN
+6. **ProcessIntegrityChecker** — proc_regionfilename scans <1%. STATUS: FIXED (DylibEnumerator: task_for_pid + TASK_DYLD_INFO primary, PROC_PIDREGIONPATHINFO fallback)
 7. **KextAnomalyDetector** — Linux rootkit names. STATUS: FIXED (Session B2: macOS names)
-8. **StealthScanner** — Emond dead (10.11+), SUID only 5 dirs. STATUS: OPEN
-9. **CredentialAccessDetector** — Browser cookie FPs, bash-wrapped invisible. STATUS: OPEN
-10. **SupplyChainAuditor** — No PyPI reference set, Xcode plugin obsolete. STATUS: OPEN
+8. **StealthScanner** — Emond dead (10.11+), SUID only 5 dirs. STATUS: FIXED (emond critical severity, SUID 11 dirs, depth guard)
+9. ~~**CredentialAccessDetector** — Browser cookie FPs, bash-wrapped invisible.~~ STATUS: FIXED (sqlite3 in credentialBinaries with browser parent filter, shell interpreter arg scanning)
+10. ~~**SupplyChainAuditor** — No PyPI reference set, Xcode plugin obsolete.~~ STATUS: FIXED (legacy .xcplugin noted as obsolete, custom toolchain detection added)
 11. **SigningVerifier** — No entitlements/Team ID/revocation. STATUS: FIXED (Session B2)
 12. **FileSystemBaseline** — 50MB limit, no symlink, no depth guard. STATUS: OPEN
-13. **PersistenceScanner+Shell** — Detects files not content. STATUS: OPEN
+13. **PersistenceScanner+Shell** — Detects files not content. STATUS: FIXED (alias/function hijacking, reverse shells, PATH manipulation, prompt hooks, encoded payloads)
 
 **CODE QUALITY:**
 - ProcessEnumeration shared helper extracted. STATUS: FIXED (Session B2)
@@ -64,7 +64,7 @@ SecurityAssessor.assess() only calls SystemSecurityChecks.runAll() (8 checks). 1
 
 **S1.** CredentialAccessDetector wrong vnode struct access. STATUS: OPEN
 **S2.** XPCServiceAuditor shell wrapper misidentification. STATUS: OPEN
-**S3.** AuthorizationDBMonitor string-contains "allow" matches "disallow". STATUS: OPEN
+**S3.** AuthorizationDBMonitor string-contains "allow" matches "disallow". STATUS: FALSE POSITIVE (Array.contains is exact-match, not substring)
 **S4.** FileSystemBaseline no depth guard. STATUS: OPEN
 **S5.** DyldEnvDetector collects all env vars before filtering. STATUS: OPEN (minor)
 
@@ -125,11 +125,11 @@ SecurityAssessor.assess() only calls SystemSecurityChecks.runAll() (8 checks). 1
 **ES1.** ES entirely stubbed — zero es_subscribe calls. STATUS: PARTIALLY FIXED (ESClient rewritten with real ES)
 **ES2.** ESProcessInfo vs ProcessInfo model mismatch. STATUS: OPEN
 **ES3.** ISO8601 date encoding/decoding mismatch. STATUS: OPEN
-**ES4.** No es_mute_process for own PID. STATUS: OPEN
-**ES5.** No es_retain_message for async processing. STATUS: OPEN
-**ES6.** Self-capture in ES callback. STATUS: OPEN
+**ES4.** No es_mute_process for own PID. STATUS: FIXED (auditTokenForSelf + es_mute_process in start())
+**ES5.** No es_retain_message for async processing. STATUS: FIXED (handleMessage retains, processingQueue releases)
+**ES6.** Self-capture in ES callback. STATUS: FIXED (ES4 fix mutes own PID)
 **ES7.** XPC continuation can hang forever. STATUS: OPEN
-**ES8.** Missing critical ES events (OPEN, WRITE, RENAME, etc.). STATUS: OPEN
+**ES8.** Missing critical ES events (OPEN, WRITE, RENAME, etc.). STATUS: FIXED (22 event types subscribed)
 **ES9.** FileManager.fileExists per-process in computed property (perf). STATUS: OPEN
 **ES10.** No event batching/rate limiting. STATUS: OPEN
 **ES11.** No XPC reconnection logic. STATUS: OPEN
@@ -186,8 +186,8 @@ SecurityAssessor.assess() only calls SystemSecurityChecks.runAll() (8 checks). 1
 
 ## Network Filter
 
-**N1.** Rule port defaults to wildcard on parse failure. STATUS: OPEN
-**N2.** Single eviction on maxConnections overflow. STATUS: OPEN
+**N1.** Rule port defaults to wildcard on parse failure. STATUS: FIXED (guard let + return false on bad port)
+**N2.** Single eviction on maxConnections overflow. STATUS: FIXED (batch evict 10% oldest)
 
 ---
 
@@ -341,8 +341,8 @@ SecurityAssessor.assess() only calls SystemSecurityChecks.runAll() (8 checks). 1
 1. **P0**: Add IrisSecurity to pbxproj + wire HomeView → SecurityHubView
 2. ~~**P0**: Rewrite NetworkAnomalyDetector~~ STATUS: FIXED (SecurityStore data + lsof fallback)
 3. ~~**P0**: Rewrite TCCMonitor~~ STATUS: FIXED (FDA+sqlite3, timestamp fix, deny→allow detection)
-4. **P0**: Fix ProcessIntegrityChecker (task_info TASK_DYLD_INFO)
-5. **P1**: Add shell config content analysis to PersistenceScanner
+4. ~~**P0**: Fix ProcessIntegrityChecker (task_info TASK_DYLD_INFO)~~ STATUS: FIXED (DylibEnumerator.swift)
+5. ~~**P1**: Add shell config content analysis to PersistenceScanner~~ STATUS: FIXED (7 pattern categories)
 6. **P1**: Wire PersistenceMonitor to ES events
 7. **P2**: Fix StealthScanner (remove emond, expand SUID dirs)
 8. **P2**: Fix CredentialAccessDetector (filter browser cookie FPs)

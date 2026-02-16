@@ -22,6 +22,7 @@ extension SecurityStore {
         } else {
             await fetchConnections()
             await fetchRules()
+            await fetchFilterStatus()
         }
         lastUpdate = Date()
     }

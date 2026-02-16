@@ -36,6 +36,10 @@ class FilterDataProvider: NEFilterDataProvider {
     /// A browser with 50 connections would otherwise verify the same binary 50 times.
     var signingIdCache: [pid_t: String?] = [:]
 
+    /// When false, handleNewFlow returns .allow() immediately — no tracking, rules, or capture.
+    /// Toggled via XPC setFilteringEnabled. Extension stays loaded but becomes passthrough.
+    var filteringEnabled: Bool = true
+
     // MARK: - Capture Budget
 
     /// Total bytes used by raw capture buffers across all connections

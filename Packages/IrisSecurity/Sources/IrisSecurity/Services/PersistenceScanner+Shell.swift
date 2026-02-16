@@ -46,28 +46,66 @@ extension PersistenceScanner {
         var ev: [Evidence] = []
         let lower = content.lowercased()
 
-        // curl|bash or wget|sh patterns
+        // Remote code execution: curl|bash, wget|sh, source <(curl...)
         if lower.contains("curl") && (lower.contains("| bash") || lower.contains("|bash") ||
             lower.contains("| sh") || lower.contains("|sh")) {
-            ev.append(Evidence(factor: "Contains curl|bash pattern", weight: 0.6, category: .content))
+            ev.append(Evidence(factor: "curl piped to shell", weight: 0.6, category: .content))
         } else if lower.contains("wget") && (lower.contains("| bash") || lower.contains("| sh")) {
-            ev.append(Evidence(factor: "Contains wget|sh pattern", weight: 0.6, category: .content))
+            ev.append(Evidence(factor: "wget piped to shell", weight: 0.6, category: .content))
+        }
+        if lower.contains("source <(curl") || lower.contains("eval \"$(curl") ||
+           lower.contains("eval $(curl") {
+            ev.append(Evidence(factor: "Sources remote script", weight: 0.7, category: .content))
         }
 
-        // base64 decode execution
-        if lower.contains("base64") && (lower.contains("decode") || lower.contains("-d")) {
-            ev.append(Evidence(factor: "Contains base64 decode execution", weight: 0.4, category: .content))
+        // Encoded payload execution
+        if lower.contains("base64") && (lower.contains("decode") || lower.contains("-d") || lower.contains("-D")) {
+            ev.append(Evidence(factor: "base64 decode execution", weight: 0.4, category: .content))
+        }
+        if lower.contains("python") && lower.contains("import os") {
+            ev.append(Evidence(factor: "Python os module in shell config", weight: 0.3, category: .content))
         }
 
-        // DYLD_ exports
+        // DYLD_ environment hijacking
         if lower.contains("dyld_insert") || lower.contains("dyld_library_path") ||
            lower.contains("dyld_framework_path") {
-            ev.append(Evidence(factor: "Contains DYLD_ export", weight: 0.3, category: .content))
+            ev.append(Evidence(factor: "DYLD_ environment variable", weight: 0.3, category: .content))
         }
 
-        // Sourcing remote scripts
-        if lower.contains("source <(curl") || lower.contains("eval \"$(curl") {
-            ev.append(Evidence(factor: "Sources remote script", weight: 0.5, category: .content))
+        // Alias/function hijacking of security-sensitive commands
+        let hijackTargets = ["sudo", "ssh", "scp", "security", "codesign", "spctl", "login", "su"]
+        for target in hijackTargets {
+            if lower.contains("alias \(target)=") || lower.contains("alias \(target) =") ||
+               lower.contains("function \(target)") || lower.contains("\(target)()") {
+                ev.append(Evidence(factor: "Shadows '\(target)' command", weight: 0.7, category: .content))
+                break
+            }
+        }
+
+        // PATH prepend with suspicious directories
+        for line in content.components(separatedBy: "\n") {
+            let l = line.trimmingCharacters(in: .whitespaces).lowercased()
+            if l.contains("path=") || l.contains("path =") {
+                if l.contains("/tmp") || l.contains("/var/tmp") || l.contains("/.") {
+                    ev.append(Evidence(factor: "PATH includes temp/hidden directory", weight: 0.5, category: .content))
+                    break
+                }
+            }
+        }
+
+        // Reverse shell patterns
+        if lower.contains("/dev/tcp/") || lower.contains("/dev/udp/") ||
+           (lower.contains("nc ") && lower.contains("-e ")) ||
+           lower.contains("mkfifo") {
+            ev.append(Evidence(factor: "Reverse shell pattern", weight: 0.9, category: .content))
+        }
+
+        // Prompt/precmd hooks with suspicious content
+        if lower.contains("prompt_command") || lower.contains("precmd()") || lower.contains("preexec()") {
+            let hookContent = lower
+            if hookContent.contains("curl") || hookContent.contains("nc ") || hookContent.contains("base64") {
+                ev.append(Evidence(factor: "Suspicious prompt hook", weight: 0.5, category: .content))
+            }
         }
 
         return ev

@@ -22,6 +22,9 @@ public final class SecurityStore: ObservableObject {
   /// Whether connected to the extension
   @Published public internal(set) var isConnected = false
 
+  /// Whether the network filter is actively monitoring (passthrough when false)
+  @Published public internal(set) var filteringEnabled = true
+
   /// Last update timestamp
   @Published public internal(set) var lastUpdate: Date?
 

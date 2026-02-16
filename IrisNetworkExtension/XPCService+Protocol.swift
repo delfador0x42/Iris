@@ -135,7 +135,7 @@ extension XPCService: NetworkXPCProtocol {
 
         let status: [String: Any] = [
             "version": "1.0.0",
-            "filterEnabled": true,
+            "filterEnabled": filterProvider?.filteringEnabled ?? false,
             "esEnabled": true,
             "connectionCount": filterProvider?.getActiveConnections().count ?? 0,
             "ruleCount": filterProvider?.getRules().count ?? 0
@@ -146,7 +146,11 @@ extension XPCService: NetworkXPCProtocol {
 
     func setFilteringEnabled(_ enabled: Bool, reply: @escaping (Bool) -> Void) {
         logger.debug("XPC: setFilteringEnabled(\(enabled))")
-        // TODO: Implement filter enable/disable
+        guard let provider = filterProvider else {
+            reply(false)
+            return
+        }
+        provider.filteringEnabled = enabled
         reply(true)
     }
 
