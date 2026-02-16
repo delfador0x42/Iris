@@ -54,7 +54,7 @@ enum SecurityEventType: String, Codable {
     case kextLoad, mount, tccModify, xpcConnect, btmLaunchItemAdd
     // Authentication / Authorization
     case sshLogin, xprotectMalwareDetected
-    case authExec
+    case authExec, authOpen
 }
 
 /// A security event captured by Endpoint Security.

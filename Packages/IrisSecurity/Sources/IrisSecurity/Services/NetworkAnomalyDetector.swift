@@ -13,6 +13,16 @@ public actor NetworkAnomalyDetector {
   private let maxHistoryPerProcess = 200
   private let maxProcesses = 500
 
+  // MARK: - Per-Process Network Baselines
+
+  /// Known destinations per process (learned during baseline period)
+  private var baselineDestinations: [String: Set<String>] = [:]
+  /// Number of connections per process (only baseline processes with >3 connections)
+  private var baselineConnectionCounts: [String: Int] = [:]
+  private var baselineLocked = false
+  private let learningPeriod: TimeInterval = 3600 // 1 hour
+  private var baselineStartTime = Date()
+
   /// Record a connection event (called from network monitoring)
   public func recordConnection(
     processName: String,
@@ -44,6 +54,69 @@ public actor NetworkAnomalyDetector {
         connectionHistory.removeValue(forKey: entry.key)
       }
     }
+
+    // Baseline tracking
+    trackBaseline(processName: processName, remoteAddress: remoteAddress)
+  }
+
+  /// Track per-process network destinations for baseline anomaly detection
+  private func trackBaseline(processName: String, remoteAddress: String) {
+    // Auto-lock baseline after learning period
+    if !baselineLocked && Date().timeIntervalSince(baselineStartTime) > learningPeriod {
+      baselineLocked = true
+      logger.info("[NET] Baseline locked: \(self.baselineDestinations.count) processes baselined")
+    }
+
+    baselineConnectionCounts[processName, default: 0] += 1
+
+    if !baselineLocked {
+      baselineDestinations[processName, default: []].insert(remoteAddress)
+    }
+  }
+
+  /// Detect connections to new destinations not seen during baseline
+  public func detectBaselineAnomalies() -> [NetworkAnomaly] {
+    guard baselineLocked else { return [] }
+    var anomalies: [NetworkAnomaly] = []
+
+    for (key, records) in connectionHistory {
+      let parts = key.split(separator: "-", maxSplits: 1)
+      let processName = parts.first.map(String.init) ?? key
+      let address = parts.count > 1 ? String(parts[1]) : ""
+
+      // Only check processes with established baselines (>3 connections during learning)
+      guard let count = baselineConnectionCounts[processName], count > 3 else { continue }
+      guard let known = baselineDestinations[processName] else { continue }
+
+      // New destination not in baseline
+      if !known.contains(address) && !records.isEmpty {
+        anomalies.append(NetworkAnomaly(
+          type: .newDestination,
+          processName: processName,
+          remoteAddress: address,
+          description: "\(processName) connected to new destination \(address) (not in baseline of \(known.count) addresses)",
+          severity: .medium,
+          connectionCount: records.count,
+          averageInterval: 0
+        ))
+      }
+    }
+    return anomalies
+  }
+
+  /// Lock the baseline manually (for testing or immediate enforcement)
+  public func lockBaseline() {
+    baselineLocked = true
+    logger.info("[NET] Baseline manually locked: \(self.baselineDestinations.count) processes")
+  }
+
+  /// Reset baseline and restart learning
+  public func resetBaseline() {
+    baselineLocked = false
+    baselineDestinations.removeAll()
+    baselineConnectionCounts.removeAll()
+    baselineStartTime = Date()
+    logger.info("[NET] Baseline reset — learning started")
   }
 
   /// Analyze connection patterns for beaconing behavior
@@ -192,6 +265,8 @@ public struct NetworkAnomaly: Identifiable, Sendable, Codable, Equatable {
     case suspiciousPort = "Suspicious Port"
     case dnsTunneling = "DNS Tunneling"
     case highVolumeDNS = "High Volume DNS"
+    case newDestination = "New Destination"
+    case dgaDomain = "DGA Domain"
   }
 
   public init(

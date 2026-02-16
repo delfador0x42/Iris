@@ -7,7 +7,9 @@ public enum RuleCondition: Sendable {
     case fieldMatchesRegex(String, String)
     case fieldHasPrefix(String, String)
     case processNotAppleSigned
+    case processNameIn([String])
     case processNameNotIn([String])
+    case parentNameIn([String])
     case processPathHasPrefix(String)
 
     /// Evaluate this condition against a SecurityEvent
@@ -25,8 +27,13 @@ public enum RuleCondition: Sendable {
             return event.fields[key]?.hasPrefix(prefix) == true
         case .processNotAppleSigned:
             return !event.isAppleSigned
+        case .processNameIn(let names):
+            return names.contains(event.processName)
         case .processNameNotIn(let names):
             return !names.contains(event.processName)
+        case .parentNameIn(let names):
+            guard let parentName = event.fields["parent_name"] else { return false }
+            return names.contains(parentName)
         case .processPathHasPrefix(let prefix):
             return event.processPath.hasPrefix(prefix)
         }

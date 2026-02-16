@@ -27,11 +27,11 @@ struct MITREBadge: View {
     let id: String
     var body: some View {
         Text(id)
-            .font(.system(size: 9, design: .monospaced))
-            .foregroundColor(.cyan)
-            .padding(.horizontal, 6).padding(.vertical, 2)
-            .background(Color.cyan.opacity(0.1))
-            .cornerRadius(4)
+            .font(.system(size: 8, design: .monospaced))
+            .foregroundColor(.cyan.opacity(0.8))
+            .padding(.horizontal, 4).padding(.vertical, 2)
+            .background(Color.cyan.opacity(0.08))
+            .cornerRadius(3)
     }
 }
 

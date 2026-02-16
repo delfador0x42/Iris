@@ -66,6 +66,43 @@ extension ESClient {
         recordSecurityEvent(.fileSetExtattr, process: info, targetPath: path, detail: attrName)
     }
 
+    // MARK: - Authorization: AUTH_OPEN for Credential Files
+
+    func handleAuthOpen(_ message: UnsafePointer<es_message_t>) {
+        let file = message.pointee.event.open.file.pointee
+        let path = esStringToSwift(file.path)
+        let proc = message.pointee.process.pointee
+        let isPlatform = proc.is_platform_binary
+        let signingId = esStringToSwift(proc.signing_id)
+        let isApple = isPlatform || (signingId.hasPrefix("com.apple.") && esStringToSwift(proc.team_id).isEmpty)
+        let name = URL(fileURLWithPath: esStringToSwift(proc.executable.pointee.path)).lastPathComponent
+
+        let decision = ExecPolicy.evaluateOpen(
+            path: path, processName: name,
+            isPlatform: isPlatform, isApple: isApple
+        )
+
+        let effectiveAllow = ExecPolicy.auditMode ? true : decision.allow
+        let result: es_auth_result_t = effectiveAllow ? ES_AUTH_RESULT_ALLOW : ES_AUTH_RESULT_DENY
+
+        guard let client = self.client else { return }
+        let respondResult = es_respond_auth_result(client, message, result, decision.cache)
+
+        if respondResult != ES_RESPOND_RESULT_SUCCESS {
+            let pid = audit_token_to_pid(proc.audit_token)
+            logger.error("[AUTH] Failed to respond AUTH_OPEN for PID \(pid): \(respondResult.rawValue)")
+        }
+
+        if !decision.allow {
+            let pid = audit_token_to_pid(proc.audit_token)
+            let mode = ExecPolicy.auditMode ? "AUDIT" : "BLOCK"
+            logger.warning("[AUTH] \(mode) OPEN: \(path) by \(name) pid=\(pid) reason=\(decision.reason)")
+            let info = extractBasicProcessInfo(from: proc)
+            recordSecurityEvent(.authOpen, process: info, targetPath: path,
+                                detail: "policy=\(decision.reason)")
+        }
+    }
+
     /// Extract minimal process info without exec arguments (faster for high-volume events)
     func extractBasicProcessInfo(from process: es_process_t) -> ESProcessInfo {
         let pid = audit_token_to_pid(process.audit_token)

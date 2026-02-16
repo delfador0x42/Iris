@@ -87,6 +87,41 @@ extension ESClient {
         recordSecurityEvent(.mprotect, process: info, detail: detail)
     }
 
+    // MARK: - Authorization: MPROTECT W→X Blocking
+
+    func handleAuthMprotect(_ message: UnsafePointer<es_message_t>) {
+        let event = message.pointee.event.mprotect
+        let prot = event.protection
+        let proc = message.pointee.process.pointee
+        let procPath = esStringToSwift(proc.executable.pointee.path)
+        let isPlatform = proc.is_platform_binary
+
+        let decision = ExecPolicy.evaluateMprotect(
+            path: procPath, protection: prot,
+            isPlatform: isPlatform
+        )
+
+        let effectiveAllow = ExecPolicy.auditMode ? true : decision.allow
+        let result: es_auth_result_t = effectiveAllow ? ES_AUTH_RESULT_ALLOW : ES_AUTH_RESULT_DENY
+
+        guard let client = self.client else { return }
+        let respondResult = es_respond_auth_result(client, message, result, decision.cache)
+
+        if respondResult != ES_RESPOND_RESULT_SUCCESS {
+            let pid = audit_token_to_pid(proc.audit_token)
+            logger.error("[AUTH] Failed to respond AUTH_MPROTECT for PID \(pid): \(respondResult.rawValue)")
+        }
+
+        if !decision.allow {
+            let pid = audit_token_to_pid(proc.audit_token)
+            let mode = ExecPolicy.auditMode ? "AUDIT" : "BLOCK"
+            logger.warning("[AUTH] \(mode) MPROTECT W→X: \(procPath) pid=\(pid) reason=\(decision.reason)")
+            let info = extractBasicProcessInfo(from: proc)
+            let detail = String(format: "policy=\(decision.reason) prot=0x%x addr=0x%llx", prot, event.address)
+            recordSecurityEvent(.mprotect, process: info, detail: detail)
+        }
+    }
+
     func handleProcSuspendResume(_ message: UnsafePointer<es_message_t>) {
         let proc = message.pointee.process.pointee
         let info = extractBasicProcessInfo(from: proc)

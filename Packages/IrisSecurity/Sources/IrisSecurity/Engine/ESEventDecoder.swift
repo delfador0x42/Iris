@@ -28,7 +28,8 @@ enum RawESEventType: String, Codable {
   case remoteThreadCreate, getTask, ptrace
   case kextLoad, mount, tccModify, xpcConnect, btmLaunchItemAdd
   case sshLogin, xprotectMalwareDetected
-  case authExec
+  case authExec, authOpen
+  case mmap, mprotect, procSuspendResume
 }
 
 struct RawESProcess: Codable {
@@ -66,6 +67,13 @@ extension RawESEvent {
       fields["target_path_full"] = tp.path
     }
     fields["ppid"] = "\(process.ppid)"
+    if process.ppid > 1 {
+      let parentPath = ProcessEnumeration.getProcessPath(process.ppid)
+      if !parentPath.isEmpty {
+        fields["parent_name"] = URL(fileURLWithPath: parentPath).lastPathComponent
+        fields["parent_path"] = parentPath
+      }
+    }
     fields["uid"] = "\(process.userId)"
     if !process.arguments.isEmpty {
       fields["args"] = process.arguments.joined(separator: " ")
@@ -105,6 +113,10 @@ extension RawESEventType {
     case .sshLogin: return "auth_ssh_login"
     case .xprotectMalwareDetected: return "auth_xprotect"
     case .authExec: return "auth_exec"
+    case .authOpen: return "auth_open"
+    case .mmap: return "mmap"
+    case .mprotect: return "mprotect"
+    case .procSuspendResume: return "proc_suspend_resume"
     }
   }
 }

@@ -39,6 +39,7 @@ struct AnomalyRow: View {
                             .font(.system(size: 10, design: .monospaced)).foregroundColor(.gray)
                     }
                 }
+                .textSelection(.enabled)
                 .padding(.horizontal, 50).padding(.bottom, 8)
             }
         }
@@ -77,6 +78,7 @@ struct FSChangeRow: View {
                     Text(change.path)
                         .font(.system(size: 10, design: .monospaced)).foregroundColor(.gray)
                 }
+                .textSelection(.enabled)
                 .padding(.horizontal, 50).padding(.bottom, 8)
             }
         }
@@ -125,7 +127,7 @@ struct CorrelationRow: View {
                         .font(.system(size: 10, design: .monospaced)).foregroundColor(.gray)
                 }
                 Spacer()
-                MITREBadge(id: correlation.mitreChain)
+                mitreBadgeTruncated(correlation.mitreChain)
                 ExpandChevron(isExpanded: isExpanded)
             }
             .padding(.horizontal, 20).padding(.vertical, 8)
@@ -134,6 +136,8 @@ struct CorrelationRow: View {
 
             if isExpanded {
                 VStack(alignment: .leading, spacing: 6) {
+                    Text("MITRE: \(correlation.mitreChain)")
+                        .font(.system(size: 10, design: .monospaced)).foregroundColor(.cyan.opacity(0.7))
                     Text(correlation.description)
                         .font(.system(size: 11)).foregroundColor(.white.opacity(0.8))
                     Text("Scanners: \(correlation.scannerIds.joined(separator: ", "))")
@@ -150,10 +154,24 @@ struct CorrelationRow: View {
                             .font(.system(size: 9, design: .monospaced)).foregroundColor(.gray.opacity(0.5))
                     }
                 }
+                .textSelection(.enabled)
                 .padding(.horizontal, 50).padding(.bottom, 8)
             }
         }
         .background(backgroundFor(correlation.severity))
+    }
+
+    @ViewBuilder
+    private func mitreBadgeTruncated(_ chain: String) -> some View {
+        let codes = chain.components(separatedBy: " \u{2192} ")
+        HStack(spacing: 2) {
+            MITREBadge(id: codes.first ?? chain)
+            if codes.count > 1 {
+                Text("+\(codes.count - 1)")
+                    .font(.system(size: 8, design: .monospaced))
+                    .foregroundColor(.cyan.opacity(0.4))
+            }
+        }
     }
 }
 
@@ -183,6 +201,7 @@ struct SupplyChainRow: View {
             if isExpanded {
                 Text(finding.details)
                     .font(.system(size: 11)).foregroundColor(.white.opacity(0.8))
+                    .textSelection(.enabled)
                     .padding(.horizontal, 50).padding(.bottom, 8)
             }
         }

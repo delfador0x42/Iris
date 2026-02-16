@@ -88,7 +88,6 @@ struct AnomalyGroupRow: View {
             Text(a.processPath)
               .font(.system(size: 9, design: .monospaced))
               .foregroundColor(.gray.opacity(0.6))
-              .textSelection(.enabled)
           }
           if a.pid > 0 {
             Text("PID: \(a.pid) | Parent: \(a.parentName) (\(a.parentPID))")
@@ -101,6 +100,7 @@ struct AnomalyGroupRow: View {
           .font(.system(size: 9, design: .monospaced)).foregroundColor(.gray.opacity(0.5))
       }
     }
+    .textSelection(.enabled)
     .frame(maxWidth: .infinity, alignment: .leading)
   }
 }

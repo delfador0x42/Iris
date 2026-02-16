@@ -20,10 +20,10 @@ struct AnalysisPanel: View {
       severity: severity, count: count
     )
     ScrollView {
-      VStack(alignment: .leading, spacing: 6) {
-        forensicSection
-        Divider().background(Color.white.opacity(0.08))
+      VStack(alignment: .leading, spacing: 4) {
         insightRow(a)
+        Divider().background(Color.white.opacity(0.08))
+        forensicSection
       }
       .padding(10)
     }
@@ -48,17 +48,20 @@ struct AnalysisPanel: View {
       Text(a.whatsHappening)
         .font(.system(size: 10)).foregroundColor(.white.opacity(0.7))
         .lineLimit(showTLDR ? nil : 2)
+        .textSelection(.enabled)
       if showTLDR {
         HStack(alignment: .top, spacing: 12) {
           VStack(alignment: .leading, spacing: 1) {
             label("WHY", color: .orange.opacity(0.6))
             Text(a.whyItMatters)
               .font(.system(size: 9)).foregroundColor(.white.opacity(0.5))
+              .textSelection(.enabled)
           }
           VStack(alignment: .leading, spacing: 1) {
             label("ACTION", color: .green.opacity(0.6))
             Text(a.recommendedAction)
               .font(.system(size: 9)).foregroundColor(.white.opacity(0.5))
+              .textSelection(.enabled)
           }
         }
       }
@@ -72,24 +75,9 @@ struct AnalysisPanel: View {
     let first = anomalies.first
     let evidence = first?.evidence ?? []
 
-    VStack(alignment: .leading, spacing: 6) {
-      // MITRE + severity context on same line
-      HStack(spacing: 8) {
-        if let mitre = anomalies.compactMap(\.mitreID).first {
-          HStack(spacing: 3) {
-            label("MITRE", color: .red)
-            Text(mitre)
-              .font(.system(size: 10, weight: .medium, design: .monospaced))
-              .foregroundColor(.red.opacity(0.8))
-          }
-        }
-        Spacer()
-        if let sid = first?.scannerId {
-          Text(scannerDisplayName(sid))
-            .font(.system(size: 8, design: .monospaced))
-            .foregroundColor(.purple.opacity(0.5))
-        }
-      }
+    VStack(alignment: .leading, spacing: 4) {
+      // DETECTION: MITRE + scanner + method on compact lines
+      detectionSection(first)
       // Evidence (primary content)
       if !evidence.isEmpty {
         evidenceBlock(evidence)
@@ -187,6 +175,26 @@ struct AnalysisPanel: View {
         if anomalies.count > 15 {
           monoLine("... +\(anomalies.count - 15) more")
         }
+      }
+    }
+  }
+
+  // MARK: - Detection context
+
+  private func detectionSection(_ first: ProcessAnomaly?) -> some View {
+    VStack(alignment: .leading, spacing: 2) {
+      HStack(spacing: 6) {
+        label("DETECTION", color: .purple)
+        if let mitre = anomalies.compactMap(\.mitreID).first {
+          Text(mitre)
+            .font(.system(size: 9, weight: .medium, design: .monospaced))
+            .foregroundColor(.red.opacity(0.7))
+        }
+      }
+      if let f = first {
+        let scanner = scannerDisplayName(f.scannerId)
+        let method = f.enumMethod.isEmpty ? "" : " · \(f.enumMethod)"
+        monoLine("\(scanner)\(method)")
       }
     }
   }

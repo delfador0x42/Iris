@@ -85,6 +85,61 @@ public enum CorrelationRuleDefinitions {
                 mitreId: "T1543.001",
                 mitreName: "Persistence + execution chain"
             ),
+
+            // Memory injection + C2: mmap executable → mprotect W→X → network
+            // (Active implant pattern: dylib load + shellcode + phone home)
+            CorrelationRule(
+                id: "corr_injection_c2",
+                name: "Memory injection + C2 activation",
+                stages: [
+                    RuleStage(eventType: "mmap", conditions: [.processNotAppleSigned]),
+                    RuleStage(eventType: "mprotect", conditions: [.processNotAppleSigned]),
+                    RuleStage(eventType: "connection"),
+                ],
+                timeWindow: 120,
+                correlationKey: .processPath,
+                severity: .critical,
+                mitreId: "T1055",
+                mitreName: "Process injection + C2"
+            ),
+
+            // Thread injection + credential theft
+            // (Inject into trusted process, then steal credentials)
+            CorrelationRule(
+                id: "corr_thread_inject_cred",
+                name: "Thread injection + credential theft",
+                stages: [
+                    RuleStage(eventType: "remote_thread_create", conditions: [.processNotAppleSigned]),
+                    RuleStage(
+                        eventType: "file_open",
+                        conditions: [
+                            .fieldMatchesRegex("target_path",
+                                "(keychain|Login Data|Cookies|key4\\.db|logins\\.json)")
+                        ]
+                    ),
+                ],
+                timeWindow: 60,
+                correlationKey: .pid,
+                severity: .critical,
+                mitreId: "T1055",
+                mitreName: "Injection + credential theft"
+            ),
+
+            // Thread injection + shellcode + exfiltration (Pegasus-style)
+            CorrelationRule(
+                id: "corr_thread_wx_exfil",
+                name: "Thread injection + shellcode + exfiltration",
+                stages: [
+                    RuleStage(eventType: "remote_thread_create", conditions: [.processNotAppleSigned]),
+                    RuleStage(eventType: "mprotect"),
+                    RuleStage(eventType: "connection"),
+                ],
+                timeWindow: 60,
+                correlationKey: .pid,
+                severity: .critical,
+                mitreId: "T1055",
+                mitreName: "Thread injection + shellcode + C2"
+            ),
         ]
     }
 }

@@ -15,6 +15,7 @@ struct ScanResultsView: View {
       } else {
         ThemedScrollView {
           LazyVStack(spacing: 0) {
+            scanHeader
             correlationsSection
             anomalySection(severity: .critical)
             anomalySection(severity: .high)
@@ -49,6 +50,65 @@ struct ScanResultsView: View {
         .font(.system(size: 13, design: .monospaced))
         .foregroundColor(.gray.opacity(0.5))
     }
+  }
+
+  // MARK: - Scan Header
+
+  @ViewBuilder
+  private var scanHeader: some View {
+    if let r = session.scanResult {
+      VStack(alignment: .leading, spacing: 2) {
+        HStack(spacing: 6) {
+          label("LAST SCAN", color: .cyan)
+          Text(r.timestamp, style: .time)
+            .font(.system(size: 9, design: .monospaced))
+            .foregroundColor(.white.opacity(0.5))
+          Text("\u{00B7}")
+            .foregroundColor(.white.opacity(0.2))
+          Text("\(r.scannerCount) engines")
+            .font(.system(size: 9, design: .monospaced))
+            .foregroundColor(.white.opacity(0.4))
+          Text("\u{00B7}")
+            .foregroundColor(.white.opacity(0.2))
+          Text(String(format: "%.1fs", r.scanDuration))
+            .font(.system(size: 9, design: .monospaced))
+            .foregroundColor(.white.opacity(0.4))
+          Text("\u{00B7}")
+            .foregroundColor(.white.opacity(0.2))
+          Text("\(r.totalFindings) findings")
+            .font(.system(size: 9, weight: .medium, design: .monospaced))
+            .foregroundColor(r.criticalCount > 0 ? .red.opacity(0.8) : .white.opacity(0.5))
+          if r.criticalCount > 0 {
+            Text("(\(r.criticalCount) critical)")
+              .font(.system(size: 9, design: .monospaced))
+              .foregroundColor(.red.opacity(0.6))
+          }
+        }
+        if let d = session.diff, d.hasChanges {
+          HStack(spacing: 6) {
+            label("\u{0394}", color: .cyan.opacity(0.6))
+            if !d.newFindings.isEmpty {
+              Text("+\(d.newFindings.count) new")
+                .font(.system(size: 9, design: .monospaced))
+                .foregroundColor(.orange.opacity(0.7))
+            }
+            if !d.resolvedFindings.isEmpty {
+              Text("-\(d.resolvedFindings.count) resolved")
+                .font(.system(size: 9, design: .monospaced))
+                .foregroundColor(.green.opacity(0.7))
+            }
+          }
+        }
+      }
+      .padding(.horizontal, 20).padding(.vertical, 6)
+      .background(Color.white.opacity(0.02))
+    }
+  }
+
+  private func label(_ text: String, color: Color) -> some View {
+    Text(text)
+      .font(.system(size: 8, weight: .bold, design: .monospaced))
+      .foregroundColor(color.opacity(0.7))
   }
 
   // MARK: - Sections

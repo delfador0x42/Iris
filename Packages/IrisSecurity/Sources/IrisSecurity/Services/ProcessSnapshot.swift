@@ -39,4 +39,22 @@ public struct ProcessSnapshot: Sendable {
         guard !p.isEmpty else { return "unknown" }
         return URL(fileURLWithPath: p).lastPathComponent
     }
+
+    /// Walk the parent chain up to maxDepth. Returns [pid, parent, grandparent, ...]
+    public func ancestry(of pid: pid_t, maxDepth: Int = 8) -> [pid_t] {
+        var chain: [pid_t] = []
+        var current = pid
+        for _ in 0..<maxDepth {
+            let p = parent(of: current)
+            guard p > 1, p != current else { break }
+            chain.append(p)
+            current = p
+        }
+        return chain
+    }
+
+    /// Walk the parent chain and return process names
+    public func ancestryNames(of pid: pid_t, maxDepth: Int = 8) -> [String] {
+        ancestry(of: pid, maxDepth: maxDepth).map { name(for: $0) }
+    }
 }

@@ -30,6 +30,31 @@ public actor DNSTunnelingDetector {
             if samples.count < 50 { samples.append(String(sub)) }
             subdomainSamples[baseDomain] = samples
         }
+
+        // Real-time single-query check: high-entropy subdomain → immediate alert
+        if checkQuery(domain: domain) {
+            let event = SecurityEvent(
+                source: .dns, eventType: "dns_exfil",
+                processName: "DNS", processPath: "",
+                pid: 0, fields: [
+                    "domain": domain, "base_domain": baseDomain,
+                    "record_type": recordType,
+                ])
+            Task { await SecurityEventBus.shared.ingest(event) }
+            logger.warning("[DNS] Exfil indicator: \(domain)")
+        }
+
+        // DGA check on base domain
+        if DGADetector.isDGA(baseDomain) {
+            let event = SecurityEvent(
+                source: .dns, eventType: "dns_dga",
+                processName: "DNS", processPath: "",
+                pid: 0, fields: [
+                    "domain": domain, "base_domain": baseDomain,
+                ])
+            Task { await SecurityEventBus.shared.ingest(event) }
+            logger.warning("[DNS] DGA domain: \(baseDomain)")
+        }
     }
 
     /// Analyze current DNS patterns for tunneling indicators

@@ -70,6 +70,23 @@ public enum EvasionRules {
                 mitreId: "T1070.002",
                 mitreName: "Indicator Removal: Clear Linux or Mac System Logs"
             ),
+            // Suspicious process genealogy: browser/office → shell
+            // (Dropper pattern: app exploited → spawns shell → payload)
+            DetectionRule(
+                id: "evasion_browser_shell_spawn",
+                name: "Browser/office app spawned shell process",
+                eventType: "auth_exec",
+                conditions: [
+                    .processNameIn(["sh", "bash", "zsh", "dash", "ksh"]),
+                    .parentNameIn(["Safari", "Google Chrome", "Firefox",
+                                   "Microsoft Word", "Microsoft Excel", "Microsoft PowerPoint",
+                                   "Pages", "Numbers", "Keynote", "Preview",
+                                   "Mail", "Messages"]),
+                ],
+                severity: .critical,
+                mitreId: "T1059.004",
+                mitreName: "Command and Scripting Interpreter: Unix Shell"
+            ),
         ]
     }
 }

@@ -136,6 +136,8 @@ class ESClient {
             ES_EVENT_TYPE_NOTIFY_XP_MALWARE_DETECTED,
             // Authorization (real-time blocking)
             ES_EVENT_TYPE_AUTH_EXEC,
+            ES_EVENT_TYPE_AUTH_MPROTECT,
+            ES_EVENT_TYPE_AUTH_OPEN,
         ]
 
         logger.info("[ES] Subscribing to \(events.count) event types...")
@@ -229,6 +231,8 @@ class ESClient {
 
         // Authorization (real-time blocking — requires immediate response)
         case ES_EVENT_TYPE_AUTH_EXEC: handleAuthExec(message)
+        case ES_EVENT_TYPE_AUTH_MPROTECT: handleAuthMprotect(message)
+        case ES_EVENT_TYPE_AUTH_OPEN: handleAuthOpen(message)
 
         default:
             break
