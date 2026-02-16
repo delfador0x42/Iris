@@ -19,6 +19,8 @@ struct RawESEvent: Codable {
   let targetPath: String?
   let targetProcess: RawESProcess?
   let detail: String?
+  let parentPath: String?
+  let parentName: String?
   let sequenceNumber: UInt64
 }
 
@@ -67,11 +69,16 @@ extension RawESEvent {
       fields["target_path_full"] = tp.path
     }
     fields["ppid"] = "\(process.ppid)"
-    if process.ppid > 1 {
-      let parentPath = ProcessEnumeration.getProcessPath(process.ppid)
-      if !parentPath.isEmpty {
-        fields["parent_name"] = URL(fileURLWithPath: parentPath).lastPathComponent
-        fields["parent_path"] = parentPath
+    if let pp = parentPath, !pp.isEmpty {
+      // Pre-resolved at event creation time (reliable — parent was alive)
+      fields["parent_path"] = pp
+      fields["parent_name"] = parentName ?? URL(fileURLWithPath: pp).lastPathComponent
+    } else if process.ppid > 1 {
+      // Fallback: runtime lookup (may fail if parent already exited)
+      let pp = ProcessEnumeration.getProcessPath(process.ppid)
+      if !pp.isEmpty {
+        fields["parent_name"] = URL(fileURLWithPath: pp).lastPathComponent
+        fields["parent_path"] = pp
       }
     }
     fields["uid"] = "\(process.userId)"
@@ -99,19 +106,19 @@ extension RawESEventType {
     case .fileUnlink: return "file_unlink"
     case .fileRename: return "file_rename"
     case .fileSetExtattr: return "file_setextattr"
-    case .setuid: return "privilege_setuid"
-    case .setgid: return "privilege_setgid"
-    case .sudo: return "privilege_sudo"
-    case .remoteThreadCreate: return "inject_remote_thread"
-    case .getTask: return "inject_get_task"
-    case .ptrace: return "inject_ptrace"
-    case .kextLoad: return "system_kext_load"
-    case .mount: return "system_mount"
-    case .tccModify: return "system_tcc_modify"
-    case .xpcConnect: return "system_xpc_connect"
-    case .btmLaunchItemAdd: return "persist_btm_add"
-    case .sshLogin: return "auth_ssh_login"
-    case .xprotectMalwareDetected: return "auth_xprotect"
+    case .setuid: return "setuid"
+    case .setgid: return "setgid"
+    case .sudo: return "sudo"
+    case .remoteThreadCreate: return "remote_thread_create"
+    case .getTask: return "get_task"
+    case .ptrace: return "ptrace"
+    case .kextLoad: return "kext_load"
+    case .mount: return "mount"
+    case .tccModify: return "tcc_modify"
+    case .xpcConnect: return "xpc_connect"
+    case .btmLaunchItemAdd: return "btm_launch_item_add"
+    case .sshLogin: return "ssh_login"
+    case .xprotectMalwareDetected: return "xprotect_malware"
     case .authExec: return "auth_exec"
     case .authOpen: return "auth_open"
     case .mmap: return "mmap"

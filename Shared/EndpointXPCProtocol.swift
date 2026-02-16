@@ -23,6 +23,15 @@ import Foundation
 
     func getStatus(reply: @escaping ([String: Any]) -> Void)
     func isEndpointSecurityAvailable(reply: @escaping (Bool) -> Void)
+
+    // MARK: - ExecPolicy Configuration
+
+    /// Push threat intel blocklists from main app to extension
+    func updateBlocklists(paths: [String], teamIds: [String], signingIds: [String],
+                          reply: @escaping (Bool) -> Void)
+
+    /// Toggle enforcement mode (true = enforce, false = audit only)
+    func setEnforcementMode(_ enforce: Bool, reply: @escaping (Bool) -> Void)
 }
 
 // MARK: - Service Names

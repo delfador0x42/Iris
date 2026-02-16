@@ -220,16 +220,26 @@ public actor NetworkAnomalyDetector {
     }
 
     anomalies.append(contentsOf: detectBeaconing())
+    anomalies.append(contentsOf: detectBaselineAnomalies())
     return anomalies
   }
 
   // MARK: - Helpers (internal for +LsofFallback split)
 
   func isPrivateIP(_ ip: String) -> Bool {
-    ip.hasPrefix("10.") || ip.hasPrefix("192.168.") || ip.hasPrefix("172.16.")
-      || ip.hasPrefix("172.17.") || ip.hasPrefix("172.18.") || ip.hasPrefix("172.19.")
-      || ip.hasPrefix("172.2") || ip.hasPrefix("172.3") || ip.hasPrefix("127.") || ip == "0.0.0.0"
-      || ip == "localhost" || ip.hasPrefix("::1") || ip.hasPrefix("fe80:") || ip.hasPrefix("fd")
+    if ip.hasPrefix("10.") || ip.hasPrefix("192.168.") || ip.hasPrefix("127.")
+      || ip == "0.0.0.0" || ip == "localhost"
+      || ip.hasPrefix("::1") || ip.hasPrefix("fe80:") || ip.hasPrefix("fd") {
+      return true
+    }
+    // RFC 1918: 172.16.0.0 - 172.31.255.255 (second octet 16-31)
+    if ip.hasPrefix("172.") {
+      let parts = ip.split(separator: ".", maxSplits: 2)
+      if parts.count >= 2, let octet2 = Int(parts[1]) {
+        return octet2 >= 16 && octet2 <= 31
+      }
+    }
+    return false
   }
 
   func isRawIP(_ addr: String) -> Bool {

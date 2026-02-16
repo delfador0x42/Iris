@@ -95,6 +95,18 @@ public enum CredentialTheftRules {
                 mitreId: "T1552.004",
                 mitreName: "Private Keys"
             ),
+            // AUTH_OPEN: credential file access blocked by ExecPolicy
+            DetectionRule(
+                id: "cred_auth_open_denied",
+                name: "Credential file access blocked",
+                eventType: "auth_open",
+                conditions: [
+                    .processNotAppleSigned,
+                ],
+                severity: .critical,
+                mitreId: "T1555",
+                mitreName: "Credentials from Password Stores"
+            ),
         ]
     }
 }

@@ -68,6 +68,8 @@ struct ESSecurityEvent: Codable, Identifiable {
     let targetPath: String?
     let targetProcess: ESProcessInfo?
     let detail: String?
+    let parentPath: String?
+    let parentName: String?
     var sequenceNumber: UInt64
 
     init(
@@ -77,6 +79,8 @@ struct ESSecurityEvent: Codable, Identifiable {
         targetPath: String? = nil,
         targetProcess: ESProcessInfo? = nil,
         detail: String? = nil,
+        parentPath: String? = nil,
+        parentName: String? = nil,
         sequenceNumber: UInt64 = 0
     ) {
         self.id = UUID()
@@ -86,6 +90,8 @@ struct ESSecurityEvent: Codable, Identifiable {
         self.targetPath = targetPath
         self.targetProcess = targetProcess
         self.detail = detail
+        self.parentPath = parentPath
+        self.parentName = parentName
         self.sequenceNumber = sequenceNumber
     }
 }

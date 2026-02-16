@@ -48,11 +48,27 @@ extension ESClient {
         targetProcess: ESProcessInfo? = nil,
         detail: String? = nil
     ) {
+        // Resolve parent path NOW while the parent is likely still alive.
+        // ESEventDecoder does this too late — parent may have exited by then.
+        var resolvedParentPath: String? = nil
+        var resolvedParentName: String? = nil
+        if process.ppid > 1 {
+            let buf = UnsafeMutablePointer<UInt8>.allocate(capacity: Int(MAXPATHLEN))
+            defer { buf.deallocate() }
+            let len = proc_pidpath(process.ppid, buf, UInt32(MAXPATHLEN))
+            if len > 0 {
+                let path = String(cString: buf)
+                resolvedParentPath = path
+                resolvedParentName = URL(fileURLWithPath: path).lastPathComponent
+            }
+        }
+
         securityRingLock.lock()
         securitySequence += 1
         var event = ESSecurityEvent(
             eventType: type, process: process, timestamp: Date(),
-            targetPath: targetPath, targetProcess: targetProcess, detail: detail
+            targetPath: targetPath, targetProcess: targetProcess, detail: detail,
+            parentPath: resolvedParentPath, parentName: resolvedParentName
         )
         event.sequenceNumber = securitySequence
 

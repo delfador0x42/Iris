@@ -9,7 +9,11 @@ public actor SecurityEventBus {
 
   private let logger = Logger(subsystem: "com.wudan.iris", category: "EventBus")
   private let serviceName = "99HGW2AR62.com.wudan.iris.endpoint.xpc"
-  private let decoder = JSONDecoder()
+  private let decoder: JSONDecoder = {
+    let d = JSONDecoder()
+    d.dateDecodingStrategy = .iso8601
+    return d
+  }()
 
   private var esSequence: UInt64 = 0
   private var isRunning = false
@@ -86,7 +90,11 @@ public actor SecurityEventBus {
     var secEvents: [SecurityEvent] = []
     secEvents.reserveCapacity(dataArray.count)
     for data in dataArray {
-      guard let raw = try? decoder.decode(RawESEvent.self, from: data) else {
+      let raw: RawESEvent
+      do {
+        raw = try decoder.decode(RawESEvent.self, from: data)
+      } catch {
+        logger.error("[BUS] Decode failed: \(error.localizedDescription)")
         continue
       }
       secEvents.append(raw.toSecurityEvent())

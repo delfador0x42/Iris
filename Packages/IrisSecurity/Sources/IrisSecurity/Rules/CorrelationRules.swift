@@ -54,8 +54,8 @@ public enum CorrelationRuleDefinitions {
                 name: "Fake password prompt + exfiltration",
                 stages: [
                     RuleStage(
-                        eventType: "exec",
-                        conditions: [.fieldContains("process_name", "osascript")]
+                        eventType: "auth_exec",
+                        conditions: [.processNameIn(["osascript"])]
                     ),
                     RuleStage(eventType: "file_write"),
                     RuleStage(eventType: "connection"),
@@ -77,7 +77,7 @@ public enum CorrelationRuleDefinitions {
                         eventType: "file_write",
                         conditions: [.fieldContains("target_path", "LaunchAgents/")]
                     ),
-                    RuleStage(eventType: "exec"),
+                    RuleStage(eventType: "auth_exec"),
                 ],
                 timeWindow: 120,
                 correlationKey: .processPath,

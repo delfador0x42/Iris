@@ -216,4 +216,19 @@ extension ESXPCService: EndpointXPCProtocol {
         logger.debug("[XPC] isEndpointSecurityAvailable → \(available)")
         reply(available)
     }
+
+    func updateBlocklists(paths: [String], teamIds: [String], signingIds: [String],
+                          reply: @escaping (Bool) -> Void) {
+        ExecPolicy.updateBlocklists(
+            paths: Set(paths), teamIds: Set(teamIds), signingIds: Set(signingIds)
+        )
+        logger.info("[XPC] updateBlocklists → \(paths.count) paths, \(teamIds.count) teams, \(signingIds.count) sigIDs")
+        reply(true)
+    }
+
+    func setEnforcementMode(_ enforce: Bool, reply: @escaping (Bool) -> Void) {
+        ExecPolicy.auditMode = !enforce
+        logger.info("[XPC] setEnforcementMode → enforce=\(enforce) (auditMode=\(!enforce))")
+        reply(true)
+    }
 }

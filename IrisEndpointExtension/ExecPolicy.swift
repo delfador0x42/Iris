@@ -54,20 +54,17 @@ enum ExecPolicy {
             return Decision(allow: true, reason: "unsigned_unusual_path", cache: false)
         }
 
-        // Threat intel: blocked paths
-        if blockedPaths.contains(path) {
+        // Threat intel: snapshot blocklists under lock, then check
+        let blocks = blockedSnapshot
+        if blocks.paths.contains(path) {
             logger.warning("[POLICY] DENY: threat intel blocked path: \(path)")
             return Decision(allow: false, reason: "threat_intel_path", cache: true)
         }
-
-        // Threat intel: blocked team IDs
-        if let tid = teamId, blockedTeamIds.contains(tid) {
+        if let tid = teamId, blocks.teams.contains(tid) {
             logger.warning("[POLICY] DENY: threat intel blocked team: \(tid) path=\(path)")
             return Decision(allow: false, reason: "threat_intel_team", cache: true)
         }
-
-        // Known-bad signing IDs
-        if let sid = signingId, blockedSigningIds.contains(sid) {
+        if let sid = signingId, blocks.sigs.contains(sid) {
             logger.warning("[POLICY] DENY: blocked signing ID: \(sid) path=\(path)")
             return Decision(allow: false, reason: "blocked_signing_id", cache: true)
         }
@@ -165,19 +162,27 @@ enum ExecPolicy {
 
     // MARK: - Threat Intel Blocklists (updatable via XPC)
 
+    private static let blocksLock = NSLock()
     private static var blockedPaths: Set<String> = []
     private static var blockedTeamIds: Set<String> = []
+    private static var blockedSigningIds: Set<String> = []
 
-    /// Update blocklists from main app via XPC
+    /// Thread-safe snapshot of blocklists for evaluate()
+    private static var blockedSnapshot: (paths: Set<String>, teams: Set<String>, sigs: Set<String>) {
+        blocksLock.lock()
+        defer { blocksLock.unlock() }
+        return (blockedPaths, blockedTeamIds, blockedSigningIds)
+    }
+
+    /// Update blocklists from main app via XPC (called on XPC thread)
     static func updateBlocklists(
         paths: Set<String>, teamIds: Set<String>, signingIds: Set<String>
     ) {
+        blocksLock.lock()
         blockedPaths = paths
         blockedTeamIds = teamIds
         blockedSigningIds = signingIds
+        blocksLock.unlock()
         logger.info("[POLICY] Updated blocklists: \(paths.count) paths, \(teamIds.count) teams, \(signingIds.count) sigIDs")
     }
-
-    /// Signing IDs of known-malicious tools. Extend as threat intel arrives.
-    private static var blockedSigningIds: Set<String> = []
 }

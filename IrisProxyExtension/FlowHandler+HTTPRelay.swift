@@ -22,6 +22,8 @@ extension FlowHandler {
     let startTime = CFAbsoluteTimeGetCurrent()
     let state = RelayState()
     let xpcService = self.provider?.xpcService
+    let bytesOut = ByteCounter()
+    let bytesIn = ByteCounter()
 
     await withTaskGroup(of: Void.self) { group in
       // Overall relay timeout guard
@@ -43,6 +45,7 @@ extension FlowHandler {
           }
           if result.error != nil { break }
           guard let data = result.data, !data.isEmpty else { break }
+          bytesOut.add(Int64(data.count))
 
           state.appendToRequestBuffer(data)
 
@@ -92,6 +95,7 @@ extension FlowHandler {
           do {
             let serverData = try await Self.receiveFromServer(serverConnection)
             guard !serverData.isEmpty else { continue }
+            bytesIn.add(Int64(serverData.count))
 
             state.appendToResponseBuffer(serverData)
 
@@ -172,6 +176,8 @@ extension FlowHandler {
     }
 
     serverConnection.cancel()
+    xpcService?.completeFlow(
+      flowId, bytesIn: bytesIn.value, bytesOut: bytesOut.value, error: nil)
     provider?.removeFlow(flowId)
   }
 }

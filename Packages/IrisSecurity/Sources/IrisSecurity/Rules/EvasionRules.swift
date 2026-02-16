@@ -70,6 +70,42 @@ public enum EvasionRules {
                 mitreId: "T1070.002",
                 mitreName: "Indicator Removal: Clear Linux or Mac System Logs"
             ),
+            // setgid to wheel/admin by non-system process (privilege escalation)
+            DetectionRule(
+                id: "evasion_setgid_escalation",
+                name: "Process changed group via setgid",
+                eventType: "setgid",
+                conditions: [
+                    .processNotAppleSigned,
+                ],
+                severity: .high,
+                mitreId: "T1548.001",
+                mitreName: "Setuid and Setgid"
+            ),
+            // sudo usage by non-interactive process (automated privilege escalation)
+            DetectionRule(
+                id: "evasion_sudo_abuse",
+                name: "sudo invoked by non-system process",
+                eventType: "sudo",
+                conditions: [
+                    .processNotAppleSigned,
+                ],
+                severity: .high,
+                mitreId: "T1548.003",
+                mitreName: "Sudo and Sudo Caching"
+            ),
+            // Process suspend/resume by non-system process (anti-forensics: freeze defenders)
+            DetectionRule(
+                id: "evasion_proc_suspend",
+                name: "Process suspended by non-system binary",
+                eventType: "proc_suspend_resume",
+                conditions: [
+                    .processNotAppleSigned,
+                ],
+                severity: .high,
+                mitreId: "T1562.001",
+                mitreName: "Impair Defenses: Disable or Modify Tools"
+            ),
             // Suspicious process genealogy: browser/office → shell
             // (Dropper pattern: app exploited → spawns shell → payload)
             DetectionRule(

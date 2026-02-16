@@ -34,6 +34,40 @@ struct IrisMainApp: App {
       // 4. Initialize detection engine with all rules, start event bus
       await RuleLoader.loadAll()
       await SecurityEventBus.shared.start()
+
+      // 5. Push threat intel blocklists to endpoint extension
+      await IrisMainApp.pushThreatIntel()
+
+      // 6. Bridge network + DNS data into the detection pipeline
+      await NetworkEventBridge.shared.start()
+      await DNSEventBridge.shared.start()
+    }
+  }
+
+  @MainActor
+  static func pushThreatIntel() async {
+    let logger = Logger(subsystem: "com.wudan.iris", category: "IrisApp")
+    let indicators = ThreatIntelStore.allIndicators()
+    let paths = indicators.filter { $0.type == .filePath }.map(\.value)
+    let signingIds = indicators.filter { $0.type == .signingId }.map(\.value)
+    guard !paths.isEmpty || !signingIds.isEmpty else { return }
+
+    let conn = NSXPCConnection(machServiceName: EndpointXPCService.extensionServiceName)
+    conn.remoteObjectInterface = NSXPCInterface(with: EndpointXPCProtocol.self)
+    conn.resume()
+    defer { conn.invalidate() }
+
+    guard let proxy = conn.remoteObjectProxyWithErrorHandler({ error in
+      logger.error("[THREAT-INTEL] XPC error: \(error.localizedDescription)")
+    }) as? EndpointXPCProtocol else { return }
+
+    let ok: Bool = await withCheckedContinuation { cont in
+      proxy.updateBlocklists(paths: paths, teamIds: [], signingIds: signingIds) { ok in
+        cont.resume(returning: ok)
+      }
+    }
+    if ok {
+      logger.info("[THREAT-INTEL] Pushed \(paths.count) paths, \(signingIds.count) sigIDs to ExecPolicy")
     }
   }
 

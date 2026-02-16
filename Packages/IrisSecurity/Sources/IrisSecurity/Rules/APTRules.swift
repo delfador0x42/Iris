@@ -38,9 +38,9 @@ public enum APTRules {
         // NotLockBit: Desktop wallpaper change via osascript (ransomware indicator)
         DetectionRule(
             id: "apt_wallpaper_change", name: "Desktop Wallpaper Change via Script",
-            eventType: "exec",
+            eventType: "auth_exec",
             conditions: [
-                .fieldEquals("process_name", "osascript"),
+                .processNameIn(["osascript"]),
                 .fieldContains("args", "desktop picture"),
             ],
             severity: .critical, mitreId: "T1491", mitreName: "Defacement"),
@@ -48,7 +48,7 @@ public enum APTRules {
         // Supply chain: npm preinstall hook spawning network connections
         DetectionRule(
             id: "apt_npm_preinstall", name: "npm Lifecycle Script Network Access",
-            eventType: "exec",
+            eventType: "auth_exec",
             conditions: [
                 .fieldContains("args", "preinstall"),
                 .fieldContains("parent_path", "node_modules"),
@@ -60,7 +60,7 @@ public enum APTRules {
             id: "apt_cron_write", name: "Cron Job Creation",
             eventType: "file_write",
             conditions: [
-                .fieldContains("path", "/var/at/tabs/"),
+                .fieldContains("target_path", "/var/at/tabs/"),
                 .processNotAppleSigned,
             ],
             severity: .high, mitreId: "T1053.003", mitreName: "Cron"),
@@ -70,7 +70,7 @@ public enum APTRules {
             id: "apt_zshrc_hijack", name: "Shell Profile Modification",
             eventType: "file_write",
             conditions: [
-                .fieldContains("path", ".zshrc"),
+                .fieldContains("target_path", ".zshrc"),
                 .processNameNotIn(["zsh", "bash", "sh", "vim", "nvim", "nano", "code", "cursor"]),
             ],
             severity: .critical, mitreId: "T1546.004", mitreName: "Unix Shell Config Modification"),
@@ -80,7 +80,7 @@ public enum APTRules {
             id: "apt_filesystems_write", name: "Write to /Library/Filesystems",
             eventType: "file_write",
             conditions: [
-                .fieldContains("path", "/Library/Filesystems/"),
+                .fieldContains("target_path", "/Library/Filesystems/"),
             ],
             severity: .critical, mitreId: "T1553.006", mitreName: "Code Signing Policy Modification"),
 
@@ -89,7 +89,7 @@ public enum APTRules {
             id: "apt_mass_rename", name: "Mass File Rename (Ransomware)",
             eventType: "file_rename",
             conditions: [
-                .fieldContains("path", ".abcd"),  // NotLockBit extension
+                .fieldContains("target_path", ".abcd"),  // NotLockBit extension
             ],
             severity: .critical, mitreId: "T1486", mitreName: "Data Encrypted for Impact"),
 
@@ -98,7 +98,7 @@ public enum APTRules {
             id: "apt_var_tmp_staging", name: "Payload Drop in /var/tmp",
             eventType: "file_write",
             conditions: [
-                .fieldHasPrefix("path", "/var/tmp/"),
+                .fieldHasPrefix("target_path", "/var/tmp/"),
                 .processNotAppleSigned,
             ],
             severity: .high, mitreId: "T1074.001", mitreName: "Local Data Staging"),

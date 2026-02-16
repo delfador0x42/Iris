@@ -89,6 +89,63 @@ public enum C2Rules {
             mitreName: "Proxy: Multi-hop Proxy"
         ))
 
+        // SSH login (lateral movement / unauthorized access)
+        rules.append(DetectionRule(
+            id: "c2_ssh_login",
+            name: "SSH login detected",
+            eventType: "ssh_login",
+            conditions: [],
+            severity: .medium,
+            mitreId: "T1021.004",
+            mitreName: "Remote Services: SSH"
+        ))
+
+        // XPC connection by non-system process to privileged service
+        rules.append(DetectionRule(
+            id: "c2_xpc_priv_connect",
+            name: "Non-system XPC connection to privileged service",
+            eventType: "xpc_connect",
+            conditions: [
+                .processNotAppleSigned,
+            ],
+            severity: .medium,
+            mitreId: "T1559",
+            mitreName: "Inter-Process Communication"
+        ))
+
+        // XProtect malware detection (Apple's built-in signature match)
+        rules.append(DetectionRule(
+            id: "c2_xprotect_malware",
+            name: "XProtect malware signature detected",
+            eventType: "xprotect_malware",
+            conditions: [],
+            severity: .critical,
+            mitreId: "T1204",
+            mitreName: "User Execution"
+        ))
+
+        // DNS exfiltration detected by entropy analysis
+        rules.append(DetectionRule(
+            id: "c2_dns_exfil",
+            name: "DNS exfiltration indicator (high entropy subdomain)",
+            eventType: "dns_exfil",
+            conditions: [],
+            severity: .high,
+            mitreId: "T1071.004",
+            mitreName: "Application Layer Protocol: DNS"
+        ))
+
+        // DGA domain detected
+        rules.append(DetectionRule(
+            id: "c2_dns_dga",
+            name: "Algorithmically-generated domain detected",
+            eventType: "dns_dga",
+            conditions: [],
+            severity: .high,
+            mitreId: "T1568.002",
+            mitreName: "Dynamic Resolution: Domain Generation Algorithms"
+        ))
+
         return rules
     }
 }

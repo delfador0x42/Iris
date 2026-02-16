@@ -22,6 +22,8 @@ extension FlowHandler {
     let startTime = CFAbsoluteTimeGetCurrent()
     let state = RelayState()
     let xpcService = self.provider?.xpcService
+    let bytesOut = ByteCounter()
+    let bytesIn = ByteCounter()
 
     await withTaskGroup(of: Void.self) { group in
       // Overall relay timeout guard
@@ -37,6 +39,7 @@ extension FlowHandler {
         do {
           while true {
             let decryptedData = try await clientTLS.read()
+            bytesOut.add(Int64(decryptedData.count))
             state.appendToRequestBuffer(decryptedData)
 
             if !state.hasRequest {
@@ -80,6 +83,7 @@ extension FlowHandler {
           while true {
             let serverData = try await Self.receiveFromServer(serverConnection)
             guard !serverData.isEmpty else { continue }
+            bytesIn.add(Int64(serverData.count))
 
             state.appendToResponseBuffer(serverData)
 
@@ -158,6 +162,8 @@ extension FlowHandler {
 
     serverConnection.cancel()
     clientTLS.close()
+    xpcService?.completeFlow(
+      flowId, bytesIn: bytesIn.value, bytesOut: bytesOut.value, error: nil)
     provider?.removeFlow(flowId)
   }
 }
