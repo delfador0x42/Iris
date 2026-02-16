@@ -20,17 +20,6 @@ enum DEREncoder {
     static func buildPrintableString(_ string: String) -> [UInt8] { RustDEREncoder.buildPrintableString(string) }
     static func buildGeneralizedTime(_ date: Date) -> [UInt8] { RustDEREncoder.buildGeneralizedTime(date) }
 
-    static func encodeOIDComponent(_ value: UInt) -> [UInt8] {
-        if value < 128 { return [UInt8(value)] }
-        var bytes: [UInt8] = []
-        var v = value
-        while v > 0 {
-            bytes.insert(UInt8(v & 0x7F) | (bytes.isEmpty ? 0 : 0x80), at: 0)
-            v >>= 7
-        }
-        return bytes
-    }
-
     static func encodeLength(_ length: Int) -> [UInt8] {
         if length < 128 { return [UInt8(length)] }
         var bytes: [UInt8] = []

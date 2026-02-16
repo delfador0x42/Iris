@@ -95,6 +95,20 @@ public actor SecurityEventBus {
     if !secEvents.isEmpty {
       totalIngested += UInt64(secEvents.count)
       await DetectionEngine.shared.processBatch(secEvents)
+
+      // Forward file events to PersistenceMonitor for real-time persistence detection
+      for event in secEvents {
+        guard let path = event.fields["target_path"] else { continue }
+        let fileEvent: FileEventType? = switch event.eventType {
+        case "file_write": .modified
+        case "file_unlink": .deleted
+        case "file_rename": .renamed
+        default: nil
+        }
+        guard let fe = fileEvent else { continue }
+        await PersistenceMonitor.shared.processFileEvent(
+          path: path, eventType: fe, pid: event.pid, processPath: event.processPath)
+      }
     }
   }
 

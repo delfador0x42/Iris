@@ -44,7 +44,13 @@ extension PersistenceScanner {
             return []
         }
         var ev: [Evidence] = []
-        let lower = content.lowercased()
+
+        // Deobfuscate first — decode ${IFS}, hex, octal, printf, quote splitting
+        let deob = ShellDeobfuscator.deobfuscate(content)
+        ev.append(contentsOf: deob.evidence)
+
+        // Run pattern checks against decoded content (catches obfuscated payloads)
+        let lower = deob.decoded.lowercased()
 
         // Remote code execution: curl|bash, wget|sh, source <(curl...)
         if lower.contains("curl") && (lower.contains("| bash") || lower.contains("|bash") ||

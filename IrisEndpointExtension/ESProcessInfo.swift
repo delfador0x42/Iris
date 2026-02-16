@@ -52,8 +52,9 @@ enum SecurityEventType: String, Codable {
     case mmap, mprotect, procSuspendResume
     // System changes
     case kextLoad, mount, tccModify, xpcConnect, btmLaunchItemAdd
-    // Authentication
+    // Authentication / Authorization
     case sshLogin, xprotectMalwareDetected
+    case authExec
 }
 
 /// A security event captured by Endpoint Security.

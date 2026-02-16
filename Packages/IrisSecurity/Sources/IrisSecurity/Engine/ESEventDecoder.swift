@@ -28,6 +28,7 @@ enum RawESEventType: String, Codable {
   case remoteThreadCreate, getTask, ptrace
   case kextLoad, mount, tccModify, xpcConnect, btmLaunchItemAdd
   case sshLogin, xprotectMalwareDetected
+  case authExec
 }
 
 struct RawESProcess: Codable {
@@ -103,6 +104,7 @@ extension RawESEventType {
     case .btmLaunchItemAdd: return "persist_btm_add"
     case .sshLogin: return "auth_ssh_login"
     case .xprotectMalwareDetected: return "auth_xprotect"
+    case .authExec: return "auth_exec"
     }
   }
 }

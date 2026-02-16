@@ -9,8 +9,8 @@ class ESClient {
 
     let logger = Logger(subsystem: "com.wudan.iris.endpoint", category: "ESClient")
 
-    /// The ES client handle
-    private var client: OpaquePointer?
+    /// The ES client handle (internal for AUTH response from extension files)
+    private(set) var client: OpaquePointer?
 
     /// Live process table: pid -> process info
     var processTable: [pid_t: ESProcessInfo] = [:]
@@ -134,6 +134,8 @@ class ESClient {
             // Authentication
             ES_EVENT_TYPE_NOTIFY_OPENSSH_LOGIN,
             ES_EVENT_TYPE_NOTIFY_XP_MALWARE_DETECTED,
+            // Authorization (real-time blocking)
+            ES_EVENT_TYPE_AUTH_EXEC,
         ]
 
         logger.info("[ES] Subscribing to \(events.count) event types...")
@@ -224,6 +226,9 @@ class ESClient {
         // Authentication
         case ES_EVENT_TYPE_NOTIFY_OPENSSH_LOGIN: handleSSHLogin(message)
         case ES_EVENT_TYPE_NOTIFY_XP_MALWARE_DETECTED: handleXProtectMalware(message)
+
+        // Authorization (real-time blocking — requires immediate response)
+        case ES_EVENT_TYPE_AUTH_EXEC: handleAuthExec(message)
 
         default:
             break
