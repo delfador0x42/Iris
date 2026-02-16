@@ -10,5 +10,9 @@ ipsw_clean_dmg/
 
 notes/
 
+.claude/
+.vscode/
+.xcodebuildmcp/
+
 
 
