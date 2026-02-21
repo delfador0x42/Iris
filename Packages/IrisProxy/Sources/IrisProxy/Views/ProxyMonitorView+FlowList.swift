@@ -2,7 +2,7 @@
 //  ProxyMonitorView+FlowList.swift
 //  IrisProxy
 //
-//  Flow list, header, filter bar, and empty state for ProxyMonitorView.
+//  Flow list, header, filter bar — NieR aesthetic.
 //
 
 import SwiftUI
@@ -14,9 +14,9 @@ extension ProxyMonitorView {
   var flowListView: some View {
     VStack(spacing: 0) {
       flowListHeader
-      Divider()
+      thinDivider
       filterBar
-      Divider()
+      thinDivider
 
       if store.filteredFlows.isEmpty {
         emptyListView
@@ -24,59 +24,84 @@ extension ProxyMonitorView {
         List(store.filteredFlows, selection: $store.selectedFlow) { flow in
           FlowRowView(flow: flow)
             .tag(flow)
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
         }
         .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(Color(red: 0.01, green: 0.02, blue: 0.04))
       }
     }
+    .background(Color(red: 0.01, green: 0.02, blue: 0.04))
+  }
+
+  private var thinDivider: some View {
+    Rectangle()
+      .fill(Color.cyan.opacity(0.12))
+      .frame(height: 0.5)
   }
 
   var flowListHeader: some View {
     HStack {
       VStack(alignment: .leading, spacing: 2) {
-        Text("Network Flows")
-          .font(.headline)
-        Text("\(store.filteredFlows.count) of \(store.totalFlowCount) flows")
-          .font(.caption)
-          .foregroundColor(.secondary)
+        Text("NETWORK FLOWS")
+          .font(.system(size: 10, weight: .bold, design: .monospaced))
+          .foregroundColor(.cyan.opacity(0.7))
+        Text("\(store.filteredFlows.count)/\(store.totalFlowCount)")
+          .font(.system(size: 9, design: .monospaced))
+          .foregroundColor(.white.opacity(0.3))
       }
 
       Spacer()
 
-      HStack(spacing: 16) {
-        StatItem(title: "Success", value: "\(store.statistics.successful)", color: .green)
-        StatItem(
-          title: "Errors", value: "\(store.statistics.failed + store.statistics.errors)",
-          color: .red)
-        StatItem(title: "Pending", value: "\(store.statistics.pending)", color: .orange)
-        StatItem(title: "Total", value: store.statistics.totalBytesFormatted, color: .blue)
+      HStack(spacing: 12) {
+        StatItem(title: "OK", value: "\(store.statistics.successful)",
+                 color: Color(red: 0.3, green: 0.9, blue: 0.5))
+        StatItem(title: "ERR", value: "\(store.statistics.failed + store.statistics.errors)",
+                 color: Color(red: 1.0, green: 0.35, blue: 0.35))
+        StatItem(title: "WAIT", value: "\(store.statistics.pending)",
+                 color: Color(red: 1.0, green: 0.6, blue: 0.2))
+        StatItem(title: "DATA", value: store.statistics.totalBytesFormatted,
+                 color: .cyan)
       }
     }
-    .padding()
+    .padding(.horizontal, 12)
+    .padding(.vertical, 8)
+    .background(Color(red: 0.02, green: 0.03, blue: 0.06))
   }
 
   var filterBar: some View {
-    HStack(spacing: 12) {
-      // Search field
-      HStack {
+    HStack(spacing: 8) {
+      // Search field — dark themed
+      HStack(spacing: 6) {
         Image(systemName: "magnifyingglass")
-          .foregroundColor(.secondary)
-        TextField("Search flows...", text: $store.searchQuery)
+          .font(.system(size: 10))
+          .foregroundColor(.cyan.opacity(0.4))
+        TextField("Filter...", text: $store.searchQuery)
           .textFieldStyle(.plain)
+          .font(.system(size: 11, design: .monospaced))
+          .foregroundColor(.white.opacity(0.8))
         if !store.searchQuery.isEmpty {
           Button(action: { store.searchQuery = "" }) {
-            Image(systemName: "xmark.circle.fill")
-              .foregroundColor(.secondary)
+            Image(systemName: "xmark")
+              .font(.system(size: 8, weight: .bold))
+              .foregroundColor(.white.opacity(0.3))
           }
           .buttonStyle(.plain)
         }
       }
-      .padding(8)
-      .background(Color(NSColor.controlBackgroundColor))
-      .cornerRadius(8)
+      .padding(.horizontal, 8)
+      .padding(.vertical, 5)
+      .background(Color.white.opacity(0.04))
+      .overlay(
+        RoundedRectangle(cornerRadius: 3)
+          .stroke(Color.cyan.opacity(0.1), lineWidth: 0.5)
+      )
+      .cornerRadius(3)
 
-      // Protocol filter
+      // Protocol
       Picker("Protocol", selection: $store.protocolFilter) {
-        Text("All Protocols").tag(nil as ProxyFlowType?)
+        Text("ALL").tag(nil as ProxyFlowType?)
         Divider()
         Text("HTTP").tag(ProxyFlowType.http as ProxyFlowType?)
         Text("HTTPS").tag(ProxyFlowType.https as ProxyFlowType?)
@@ -84,59 +109,61 @@ extension ProxyMonitorView {
         Text("UDP").tag(ProxyFlowType.udp as ProxyFlowType?)
       }
       .pickerStyle(.menu)
-      .frame(width: 130)
+      .frame(width: 90)
 
-      // Method filter (HTTP flows only)
+      // Method
       if !store.availableMethods.isEmpty {
         Picker("Method", selection: $store.methodFilter) {
-          Text("All Methods").tag(nil as String?)
+          Text("ALL").tag(nil as String?)
           Divider()
           ForEach(store.availableMethods, id: \.self) { method in
             Text(method).tag(method as String?)
           }
         }
         .pickerStyle(.menu)
-        .frame(width: 120)
+        .frame(width: 80)
       }
 
-      // Status filter
+      // Status
       Picker("Status", selection: $store.statusFilter) {
         ForEach(StatusFilter.allCases) { filter in
           Text(filter.rawValue).tag(filter)
         }
       }
       .pickerStyle(.menu)
-      .frame(width: 100)
+      .frame(width: 80)
     }
-    .padding(.horizontal)
-    .padding(.vertical, 8)
+    .padding(.horizontal, 12)
+    .padding(.vertical, 6)
+    .background(Color(red: 0.02, green: 0.03, blue: 0.06))
   }
 
   var emptyListView: some View {
-    VStack(spacing: 16) {
+    VStack(spacing: 12) {
       Image(systemName: "network.slash")
-        .font(.system(size: 48))
-        .foregroundColor(.secondary)
-      Text("No Flows Captured")
-        .font(.headline)
+        .font(.system(size: 32, weight: .thin))
+        .foregroundColor(.cyan.opacity(0.2))
+      Text("NO FLOWS")
+        .font(.system(size: 11, weight: .bold, design: .monospaced))
+        .foregroundColor(.white.opacity(0.3))
       Text(emptyMessage)
-        .font(.caption)
-        .foregroundColor(.secondary)
+        .font(.system(size: 10, design: .monospaced))
+        .foregroundColor(.white.opacity(0.15))
         .multilineTextAlignment(.center)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .padding()
+    .background(Color(red: 0.01, green: 0.02, blue: 0.04))
   }
 
   var emptyMessage: String {
     if !store.searchQuery.isEmpty || store.methodFilter != nil
       || store.statusFilter != .all || store.protocolFilter != nil
     {
-      return "No flows match your filters.\nTry adjusting your search criteria."
+      return "No flows match filters"
     } else if !store.isEnabled {
-      return "Proxy extension is not enabled.\nEnable it in Settings to start capturing traffic."
+      return "Extension offline"
     } else {
-      return "Waiting for network traffic...\nAll TCP and UDP flows will appear here."
+      return "Awaiting traffic..."
     }
   }
 }

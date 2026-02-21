@@ -302,5 +302,27 @@ extension ScannerEntry {
     ScannerEntry(id: "phantom_dylib", name: "Phantom Dylib", tier: .slow) { ctx in
       await PhantomDylibDetector.shared.scan(snapshot: ctx.snapshot)
     },
+
+    // ── Contradiction Probes (v2 — structured via ProbeRunner) ─────
+    // 5 probes migrated to ContradictionProbe protocol; results convert to ProcessAnomaly
+
+    ScannerEntry(id: "contradiction_probes", name: "Contradiction Probes", tier: .slow) { _ in
+      let results = await ProbeRunner.shared.runAll()
+      return results.flatMap { $0.toAnomalies() }
+    },
+
+    // ── Legacy Probes (Phase 2 migration) ────────────────────
+    ScannerEntry(id: "launch_daemon_census", name: "Launch Daemon Census", tier: .slow) { ctx in
+      await LaunchDaemonCensusProbe.shared.scan(snapshot: ctx.snapshot)
+    },
+    ScannerEntry(id: "entitlement_contradiction", name: "Entitlement Contradiction", tier: .slow) { ctx in
+      await EntitlementContradictionProbe.shared.scan(snapshot: ctx.snapshot)
+    },
+    ScannerEntry(id: "partition_integrity", name: "Partition Integrity", tier: .slow) { _ in
+      await PartitionIntegrityProbe.shared.scan()
+    },
+    ScannerEntry(id: "disk_entropy", name: "Disk Entropy Analysis", tier: .slow) { _ in
+      await DiskEntropyProbe.shared.scan()
+    },
   ]
 }

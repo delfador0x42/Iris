@@ -160,4 +160,46 @@ if [ "${1:-}" = "--json" ]; then
         }'
 fi
 
+# 10. Latest Scan Results
+section "Latest Scan Results"
+SNAPSHOT_FILE="$HOME/Library/Application Support/Iris/latest-snapshot.json"
+if [ -f "$SNAPSHOT_FILE" ]; then
+    SCAN_TIME=$(python3 -c "import json; d=json.load(open('$SNAPSHOT_FILE')); print(d.get('timestamp','?'))" 2>/dev/null || echo "?")
+    ANOMALY_COUNT=$(python3 -c "import json; d=json.load(open('$SNAPSHOT_FILE')); print(d.get('anomalyCount',0))" 2>/dev/null || echo "?")
+    CRITICAL=$(python3 -c "import json; d=json.load(open('$SNAPSHOT_FILE')); print(d.get('criticalCount',0))" 2>/dev/null || echo "?")
+    HIGH=$(python3 -c "import json; d=json.load(open('$SNAPSHOT_FILE')); print(d.get('highCount',0))" 2>/dev/null || echo "?")
+    ok "Last scan: $SCAN_TIME"
+    if [ "$CRITICAL" -gt 0 ] 2>/dev/null; then
+        fail "$ANOMALY_COUNT findings ($CRITICAL critical, $HIGH high)"
+    elif [ "$ANOMALY_COUNT" -gt 0 ] 2>/dev/null; then
+        warn "$ANOMALY_COUNT findings ($HIGH high)"
+    else
+        ok "No findings"
+    fi
+    # Integrity probe status
+    PROBES=$(python3 -c "
+import json
+d=json.load(open('$SNAPSHOT_FILE'))
+for k,v in d.get('integrityStatus',{}).items():
+    print(f'  {k}: {v}')
+" 2>/dev/null || true)
+    if [ -n "$PROBES" ]; then
+        echo "  Integrity probes:"
+        echo "$PROBES"
+    fi
+else
+    warn "No scan results yet (run a scan from Iris UI)"
+fi
+
+# 11. Diagnostic Log
+section "Diagnostic Log"
+LOG_FILE="$HOME/Library/Application Support/Iris/diagnostics.jsonl"
+if [ -f "$LOG_FILE" ]; then
+    LOG_SIZE=$(du -h "$LOG_FILE" | cut -f1)
+    LOG_LINES=$(wc -l < "$LOG_FILE" | tr -d ' ')
+    ok "diagnostics.jsonl: $LOG_SIZE ($LOG_LINES entries)"
+else
+    warn "No diagnostic log yet"
+fi
+
 echo ""

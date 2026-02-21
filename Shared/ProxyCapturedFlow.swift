@@ -14,6 +14,8 @@ public struct ProxyCapturedFlow: Codable, Identifiable, Sendable, Equatable, Has
   public let processId: Int?
   public var bytesOut: Int64
   public var bytesIn: Int64
+  /// Actual request body bytes (may differ from request.bodySize for chunked/streaming bodies)
+  public var requestBodySize: Int64
   public var endTimestamp: Date?
   /// Monotonically increasing sequence number for delta XPC protocol.
   public var sequenceNumber: UInt64
@@ -31,6 +33,7 @@ public struct ProxyCapturedFlow: Codable, Identifiable, Sendable, Equatable, Has
     processId: Int? = nil,
     bytesOut: Int64 = 0,
     bytesIn: Int64 = 0,
+    requestBodySize: Int64 = 0,
     endTimestamp: Date? = nil,
     sequenceNumber: UInt64 = 0
   ) {
@@ -46,6 +49,7 @@ public struct ProxyCapturedFlow: Codable, Identifiable, Sendable, Equatable, Has
     self.processId = processId
     self.bytesOut = bytesOut
     self.bytesIn = bytesIn
+    self.requestBodySize = requestBodySize
     self.endTimestamp = endTimestamp
     self.sequenceNumber = sequenceNumber
   }

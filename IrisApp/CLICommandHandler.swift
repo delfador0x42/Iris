@@ -70,6 +70,16 @@ final class CLICommandHandler {
     case "scan":
       await runScanWithTiming()
 
+    case "probe":
+      await runProbes()
+
+    case "probeOne":
+      let probeId = notification.userInfo?["probeId"] as? String ?? ""
+      await runOneProbe(id: probeId)
+
+    case "probeStatus":
+      writeProbeStatus()
+
     default:
       logger.warning("Unknown CLI command: \(action)")
       respond("error", action: action)
@@ -135,6 +145,35 @@ final class CLICommandHandler {
 
     logger.info("CLI scan complete: \(result.totalFindings) findings in \(String(format: "%.1f", elapsed))s")
     respond("ok", action: "scan")
+  }
+
+  // MARK: - Probe Commands
+
+  private func runProbes() async {
+    let runner = ProbeRunner.shared
+    let results = await runner.runAll()
+    let contradictions = results.filter { $0.verdict == .contradiction }.count
+    logger.info("CLI probes: \(results.count) run, \(contradictions) contradictions")
+    respond("ok", action: "probe")
+  }
+
+  private func runOneProbe(id: String) async {
+    let runner = ProbeRunner.shared
+    if let result = await runner.runOne(id: id) {
+      logger.info("CLI probeOne(\(id)): \(result.verdict.rawValue)")
+      respond("ok", action: "probeOne")
+    } else {
+      respond("error: unknown probe '\(id)'", action: "probeOne")
+    }
+  }
+
+  private func writeProbeStatus() {
+    let results = ProbeStore.readLatest()
+    let path = "/tmp/iris-probes.json"
+    if let data = try? JSONEncoder().encode(results) {
+      try? data.write(to: URL(fileURLWithPath: path))
+    }
+    respond("ok", action: "probeStatus")
   }
 
   private func respond(_ status: String, action: String) {

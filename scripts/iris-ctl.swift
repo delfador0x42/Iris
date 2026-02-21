@@ -26,6 +26,7 @@ let action = args.count > 1 ? args[1] : "status"
 let validCommands = [
   "status", "reinstall", "startProxy", "stopProxy", "sendCA", "checkExtensions",
   "installProxy", "installDNS", "cleanProxy", "scan",
+  "probe", "probeOne", "probeStatus",
 ]
 guard validCommands.contains(action) else {
   print("Unknown command: \(action)")
@@ -57,17 +58,28 @@ let observer = center.addObserver(forName: responseName, object: nil, queue: .ma
   }
 }
 
+// Build userInfo
+var userInfo: [String: String] = ["action": action]
+if action == "probeOne" {
+  guard args.count > 2 else {
+    print("Usage: iris-ctl probeOne <probe-id>")
+    print("Probe IDs: dyld-cache, sip-status, process-census, binary-integrity, network-ghost")
+    exit(1)
+  }
+  userInfo["probeId"] = args[2]
+}
+
 // Send command
 print("Sending: \(action)")
 center.postNotificationName(
   commandName,
   object: nil,
-  userInfo: ["action": action],
+  userInfo: userInfo,
   deliverImmediately: true
 )
 
 // Wait for response (scan takes longer — up to 60s)
-let timeout: TimeInterval = action == "scan" ? 60 : 10
+let timeout: TimeInterval = (action == "scan" || action == "probe") ? 60 : 10
 let deadline = Date().addingTimeInterval(timeout)
 while !gotResponse && Date() < deadline {
   RunLoop.main.run(until: Date().addingTimeInterval(0.1))
@@ -85,6 +97,7 @@ let resultFile: String? = {
   switch action {
   case "status", "checkExtensions": return statusPath
   case "scan": return "/tmp/iris-scan-timing.json"
+  case "probe", "probeStatus": return "/tmp/iris-probes.json"
   default: return nil
   }
 }()

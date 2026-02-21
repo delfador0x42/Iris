@@ -2,7 +2,7 @@
 //  HTTPFlowDetailView.swift
 //  IrisProxy
 //
-//  Detail view for a single HTTP flow showing request and response.
+//  Flow detail view — NieR aesthetic. Dark, monospaced, outline accents.
 //
 
 import SwiftUI
@@ -23,7 +23,6 @@ public struct HTTPFlowDetailView: View {
   let flow: ProxyCapturedFlow
   @State private var selectedTab: DetailTab = .overview
 
-  /// Non-optional request — only show this view when flow.request != nil.
   var request: ProxyCapturedRequest { flow.request! }
 
   public init(flow: ProxyCapturedFlow) {
@@ -32,36 +31,40 @@ public struct HTTPFlowDetailView: View {
 
   public var body: some View {
     VStack(spacing: 0) {
-      // Header
       detailHeader
+      thinDivider
 
-      Divider()
-
-      // Tab picker
+      // Tab picker — segmented, tight
       Picker("Tab", selection: $selectedTab) {
         ForEach(DetailTab.allCases) { tab in
-          Text(tab.rawValue).tag(tab)
+          Text(tab.rawValue.uppercased()).tag(tab)
         }
       }
       .pickerStyle(.segmented)
-      .padding()
+      .padding(.horizontal, 12)
+      .padding(.vertical, 8)
 
-      Divider()
+      thinDivider
 
-      // Tab content
       ThemedScrollView {
         tabContent
-          .padding()
+          .padding(12)
       }
     }
-    .background(Color(NSColor.controlBackgroundColor))
+    .background(Color(red: 0.01, green: 0.02, blue: 0.04))
+  }
+
+  private var thinDivider: some View {
+    Rectangle()
+      .fill(Color.cyan.opacity(0.12))
+      .frame(height: 0.5)
   }
 
   // MARK: - Header
 
   var detailHeader: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      // Method and URL
+    VStack(alignment: .leading, spacing: 6) {
+      // Method + Status + Copy
       HStack {
         MethodBadge(method: request.method)
 
@@ -75,48 +78,51 @@ public struct HTTPFlowDetailView: View {
 
         Spacer()
 
-        // Copy URL button
         Button(action: copyURL) {
           Image(systemName: "doc.on.doc")
+            .font(.system(size: 11))
+            .foregroundColor(.cyan.opacity(0.4))
         }
         .buttonStyle(.borderless)
         .help("Copy URL")
       }
 
-      // Full URL
+      // URL
       Text(request.url)
-        .font(.system(size: 12, design: .monospaced))
-        .foregroundColor(.secondary)
+        .font(.system(size: 11, design: .monospaced))
+        .foregroundColor(.white.opacity(0.5))
         .lineLimit(2)
         .textSelection(.enabled)
 
       // Metadata row
-      HStack(spacing: 16) {
+      HStack(spacing: 12) {
         if let process = flow.processName {
           Label(process, systemImage: "app")
-            .font(.caption)
-            .foregroundColor(.secondary)
+            .font(.system(size: 9, design: .monospaced))
+            .foregroundColor(.white.opacity(0.25))
         }
 
         Label(formatTimestamp(flow.timestamp), systemImage: "clock")
-          .font(.caption)
-          .foregroundColor(.secondary)
+          .font(.system(size: 9, design: .monospaced))
+          .foregroundColor(.white.opacity(0.25))
 
         if let duration = flow.duration {
           Label(formatDuration(duration), systemImage: "stopwatch")
-            .font(.caption)
-            .foregroundColor(.secondary)
+            .font(.system(size: 9, design: .monospaced))
+            .foregroundColor(.white.opacity(0.25))
         }
 
         let totalSize = request.bodySize + (flow.response?.bodySize ?? 0)
         if totalSize > 0 {
           Label(formatBytes(totalSize), systemImage: "arrow.up.arrow.down")
-            .font(.caption)
-            .foregroundColor(.secondary)
+            .font(.system(size: 9, design: .monospaced))
+            .foregroundColor(.white.opacity(0.25))
         }
       }
     }
-    .padding()
+    .padding(.horizontal, 12)
+    .padding(.vertical, 10)
+    .background(Color(red: 0.02, green: 0.03, blue: 0.06))
   }
 
   // MARK: - Tab Content

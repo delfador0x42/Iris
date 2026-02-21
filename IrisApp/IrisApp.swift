@@ -20,6 +20,7 @@ struct IrisMainApp: App {
 
   init() {
     CLICommandHandler.shared.startListening()
+    ProbeRunner.shared.registerDefaultProbes()
 
     Task { @MainActor in
       // 1. Generate/load CA certificate

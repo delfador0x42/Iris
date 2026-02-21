@@ -1,110 +1,73 @@
 import SwiftUI
 
-/// Header view for the process list showing title and stats
+/// Process monitor header — NieR aesthetic.
 struct ProcessListHeaderView: View {
     @ObservedObject var store: ProcessStore
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             // Title row
             HStack {
-                Text("Process Monitor")
-                    .font(.system(size: 24, weight: .bold, design: .serif))
-                    .foregroundColor(.white)
+                Text("PROCESS MONITOR")
+                    .font(.system(size: 12, weight: .bold, design: .monospaced))
+                    .foregroundColor(.cyan.opacity(0.7))
 
                 Spacer()
 
-                // Refresh button
                 Button(action: {
-                    Task {
-                        await store.refreshProcesses()
-                    }
+                    Task { await store.refreshProcesses() }
                 }) {
                     Image(systemName: "arrow.clockwise")
-                        .foregroundColor(.white)
-                        .opacity(store.isLoading ? 0.5 : 1.0)
+                        .font(.system(size: 11))
+                        .foregroundColor(.cyan.opacity(store.isLoading ? 0.2 : 0.5))
                 }
                 .buttonStyle(.plain)
                 .disabled(store.isLoading)
             }
 
             // Stats row
-            HStack(spacing: 24) {
+            HStack(spacing: 12) {
+                StatBox(label: "Total", value: "\(store.totalCount)", color: .cyan)
                 StatBox(
-                    label: "Total Processes",
-                    value: "\(store.totalCount)",
-                    color: .white,
-                    fontSize: 18,
-                    fontWeight: .bold
+                    label: "Suspicious", value: "\(store.suspiciousCount)",
+                    color: store.suspiciousCount > 0
+                        ? Color(red: 1.0, green: 0.35, blue: 0.35)
+                        : Color(red: 0.3, green: 0.9, blue: 0.5)
                 )
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(Color.white.opacity(0.05))
-                .cornerRadius(8)
 
-                StatBox(
-                    label: "Suspicious",
-                    value: "\(store.suspiciousCount)",
-                    color: store.suspiciousCount > 0 ? .red : .green,
-                    fontSize: 18,
-                    fontWeight: .bold
-                )
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(Color.white.opacity(0.05))
-                .cornerRadius(8)
-
-                // History count (visible in history mode)
                 if store.viewMode == .history {
-                    StatBox(
-                        label: "History",
-                        value: "\(store.processHistory.count)",
-                        color: .cyan,
-                        fontSize: 18,
-                        fontWeight: .bold
-                    )
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(Color.white.opacity(0.05))
-                    .cornerRadius(8)
+                    StatBox(label: "History", value: "\(store.processHistory.count)", color: .cyan)
                 }
 
-                // ES status indicator
                 esStatusBadge
 
                 Spacer()
 
-                // Last update
                 if let lastUpdate = store.lastUpdate {
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text("Last update")
-                            .font(.system(size: 10))
-                            .foregroundColor(.gray.opacity(0.7))
-                        Text(lastUpdate, style: .time)
-                            .font(.system(size: 12, design: .monospaced))
-                            .foregroundColor(.gray)
-                    }
+                    Text(lastUpdate, style: .time)
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundColor(.white.opacity(0.2))
                 }
             }
         }
-        .padding(.vertical, 16)
-        .padding(.horizontal, 20)
-        .background(Color.black.opacity(0.3))
+        .padding(.vertical, 12)
+        .padding(.horizontal, 16)
+        .background(Color(red: 0.02, green: 0.03, blue: 0.06))
     }
 
     private var esStatusBadge: some View {
         let (color, icon, label): (Color, String, String) = {
             switch store.esExtensionStatus {
             case .running:
-                return (.green, "shield.checkered", "ES Active")
+                return (Color(red: 0.3, green: 0.9, blue: 0.5), "shield.checkered", "ES")
             case .esDisabled:
-                return (.orange, "shield.slash", "ES Disabled")
+                return (Color(red: 1.0, green: 0.6, blue: 0.2), "shield.slash", "ES OFF")
             case .notInstalled:
-                return (.red, "shield.slash", "ES Not Installed")
+                return (Color(red: 1.0, green: 0.35, blue: 0.35), "shield.slash", "NO ES")
             case .error:
-                return (.red, "exclamationmark.shield", "ES Error")
+                return (Color(red: 1.0, green: 0.35, blue: 0.35), "exclamationmark.shield", "ES ERR")
             case .unknown:
-                return (.gray, "shield", "Checking...")
+                return (Color.white.opacity(0.3), "shield", "...")
             }
         }()
 
@@ -112,12 +75,16 @@ struct ProcessListHeaderView: View {
             Image(systemName: icon)
                 .font(.system(size: 10))
             Text(label)
-                .font(.system(size: 10, weight: .medium))
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
         }
         .foregroundColor(color)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(color.opacity(0.15))
-        .cornerRadius(6)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .background(color.opacity(0.06))
+        .overlay(
+            RoundedRectangle(cornerRadius: 3)
+                .stroke(color.opacity(0.2), lineWidth: 0.5)
+        )
+        .cornerRadius(3)
     }
 }

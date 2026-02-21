@@ -2,12 +2,12 @@
 //  MethodBadge.swift
 //  IrisProxy
 //
-//  Badge displaying HTTP method with color coding.
+//  Outline-style HTTP method badge — NieR aesthetic.
 //
 
 import SwiftUI
 
-/// Badge displaying an HTTP method with appropriate color coding.
+/// Outline badge displaying an HTTP method with muted color coding.
 public struct MethodBadge: View {
     let method: String
 
@@ -17,34 +17,29 @@ public struct MethodBadge: View {
 
     public var body: some View {
         Text(method)
-            .font(.system(size: 10, weight: .semibold, design: .monospaced))
-            .foregroundColor(.white)
+            .font(.system(size: 10, weight: .bold, design: .monospaced))
+            .foregroundColor(accentColor)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
-            .background(backgroundColor)
-            .cornerRadius(4)
+            .background(accentColor.opacity(0.08))
+            .overlay(
+                RoundedRectangle(cornerRadius: 3)
+                    .stroke(accentColor.opacity(0.3), lineWidth: 0.5)
+            )
+            .cornerRadius(3)
     }
 
-    private var backgroundColor: Color {
+    private var accentColor: Color {
         switch method.uppercased() {
-        case "GET":
-            return .blue
-        case "POST":
-            return .orange
-        case "PUT":
-            return .purple
-        case "PATCH":
-            return .indigo
-        case "DELETE":
-            return .red
-        case "HEAD":
-            return .gray
-        case "OPTIONS":
-            return .teal
-        case "CONNECT":
-            return .pink
-        default:
-            return .secondary
+        case "GET":    return .cyan
+        case "POST":   return Color(red: 1.0, green: 0.6, blue: 0.2)
+        case "PUT":    return Color(red: 0.7, green: 0.5, blue: 1.0)
+        case "PATCH":  return Color(red: 0.5, green: 0.5, blue: 1.0)
+        case "DELETE": return Color(red: 1.0, green: 0.35, blue: 0.35)
+        case "HEAD":   return Color.white.opacity(0.5)
+        case "OPTIONS": return Color(red: 0.4, green: 0.8, blue: 0.8)
+        case "CONNECT": return Color(red: 0.8, green: 0.5, blue: 0.7)
+        default:       return Color.white.opacity(0.4)
         }
     }
 }
@@ -60,4 +55,5 @@ public struct MethodBadge: View {
         MethodBadge(method: "PATCH")
     }
     .padding()
+    .background(Color(red: 0.01, green: 0.02, blue: 0.04))
 }

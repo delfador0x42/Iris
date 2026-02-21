@@ -22,6 +22,10 @@ final class RelayState: @unchecked Sendable {
   private var _responseMessageSize: Int?
   /// Whether the response body is fully received (for keep-alive boundary tracking)
   private var _responseBodyComplete = false
+  /// Request header end index (where body begins), set when request is parsed
+  private var _requestHeaderEndIndex: Int = 0
+  /// Whether the current request uses Transfer-Encoding: chunked
+  private var _requestIsChunked = false
 
   /// Max buffer size per direction (16 MB) to prevent unbounded growth
   static let maxBufferSize = 16 * 1024 * 1024
@@ -101,6 +105,39 @@ final class RelayState: @unchecked Sendable {
     lock.unlock()
   }
 
+  /// Store request parse metadata for chunked body tracking.
+  func setRequestParseInfo(headerEndIndex: Int, isChunked: Bool) {
+    lock.lock()
+    _requestHeaderEndIndex = headerEndIndex
+    _requestIsChunked = isChunked
+    lock.unlock()
+  }
+
+  var requestIsChunked: Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    return _requestIsChunked
+  }
+
+  /// Check if the chunked request body is complete (terminal chunk detected).
+  /// Uses the same HTTPParser.isChunkedBodyComplete() as the response side.
+  func isChunkedRequestBodyComplete() -> Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    guard _requestIsChunked, _requestHeaderEndIndex > 0 else { return false }
+    let bodyStart = _requestHeaderEndIndex
+    guard bodyStart < _requestBuffer.count else { return false }
+    let bodyData = Data(_requestBuffer[bodyStart...])
+    return HTTPParser.isChunkedBodyComplete(bodyData)
+  }
+
+  /// Actual request body bytes accumulated (buffer bytes after header end).
+  var requestBodyBytes: Int {
+    lock.lock()
+    defer { lock.unlock() }
+    return max(0, _requestBuffer.count - _requestHeaderEndIndex)
+  }
+
   func markResponseCaptured() {
     lock.lock()
     _hasResponse = true
@@ -172,6 +209,8 @@ final class RelayState: @unchecked Sendable {
     _hasRequest = false
     _hasResponse = false
     _responseBodyComplete = false
+    _requestHeaderEndIndex = 0
+    _requestIsChunked = false
     _requestCount += 1
     _currentFlowId = nil
     _requestMessageSize = nil

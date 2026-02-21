@@ -157,8 +157,9 @@ public struct NetworkMonitorView: View {
                 // Column headers
                 connectionHeaderRow
 
-                Divider()
-                    .background(Color.gray.opacity(0.3))
+                Rectangle()
+                    .fill(Color.cyan.opacity(0.1))
+                    .frame(height: 0.5)
 
                 // Process rows
                 ForEach(store.processes) { process in
@@ -184,27 +185,27 @@ public struct NetworkMonitorView: View {
 
     private var connectionHeaderRow: some View {
         HStack(spacing: 0) {
-            Text("Process / Connection")
+            Text("PROCESS / CONNECTION")
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            Text("Protocol")
+            Text("PROTO")
                 .frame(width: 60)
 
-            Text("Interface")
+            Text("IFACE")
                 .frame(width: 70)
 
-            Text("State")
+            Text("STATE")
                 .frame(width: 90)
 
-            Text("Bytes Up")
+            Text("UP")
                 .frame(width: 80, alignment: .trailing)
 
-            Text("Bytes Down")
+            Text("DOWN")
                 .frame(width: 80, alignment: .trailing)
         }
-        .font(.system(size: 11, weight: .medium))
-        .foregroundColor(.gray)
-        .padding(.vertical, 8)
+        .font(.system(size: 9, weight: .bold, design: .monospaced))
+        .foregroundColor(.cyan.opacity(0.4))
+        .padding(.vertical, 6)
     }
 
     private func toggleProcess(_ identityKey: String) {

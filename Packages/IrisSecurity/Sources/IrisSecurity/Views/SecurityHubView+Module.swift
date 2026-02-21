@@ -16,6 +16,7 @@ enum SecurityModule: String, CaseIterable, Identifiable {
   case ransomware = "Ransomware Check"
   case packageInventory = "Package Inventory"
   case allowlist = "Allowlist"
+  case contradictionProbes = "Contradiction Probes"
 
   var id: String { rawValue }
 
@@ -34,6 +35,7 @@ enum SecurityModule: String, CaseIterable, Identifiable {
     case .ransomware: return "lock.trianglebadge.exclamationmark"
     case .packageInventory: return "archivebox"
     case .allowlist: return "list.bullet.rectangle.portrait"
+    case .contradictionProbes: return "exclamationmark.triangle.fill"
     }
   }
 
@@ -52,6 +54,7 @@ enum SecurityModule: String, CaseIterable, Identifiable {
     case .ransomware: return "entropy \u{00B7} chi-square \u{00B7} pi"
     case .packageInventory: return "brew \u{00B7} app store \u{00B7} pkgutil"
     case .allowlist: return "suppress false positives"
+    case .contradictionProbes: return "9 probes \u{00B7} source comparison"
     }
   }
 
@@ -70,6 +73,7 @@ enum SecurityModule: String, CaseIterable, Identifiable {
     case .ransomware: return Color(red: 0.8, green: 0.2, blue: 0.2)
     case .packageInventory: return .indigo
     case .allowlist: return .gray
+    case .contradictionProbes: return Color(red: 1.0, green: 0.4, blue: 0.0)
     }
   }
 }

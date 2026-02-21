@@ -123,6 +123,7 @@ public struct SecurityHubView: View {
     case .tccPermissions: TCCMonitorView()
     case .ransomware: RansomwareCheckView()
     case .allowlist: AllowlistView()
+    case .contradictionProbes: ProbeEngineView()
     }
   }
 

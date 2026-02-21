@@ -89,8 +89,9 @@ extension FlowHandler {
             headers: response.headers, body: body, duration: elapsed
         )
         let updateId = state.currentFlowId ?? flowId
+        let actualRequestBodyBytes = Int64(state.requestBodyBytes)
         state.markResponseCaptured()
-        xpcService?.updateFlow(updateId, response: capturedResponse)
+        xpcService?.updateFlow(updateId, response: capturedResponse, requestBodySize: actualRequestBodyBytes)
     }
 
     /// After resetForNextRequest, check if leftover buffer contains a pipelined request.
@@ -113,8 +114,12 @@ extension FlowHandler {
             method: request.method, url: url, httpVersion: request.httpVersion,
             headers: request.headers, body: body
         )
+        let isChunked = request.isChunked
         let bodySize = request.contentLength ?? 0
-        state.setRequestMessageSize(request.headerEndIndex + bodySize)
+        if !isChunked {
+            state.setRequestMessageSize(request.headerEndIndex + bodySize)
+        }
+        state.setRequestParseInfo(headerEndIndex: request.headerEndIndex, isChunked: isChunked)
         let pipelinedFlowId = UUID()
         let capturedFlow = ProxyCapturedFlow(
             id: pipelinedFlowId, flowType: isSecure ? .https : .http,

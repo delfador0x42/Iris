@@ -35,12 +35,16 @@ extension ProxyXPCService {
 
   /// Updates an existing flow (e.g., when response arrives).
   /// Bumps the sequence number so delta fetch picks up the update.
-  func updateFlow(_ flowId: UUID, response: ProxyCapturedResponse) {
+  /// requestBodySize: actual bytes of request body (may exceed initial capture for chunked/streaming).
+  func updateFlow(_ flowId: UUID, response: ProxyCapturedResponse, requestBodySize: Int64 = 0) {
     flowsLock.lock()
     defer { flowsLock.unlock() }
 
     if let index = capturedFlows.firstIndex(where: { $0.id == flowId }) {
       capturedFlows[index].response = response
+      if requestBodySize > 0 {
+        capturedFlows[index].requestBodySize = requestBodySize
+      }
       capturedFlows[index].sequenceNumber = nextSequenceNumber
       nextSequenceNumber += 1
       notifyFlowUpdate(capturedFlows[index])
@@ -107,29 +111,25 @@ extension ProxyXPCService: NSXPCListenerDelegate {
   private func verifyCodeSignature(pid: pid_t) -> Bool {
     var code: SecCode?
     let attrs = [kSecGuestAttributePid: pid] as NSDictionary
-    guard SecCodeCopyGuestWithAttributes(nil, attrs, SecCSFlags(), &code) == errSecSuccess,
-      let guestCode = code
-    else {
-      // Extension (root) may lack access to DetachedSignatures DB for Debug builds
-      #if DEBUG
-      logger.warning("XPC: SecCodeCopyGuestWithAttributes failed for PID \(pid), accepting (DEBUG)")
-      return true
-      #else
-      logger.error("XPC: SecCodeCopyGuestWithAttributes failed for PID \(pid), rejecting")
+    let copyResult = SecCodeCopyGuestWithAttributes(nil, attrs, SecCSFlags(), &code)
+    guard copyResult == errSecSuccess, let guestCode = code else {
+      logger.error("XPC: SecCodeCopyGuestWithAttributes FAILED for PID \(pid): \(copyResult)")
       return false
-      #endif
     }
     var requirement: SecRequirement?
     let reqStr =
       "anchor apple generic and certificate leaf[subject.OU] = \"99HGW2AR62\"" as CFString
     guard SecRequirementCreateWithString(reqStr, SecCSFlags(), &requirement) == errSecSuccess,
       let req = requirement
-    else { return false }
-    let valid = SecCodeCheckValidity(guestCode, SecCSFlags(), req) == errSecSuccess
-    if !valid {
-      logger.warning("XPC: code signing check failed for PID \(pid)")
+    else {
+      logger.error("XPC: SecRequirementCreateWithString FAILED")
+      return false
     }
-    return valid
+    let checkResult = SecCodeCheckValidity(guestCode, SecCSFlags(), req)
+    if checkResult != errSecSuccess {
+      logger.error("XPC: SecCodeCheckValidity FAILED for PID \(pid): \(checkResult)")
+    }
+    return checkResult == errSecSuccess
   }
 
   func connectionInvalidated(_ connection: NSXPCConnection) {

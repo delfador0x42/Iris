@@ -1,48 +1,54 @@
 //
-//  HTTPFlowDetailView+Helpers.swift
+//  HTTPFlowDetailView+Formatting.swift
 //  IrisProxy
 //
-//  Helper views, actions, and formatting for HTTPFlowDetailView.
+//  Helper views, actions, formatting — NieR aesthetic.
 //
 
 import SwiftUI
+
+// Shared timestamp formatter — avoid recreation per view body
+private let timestampFormatter: DateFormatter = {
+  let f = DateFormatter()
+  f.dateFormat = "HH:mm:ss.SSS"
+  return f
+}()
 
 extension HTTPFlowDetailView {
 
   // MARK: - Helper Views
 
   func headersView(_ headers: [[String]]) -> some View {
-    VStack(alignment: .leading, spacing: 4) {
+    VStack(alignment: .leading, spacing: 2) {
       if headers.isEmpty {
         Text("No headers")
-          .foregroundColor(.secondary)
-          .padding(.vertical, 4)
+          .font(.system(size: 10, design: .monospaced))
+          .foregroundColor(.white.opacity(0.15))
       } else {
         ForEach(Array(headers.enumerated()), id: \.offset) { _, header in
           if header.count >= 2 {
-            HStack(alignment: .top, spacing: 8) {
+            HStack(alignment: .top, spacing: 6) {
               Text(header[0])
-                .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                .foregroundColor(.blue)
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .foregroundColor(.cyan.opacity(0.6))
               Text(header[1])
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundColor(.primary)
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundColor(.white.opacity(0.55))
                 .textSelection(.enabled)
             }
-            .padding(.vertical, 2)
+            .padding(.vertical, 1)
           }
         }
       }
     }
-    .padding(.vertical, 4)
   }
 
   func bodyPreviewView(_ preview: String) -> some View {
     ThemedScrollView(.horizontal) {
       Text(preview)
-        .font(.system(size: 11, design: .monospaced))
+        .font(.system(size: 10, design: .monospaced))
+        .foregroundColor(.white.opacity(0.6))
         .textSelection(.enabled)
-        .padding(.vertical, 4)
     }
     .frame(maxHeight: 300)
   }
@@ -57,9 +63,7 @@ extension HTTPFlowDetailView {
   // MARK: - Formatting
 
   func formatTimestamp(_ date: Date) -> String {
-    let formatter = DateFormatter()
-    formatter.dateFormat = "HH:mm:ss.SSS"
-    return formatter.string(from: date)
+    timestampFormatter.string(from: date)
   }
 
   func formatDuration(_ duration: TimeInterval) -> String {

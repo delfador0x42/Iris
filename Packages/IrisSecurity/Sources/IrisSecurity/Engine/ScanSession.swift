@@ -51,6 +51,26 @@ public final class ScanSession: ObservableObject {
     }
     isScanning = false
 
+    // Persist results to disk (JSONL + snapshot) for CLI / Claude consumption
+    Task {
+      let reporter = DiagnosticReporter.shared
+      let timings = result.scannerResults.map { (id: $0.id, duration: $0.duration) }
+      await reporter.recordScanResults(result.anomalies, scannerTimings: timings)
+
+      // Build integrity status from contradiction probes
+      var integrityStatus: [String: String] = [:]
+      for sr in result.scannerResults where ["sip_contradiction", "process_census",
+          "binary_integrity_probe", "network_ghost"].contains(sr.id) {
+        integrityStatus[sr.name] = sr.anomalies.isEmpty ? "clean" : "\(sr.anomalies.count) findings"
+      }
+      await reporter.writeSnapshot(
+        processCount: result.anomalies.map(\.pid).reduce(into: Set<pid_t>()) { $0.insert($1) }.count,
+        connectionCount: 0, // snapshot doesn't have connection count
+        alertCount: result.totalFindings,
+        anomalies: result.anomalies,
+        integrityStatus: integrityStatus)
+    }
+
     // Fire-and-forget VT hash checks (display-only, no trust signal)
     Task { await checkVirusTotal(result.anomalies) }
 

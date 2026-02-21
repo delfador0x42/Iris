@@ -62,8 +62,13 @@ extension FlowHandler {
                 headers: request.headers, body: body
               )
               // Track message boundary so resetForNextRequest preserves leftover data
+              let isChunked = request.isChunked
               let bodySize = request.contentLength ?? 0
-              state.setRequestMessageSize(request.headerEndIndex + bodySize)
+              if !isChunked {
+                state.setRequestMessageSize(request.headerEndIndex + bodySize)
+              }
+              // Store parse info for chunked body tracking
+              state.setRequestParseInfo(headerEndIndex: request.headerEndIndex, isChunked: isChunked)
               // Each request on a keep-alive connection gets its own flow ID
               let currentFlowId = state.requestCount == 0 ? flowId : UUID()
               let capturedFlow = ProxyCapturedFlow(
@@ -73,6 +78,14 @@ extension FlowHandler {
               state.markRequestCaptured(flowId: currentFlowId)
               xpcService?.addFlow(capturedFlow)
               self.logger.info("Captured: \(request.method) \(url) from \(processName)")
+            }
+          }
+
+          // For chunked requests, detect terminal chunk to set correct message boundary
+          if state.hasRequest && state.requestIsChunked {
+            if state.isChunkedRequestBodyComplete() {
+              let actualSize = state.withRequestBuffer { $0.count }
+              state.setRequestMessageSize(actualSize)
             }
           }
 
