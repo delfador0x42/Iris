@@ -13,15 +13,32 @@ import NetworkExtension
 import os.log
 
 /// Handles all intercepted network flows.
-/// TCP 443 → HTTPS MITM, TCP 80 → HTTP relay, other TCP → passthrough, UDP → datagram relay.
+/// TCP 443 → HTTPS MITM, TCP 80 → HTTP relay, TCP/UDP 53 → DNS-over-HTTPS,
+/// other TCP → passthrough, other UDP → datagram relay.
 actor FlowHandler {
 
   let logger = Logger(subsystem: "com.wudan.iris.proxy", category: "FlowHandler")
   weak var provider: AppProxyProvider?
   let tlsInterceptor = TLSInterceptor()
+  let dohClient = DoHClient()
+
+  /// Whether DNS-over-HTTPS is enabled (can be toggled via XPC)
+  var dnsEnabled = true
+
+  /// DNS server name for display
+  var dnsServerName = "Cloudflare"
 
   init(provider: AppProxyProvider) {
     self.provider = provider
+  }
+
+  func setDNSEnabled(_ enabled: Bool) {
+    dnsEnabled = enabled
+  }
+
+  func setDNSServer(_ name: String) {
+    dnsServerName = name
+    dohClient.setServer(name)
   }
 
   /// Valid port range for network connections
@@ -37,7 +54,10 @@ actor FlowHandler {
       provider?.removeFlow(flowId)
       return
     }
-    if port == 443 {
+    if port == 53 && dnsEnabled {
+      await relayDNSTCP(
+        flowId: flowId, flow: flow, host: host, port: port, processName: processName)
+    } else if port == 443 {
       await handleHTTPSFlow(
         flowId: flowId, flow: flow, host: host, port: port, processName: processName)
     } else if port == 80 {

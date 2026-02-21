@@ -29,7 +29,6 @@ public final class AVMonitor: ObservableObject {
 
         registerMicrophoneListeners()
         registerDeviceNotifications()
-        pollCameraState()
     }
 
     public func stopMonitoring() {
@@ -153,32 +152,6 @@ public final class AVMonitor: ObservableObject {
             }
         }
         return kAudioObjectUnknown
-    }
-
-    // MARK: - Camera Monitoring via Polling
-
-    private func pollCameraState() {
-        guard isMonitoring else { return }
-
-        let cameras = AVCaptureDevice.DiscoverySession(
-            deviceTypes: [.builtInWideAngleCamera, .externalUnknown],
-            mediaType: .video,
-            position: .unspecified
-        ).devices
-
-        for camera in cameras {
-            // AVCaptureDevice doesn't have a direct "in use" property observable
-            // from outside the capturing process. We check system log or use
-            // notification center for connect/disconnect events.
-            // For now, track via connection notifications.
-            _ = camera
-        }
-
-        // Re-poll every 2 seconds
-        Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(2))
-            self?.pollCameraState()
-        }
     }
 
     // MARK: - Device Connection/Disconnection

@@ -139,6 +139,7 @@ extension ProcessStore {
             logger.info("[XPC] ES getStatus() response: esEnabled=\(esEnabled) mode=\(mode) processCount=\(processCount) esError=\(esError ?? "none")")
 
             isUsingEndpointSecurity = esEnabled
+            enforcementEnabled = status["enforcementEnabled"] as? Bool ?? false
             if esEnabled {
                 esExtensionStatus = .running
                 errorMessage = nil
@@ -152,6 +153,33 @@ extension ProcessStore {
             logger.warning("[XPC] ES getStatus() TIMED OUT after 3s — extension not responding")
             esExtensionStatus = .notInstalled
             isUsingEndpointSecurity = false
+        }
+    }
+
+    // MARK: - Enforcement Mode
+
+    /// Toggle ExecPolicy enforcement via XPC to the endpoint extension.
+    public func setEnforcementMode(_ enforce: Bool) async {
+        guard let proxy = xpcConnection?.remoteObjectProxyWithErrorHandler({ [weak self] error in
+            Task { @MainActor in
+                self?.logger.error("[XPC] enforcement proxy error: \(error.localizedDescription)")
+            }
+        }) as? EndpointXPCProtocol else {
+            logger.warning("[XPC] No connection — cannot set enforcement mode")
+            return
+        }
+
+        let success = await withCheckedContinuation { continuation in
+            proxy.setEnforcementMode(enforce) { ok in
+                continuation.resume(returning: ok)
+            }
+        }
+
+        if success {
+            enforcementEnabled = enforce
+            logger.info("[XPC] Enforcement mode set to \(enforce)")
+        } else {
+            logger.error("[XPC] Failed to set enforcement mode")
         }
     }
 

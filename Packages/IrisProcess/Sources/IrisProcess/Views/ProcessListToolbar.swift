@@ -45,6 +45,28 @@ struct ProcessListToolbar: View {
             }
             .buttonStyle(.plain)
 
+            // ExecPolicy enforcement toggle
+            Button(action: {
+                Task {
+                    await store.setEnforcementMode(!store.enforcementEnabled)
+                }
+            }) {
+                HStack(spacing: 4) {
+                    Image(systemName: store.enforcementEnabled ? "lock.shield.fill" : "lock.shield")
+                    Text(store.enforcementEnabled ? "Enforcing" : "Audit")
+                }
+                .font(.system(size: 12))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(store.enforcementEnabled ? Color.orange.opacity(0.3) : Color.white.opacity(0.1))
+                .foregroundColor(store.enforcementEnabled ? .orange : .gray)
+                .cornerRadius(6)
+            }
+            .buttonStyle(.plain)
+            .help(store.enforcementEnabled
+                ? "ExecPolicy is ENFORCING — blocked processes will be denied"
+                : "ExecPolicy is in AUDIT mode — decisions are logged but not enforced")
+
             Spacer()
 
             // Sort picker

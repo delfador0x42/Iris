@@ -45,17 +45,33 @@ extension SecurityStore {
                 self?.logger.error("XPC error: \(error.localizedDescription)")
                 self?.errorMessage = error.localizedDescription
             }
-        }) as? NetworkXPCProtocol else {
+        }) as? ProxyXPCProtocol else {
             return
         }
 
-        await withCheckedContinuation { continuation in
-            proxy.getConnections { [weak self] dataArray in
-                Task { @MainActor in
-                    await self?.processConnectionData(dataArray)
-                    continuation.resume()
+        let gotResponse = await withTaskGroup(of: Bool.self) { group in
+            group.addTask { @MainActor in
+                await withCheckedContinuation { continuation in
+                    proxy.getConnections { [weak self] dataArray in
+                        Task { @MainActor in
+                            await self?.processConnectionData(dataArray)
+                            continuation.resume()
+                        }
+                    }
                 }
+                return true
             }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                return false
+            }
+            let result = await group.next() ?? false
+            group.cancelAll()
+            return result
+        }
+
+        if !gotResponse {
+            logger.warning("XPC getConnections() timed out after 5s")
         }
     }
 
@@ -169,7 +185,7 @@ extension SecurityStore {
             Task { @MainActor in
                 self?.logger.error("XPC error fetching conversation: \(error.localizedDescription)")
             }
-        }) as? NetworkXPCProtocol else {
+        }) as? ProxyXPCProtocol else {
             return []
         }
 
@@ -193,7 +209,7 @@ extension SecurityStore {
             Task { @MainActor in
                 self?.logger.error("XPC error fetching raw data: \(error.localizedDescription)")
             }
-        }) as? NetworkXPCProtocol else {
+        }) as? ProxyXPCProtocol else {
             return (nil, nil)
         }
 
@@ -210,7 +226,7 @@ extension SecurityStore {
             Task { @MainActor in
                 self?.logger.error("XPC error fetching capture stats: \(error.localizedDescription)")
             }
-        }) as? NetworkXPCProtocol else {
+        }) as? ProxyXPCProtocol else {
             return [:]
         }
 
@@ -227,7 +243,7 @@ extension SecurityStore {
             Task { @MainActor in
                 self?.logger.error("XPC error setting capture budget: \(error.localizedDescription)")
             }
-        }) as? NetworkXPCProtocol else {
+        }) as? ProxyXPCProtocol else {
             return false
         }
 
@@ -255,17 +271,33 @@ extension SecurityStore {
             Task { @MainActor in
                 self?.logger.error("XPC error: \(error.localizedDescription)")
             }
-        }) as? NetworkXPCProtocol else {
+        }) as? ProxyXPCProtocol else {
             return
         }
 
-        await withCheckedContinuation { continuation in
-            proxy.getRules { [weak self] dataArray in
-                Task { @MainActor in
-                    self?.processRulesData(dataArray)
-                    continuation.resume()
+        let gotResponse = await withTaskGroup(of: Bool.self) { group in
+            group.addTask { @MainActor in
+                await withCheckedContinuation { continuation in
+                    proxy.getRules { [weak self] dataArray in
+                        Task { @MainActor in
+                            self?.processRulesData(dataArray)
+                            continuation.resume()
+                        }
+                    }
                 }
+                return true
             }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                return false
+            }
+            let result = await group.next() ?? false
+            group.cancelAll()
+            return result
+        }
+
+        if !gotResponse {
+            logger.warning("XPC getRules() timed out after 5s")
         }
     }
 

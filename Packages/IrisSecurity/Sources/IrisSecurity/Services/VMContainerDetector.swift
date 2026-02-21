@@ -70,7 +70,7 @@ public actor VMContainerDetector {
       let resolved = path.replacingOccurrences(of: "~", with: home)
       if fm.fileExists(atPath: resolved) {
         anomalies.append(.filesystem(
-          name: URL(fileURLWithPath: resolved).lastPathComponent, path: resolved,
+          name: (resolved as NSString).lastPathComponent, path: resolved,
           technique: "VM/Container Infrastructure",
           description: "VM/container artifact found: \(resolved)",
           severity: .low, mitreID: "T1564.006",

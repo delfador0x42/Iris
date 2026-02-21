@@ -9,7 +9,6 @@
 import Foundation
 import Network
 import NetworkExtension
-import os.log
 
 extension FlowHandler {
 
@@ -19,9 +18,13 @@ extension FlowHandler {
     flowId: UUID, flow: NEAppProxyTCPFlow,
     host: String, port: Int, processName: String
   ) async {
+    guard let nwPort = NWEndpoint.Port(rawValue: UInt16(clamping: port)) else {
+      provider?.removeFlow(flowId)
+      return
+    }
     let connection = NWConnection(
       host: NWEndpoint.Host(host),
-      port: NWEndpoint.Port(rawValue: UInt16(clamping: port))!,
+      port: nwPort,
       using: .tcp
     )
 
@@ -80,9 +83,10 @@ extension FlowHandler {
             let data = try await Self.receiveFromServer(connection)
             guard !data.isEmpty else { continue }
             bytesIn.add(Int64(data.count))
-            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-              flow.write(data) { _ in continuation.resume() }
+            let writeError: Error? = await withCheckedContinuation { continuation in
+              flow.write(data) { error in continuation.resume(returning: error) }
             }
+            if writeError != nil { break }
           } catch {
             flow.closeWriteWithError(nil)
             break

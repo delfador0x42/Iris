@@ -16,6 +16,7 @@ public actor SecurityEventBus {
   }()
 
   private var esSequence: UInt64 = 0
+  private var lastProcessTimestamp = Date.distantPast
   private var isRunning = false
   private var pollTask: Task<Void, Never>?
   private var connection: NSXPCConnection?
@@ -62,6 +63,7 @@ public actor SecurityEventBus {
   private func pollLoop() async {
     while isRunning && !Task.isCancelled {
       await pollEndpointSecurity()
+      await pollProcessLifecycle()
       try? await Task.sleep(nanoseconds: 1_000_000_000)
     }
   }
@@ -117,6 +119,44 @@ public actor SecurityEventBus {
         await PersistenceMonitor.shared.processFileEvent(
           path: path, eventType: fe, pid: event.pid, processPath: event.processPath)
       }
+    }
+  }
+
+  /// Poll ES extension for process lifecycle events (exec/fork/exit) via XPC.
+  /// Uses timestamp-based dedup since eventRing has no sequence numbers.
+  private func pollProcessLifecycle() async {
+    let conn = getConnection()
+    guard let proxy = conn.remoteObjectProxyWithErrorHandler({ [weak self] error in
+      Task { [weak self] in await self?.handleXPCError(error) }
+    }) as? ESXPCBridge else { return }
+
+    let dataArray: [Data] = await withCheckedContinuation { cont in
+      proxy.getRecentEvents(limit: 500) { data in
+        cont.resume(returning: data)
+      }
+    }
+
+    let cutoff = lastProcessTimestamp
+    var maxTimestamp = cutoff
+    var secEvents: [SecurityEvent] = []
+
+    for data in dataArray {
+      let raw: RawProcessEvent
+      do {
+        raw = try decoder.decode(RawProcessEvent.self, from: data)
+      } catch {
+        logger.error("[BUS] Process event decode failed: \(error.localizedDescription)")
+        continue
+      }
+      guard raw.timestamp > cutoff else { continue }
+      if raw.timestamp > maxTimestamp { maxTimestamp = raw.timestamp }
+      secEvents.append(raw.toSecurityEvent())
+    }
+
+    if !secEvents.isEmpty {
+      lastProcessTimestamp = maxTimestamp
+      totalIngested += UInt64(secEvents.count)
+      await DetectionEngine.shared.processBatch(secEvents)
     }
   }
 

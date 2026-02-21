@@ -37,9 +37,11 @@ extension FlowHandler {
         await connections.cancelAll()
       }
 
-      // Client → Server: read datagrams from the flow, forward to real destinations
+      // Client → Server: read datagrams from the flow, forward to real destinations.
+      // Port 53 datagrams are intercepted for DNS-over-HTTPS when enabled.
       group.addTask { [weak self] in
         guard let self = self else { return }
+        let isDNSEnabled = await self.dnsEnabled
         while true {
           let result = await Self.readDatagrams(from: flow)
           guard let datagrams = result.datagrams, !datagrams.isEmpty else { break }
@@ -61,7 +63,17 @@ extension FlowHandler {
 
             bytesOut.add(Int64(datagram.count))
 
-            // Get or create connection for this destination
+            // DNS interception: port 53 datagrams get forwarded via DoH
+            if port == 53 && isDNSEnabled && datagram.count >= 12 {
+              await self.handleDNSDatagram(
+                datagram, from: flow, endpoint: endpoint,
+                processName: processName, xpcService: xpcService,
+                bytesIn: bytesIn
+              )
+              continue
+            }
+
+            // Normal UDP relay for non-DNS traffic
             let conn = await connections.connection(for: host, port: port)
             conn.send(
               content: datagram,

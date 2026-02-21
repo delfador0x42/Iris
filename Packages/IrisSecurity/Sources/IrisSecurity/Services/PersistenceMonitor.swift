@@ -75,7 +75,7 @@ public actor PersistenceMonitor {
             persistenceType: persistenceType,
             eventType: eventType,
             pid: pid,
-            processName: URL(fileURLWithPath: processPath).lastPathComponent,
+            processName: (processPath as NSString).lastPathComponent,
             processPath: processPath
         )
 

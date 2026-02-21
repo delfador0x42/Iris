@@ -63,13 +63,9 @@ final class CLICommandHandler {
       let cleaned = await TransparentProxyManager.enableProxy()
       respond(cleaned ? "ok" : "failed", action: "cleanProxy")
 
-    case "installProxy":
-      ExtensionManager.shared.installExtension(.proxy)
-      respond("ok", action: "installProxy")
-
-    case "installDNS":
-      ExtensionManager.shared.installExtension(.dns)
-      respond("ok", action: "installDNS")
+    case "installNetwork":
+      ExtensionManager.shared.installExtension(.network)
+      respond("ok", action: "installNetwork")
 
     case "scan":
       await runScanWithTiming()
@@ -87,10 +83,8 @@ final class CLICommandHandler {
     let status: [String: Any] = [
       "timestamp": ISO8601DateFormatter().string(from: Date()),
       "extensions": [
-        "network": em.networkExtensionState.description,
         "endpoint": em.endpointExtensionState.description,
-        "proxy": em.proxyExtensionState.description,
-        "dns": em.dnsExtensionState.description,
+        "network": em.networkExtensionState.description,
       ],
       "proxy": [
         "connected": ProxyStore.shared.isEnabled,

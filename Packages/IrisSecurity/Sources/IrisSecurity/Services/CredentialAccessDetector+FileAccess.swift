@@ -41,7 +41,7 @@ extension CredentialAccessDetector {
 
             let fdInfoCount = Int(actual) / MemoryLayout<proc_fdinfo>.size
             let path = snapshot.path(for: pid)
-            let name = URL(fileURLWithPath: path).lastPathComponent
+            let name = (path as NSString).lastPathComponent
 
             // Only skip ourselves (to avoid self-detection noise).
             // System processes are NOT exempt — a compromised system binary
@@ -119,7 +119,7 @@ extension CredentialAccessDetector {
 
             if worldRead != 0 || worldWrite != 0 || (maxPerms == 0o600 && (groupRead != 0 || groupWrite != 0)) {
                 anomalies.append(.filesystem(
-                    name: URL(fileURLWithPath: path).lastPathComponent, path: path,
+                    name: (path as NSString).lastPathComponent, path: path,
                     technique: "Exposed Credential File",
                     description: "Credential file \(path) has overly permissive permissions: \(String(perms, radix: 8)). Expected max: \(String(maxPerms, radix: 8)).",
                     severity: .medium, mitreID: "T1552.004",
@@ -158,7 +158,7 @@ extension CredentialAccessDetector {
         for (path, service) in cloudCreds {
             if fm.fileExists(atPath: path) {
                 anomalies.append(.filesystem(
-                    name: URL(fileURLWithPath: path).lastPathComponent, path: path,
+                    name: (path as NSString).lastPathComponent, path: path,
                     technique: "\(service) Credentials on Disk",
                     description: "\(service) credential file found at \(path). Cloud credentials on disk are high-value targets for APTs.",
                     severity: .low, mitreID: "T1552.001",
@@ -207,7 +207,7 @@ extension CredentialAccessDetector {
             guard pid > 0 else { continue }
             let path = snapshot.path(for: pid)
             guard !path.isEmpty else { continue }
-            let name = URL(fileURLWithPath: path).lastPathComponent
+            let name = (path as NSString).lastPathComponent
 
             // Python/Ruby/Node accessing browser credential paths is suspicious
             let scriptInterpreters: Set<String> = [

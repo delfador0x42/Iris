@@ -23,16 +23,12 @@ extension ExtensionManager: OSSystemExtensionRequestDelegate {
             logger.warning("[DELEGATE] requestNeedsUserApproval for \(type.displayName) (bundle: \(request.identifier)). User must approve in System Settings > Privacy & Security.")
 
             switch type {
-            case .network:
-                networkExtensionState = .needsUserApproval
-                startPollingForNetworkApproval()
             case .endpoint:
                 endpointExtensionState = .needsUserApproval
                 startPollingForEndpointApproval()
-            case .proxy:
-                proxyExtensionState = .needsUserApproval
-            case .dns:
-                dnsExtensionState = .needsUserApproval
+            case .network:
+                networkExtensionState = .needsUserApproval
+                startPollingForNetworkApproval()
             }
         }
     }
@@ -82,12 +78,10 @@ extension ExtensionManager: OSSystemExtensionRequestDelegate {
                 logger.error("[DELEGATE]   userInfo[\(key)] = \(String(describing: value))")
             }
 
-            // During clean reinstall, continue sequence even if uninstall fails
             if await handleReinstallError(for: type) {
                 return
             }
 
-            // Normal error handling
             handleInstallError(error, for: type)
         }
     }
@@ -136,15 +130,15 @@ extension ExtensionManager {
             logger.info("[REINSTALL] Endpoint uninstall failed (may not exist), continuing to reinstall...")
             endpointExtensionState = .notInstalled
 
-            await cleanNetworkFilterConfiguration()
+            await cleanTransparentProxyConfiguration()
             try? await Task.sleep(nanoseconds: 500_000_000)
 
             pendingOperation = .reinstallAfterCleanup
-            pendingInstallationType = .network
-            networkExtensionState = .installing
+            pendingInstallationType = .endpoint
+            endpointExtensionState = .installing
 
             let request = OSSystemExtensionRequest.activationRequest(
-                forExtensionWithIdentifier: ExtensionType.network.bundleIdentifier,
+                forExtensionWithIdentifier: ExtensionType.endpoint.bundleIdentifier,
                 queue: .main
             )
             request.delegate = self

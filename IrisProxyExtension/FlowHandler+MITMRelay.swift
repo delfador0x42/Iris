@@ -31,6 +31,8 @@ extension FlowHandler {
         try? await Task.sleep(nanoseconds: UInt64(Self.maxRelayDuration * 1_000_000_000))
         serverConnection.cancel()
         clientTLS.close()
+        flow.closeReadWithError(nil)
+        flow.closeWriteWithError(nil)
       }
 
       // Client → Server
@@ -70,6 +72,7 @@ extension FlowHandler {
           }
         } catch {
           self.logger.debug("Client→Server relay ended for \(host)")
+          clientTLS.close()
           serverConnection.cancel()
         }
       }

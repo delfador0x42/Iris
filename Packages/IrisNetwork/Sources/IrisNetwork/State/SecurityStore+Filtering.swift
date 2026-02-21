@@ -1,4 +1,5 @@
 import Foundation
+import os.log
 
 // MARK: - Filter Enable/Disable
 
@@ -8,7 +9,7 @@ extension SecurityStore {
     /// Toggle network filtering on/off via XPC. When disabled, the extension
     /// stays loaded but returns .allow() for all flows — no tracking, rules, or capture.
     public func setFilteringEnabled(_ enabled: Bool) async -> Bool {
-        guard let proxy = xpcConnection?.remoteObjectProxy as? NetworkXPCProtocol else {
+        guard let proxy = xpcConnection?.remoteObjectProxy as? ProxyXPCProtocol else {
             errorMessage = "Not connected to extension"
             return false
         }
@@ -28,16 +29,14 @@ extension SecurityStore {
     /// Sync filteringEnabled from extension status. Called during refresh.
     func fetchFilterStatus() async {
         guard let proxy = xpcConnection?.remoteObjectProxyWithErrorHandler({ _ in
-        }) as? NetworkXPCProtocol else {
+        }) as? ProxyXPCProtocol else {
             return
         }
 
-        await withCheckedContinuation { continuation in
-            proxy.getStatus { [weak self] status in
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            proxy.isFilteringEnabled { [weak self] enabled in
                 Task { @MainActor in
-                    if let enabled = status["filterEnabled"] as? Bool {
-                        self?.filteringEnabled = enabled
-                    }
+                    self?.filteringEnabled = enabled
                     continuation.resume()
                 }
             }

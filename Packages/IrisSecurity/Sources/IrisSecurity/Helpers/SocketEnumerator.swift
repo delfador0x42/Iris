@@ -77,14 +77,14 @@ public enum SocketEnumerator {
       let proto = si.pointee.psi.soi_protocol
       guard fam == AF_INET || fam == AF_INET6 else { continue }
       guard proto == Int32(IPPROTO_TCP) || proto == Int32(IPPROTO_UDP) else { continue }
-      if name == nil { name = processName(pid) }
+      let pname = name ?? { let n = processName(pid); name = n; return n }()
 
       if proto == Int32(IPPROTO_TCP) {
         let tcp = si.pointee.psi.soi_proto.pri_tcp
-        entries.append(tcpEntry(pid: pid, name: name!, tcp: tcp))
+        entries.append(tcpEntry(pid: pid, name: pname, tcp: tcp))
       } else {
         let udp = si.pointee.psi.soi_proto.pri_in
-        entries.append(udpEntry(pid: pid, name: name!, udp: udp))
+        entries.append(udpEntry(pid: pid, name: pname, udp: udp))
       }
     }
     return entries

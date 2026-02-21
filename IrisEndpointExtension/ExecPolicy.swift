@@ -8,7 +8,24 @@ import os.log
 enum ExecPolicy {
 
     /// When true, log deny decisions but allow anyway. When false, actually block.
-    static var auditMode = true
+    /// Persisted to UserDefaults so mode survives extension restart.
+    /// Thread-safe: protected by modeLock (accessed from AUTH thread + XPC thread).
+    private static let modeKey = "ExecPolicyAuditMode"
+    private static let modeLock = NSLock()
+    private static var _auditMode: Bool = {
+        let defaults = UserDefaults.standard
+        guard defaults.object(forKey: modeKey) != nil else { return true }
+        return defaults.bool(forKey: modeKey)
+    }()
+    static var auditMode: Bool {
+        get { modeLock.lock(); defer { modeLock.unlock() }; return _auditMode }
+        set {
+            modeLock.lock()
+            _auditMode = newValue
+            modeLock.unlock()
+            UserDefaults.standard.set(newValue, forKey: modeKey)
+        }
+    }
 
     struct Decision {
         let allow: Bool
@@ -112,11 +129,15 @@ enum ExecPolicy {
 
     // MARK: - AUTH_OPEN Policy
 
-    /// Credential file patterns that trigger AUTH_OPEN deny checks
+    /// Credential file patterns that trigger AUTH_OPEN deny checks.
+    /// Exact filenames use O(1) Set lookup. Variable names (SSH/GPG keys) checked via
+    /// filename prefix + path suffix in evaluateOpen — avoids O(n) substring scans.
     private static let credentialFilenames: Set<String> = [
         "login.keychain-db", "keychain-2.db",
         "Login Data", "Cookies", "Web Data", "key4.db", "logins.json",
         "TCC.db",
+        "exodus.wallet",  // Crypto wallet (was .contains path scan)
+        "credentials",    // AWS credentials (was .contains path scan)
     ]
 
     /// Processes allowed to open credential files (browsers, system daemons)
@@ -127,9 +148,18 @@ enum ExecPolicy {
         "Dropbox", "1Password", "Bitwarden",
     ]
 
+    /// Known locations for credential-accessing binaries.
+    /// Process name alone is spoofable — verify the binary lives in a trusted location.
+    private static let trustedAppPrefixes: [String] = [
+        "/Applications/",
+        "/System/Applications/",
+        "/usr/bin/", "/usr/sbin/", "/usr/libexec/",
+        "/Library/Application Support/",
+    ]
+
     /// Evaluate an OPEN of a credential-sensitive file.
     static func evaluateOpen(
-        path: String, processName: String,
+        path: String, processName: String, processPath: String,
         isPlatform: Bool, isApple: Bool
     ) -> Decision {
         // Platform binaries: always allow
@@ -140,49 +170,67 @@ enum ExecPolicy {
 
         // Check if this is a credential file
         let filename = (path as NSString).lastPathComponent
-        let isCredential = credentialFilenames.contains(filename)
-            || path.contains("/.ssh/id_")
-            || path.contains("/Exodus/exodus.wallet")
-            || path.contains("/.aws/credentials")
-            || path.contains("/.gnupg/private-keys")
+        var isCredential = credentialFilenames.contains(filename)
+        // Variable-name credentials: check filename prefix, verify parent dir via O(k) hasSuffix.
+        // Only runs when Set lookup misses — avoids O(n) substring scan on every AUTH_OPEN.
+        if !isCredential && filename.hasPrefix("id_") {
+            isCredential = path.hasSuffix("/.ssh/" + filename)
+        }
+        if !isCredential && filename.hasPrefix("private-") {
+            isCredential = path.hasSuffix("/.gnupg/" + filename)
+        }
 
         guard isCredential else {
             return Decision(allow: true, reason: "non_credential", cache: true)
         }
 
-        // Credential file + allowed process → allow
+        // Credential file + allowed process name + trusted path → allow.
+        // Name-only matching is spoofable: a malicious binary named "Safari"
+        // in /tmp/ would bypass. Require the binary to live in a known location.
         if credentialAllowlist.contains(processName) {
-            return Decision(allow: true, reason: "credential_allowlist", cache: false)
+            let inTrustedLocation = trustedAppPrefixes.contains { processPath.hasPrefix($0) }
+            if inTrustedLocation {
+                return Decision(allow: true, reason: "credential_allowlist", cache: false)
+            }
+            logger.warning("[POLICY] Credential allowlist name match but untrusted path: \(processPath)")
         }
 
-        // Credential file + unknown process → deny
-        logger.warning("[POLICY] DENY OPEN credential: \(path) by \(processName)")
+        // Credential file + unknown/untrusted process → deny
+        logger.warning("[POLICY] DENY OPEN credential: \(path) by \(processName) (\(processPath))")
         return Decision(allow: false, reason: "credential_theft", cache: false)
     }
 
     // MARK: - Threat Intel Blocklists (updatable via XPC)
 
-    private static let blocksLock = NSLock()
-    private static var blockedPaths: Set<String> = []
-    private static var blockedTeamIds: Set<String> = []
-    private static var blockedSigningIds: Set<String> = []
-
-    /// Thread-safe snapshot of blocklists for evaluate()
-    private static var blockedSnapshot: (paths: Set<String>, teams: Set<String>, sigs: Set<String>) {
-        blocksLock.lock()
-        defer { blocksLock.unlock() }
-        return (blockedPaths, blockedTeamIds, blockedSigningIds)
+    /// Immutable blocklist snapshot — created once on update, read as a single pointer.
+    /// Eliminates O(n) Set copies on every AUTH_EXEC evaluation.
+    private final class Blocklist: @unchecked Sendable {
+        let paths: Set<String>
+        let teams: Set<String>
+        let sigs: Set<String>
+        init(paths: Set<String> = [], teams: Set<String> = [], sigs: Set<String> = []) {
+            self.paths = paths; self.teams = teams; self.sigs = sigs
+        }
     }
 
-    /// Update blocklists from main app via XPC (called on XPC thread)
+    private static let blocksLock = NSLock()
+    private static var _blocklist = Blocklist()
+
+    /// Thread-safe read — returns shared immutable reference (no Set copy).
+    private static var blockedSnapshot: Blocklist {
+        blocksLock.lock()
+        defer { blocksLock.unlock() }
+        return _blocklist
+    }
+
+    /// Swap blocklists atomically from main app via XPC (called on XPC thread).
     static func updateBlocklists(
         paths: Set<String>, teamIds: Set<String>, signingIds: Set<String>
     ) {
+        let snapshot = Blocklist(paths: paths, teams: teamIds, sigs: signingIds)
         blocksLock.lock()
-        blockedPaths = paths
-        blockedTeamIds = teamIds
-        blockedSigningIds = signingIds
-        blocksLock.unlock()
+        defer { blocksLock.unlock() }
+        _blocklist = snapshot
         logger.info("[POLICY] Updated blocklists: \(paths.count) paths, \(teamIds.count) teams, \(signingIds.count) sigIDs")
     }
 }

@@ -41,6 +41,8 @@ public actor CovertChannelDetector {
     for socket in sockets {
       guard socket.proto == Int32(IPPROTO_TCP),
             socket.tcpState == Self.tcpEstablished else { continue }
+      // Skip system processes allowed to hold network sockets
+      guard !Self.rawSocketAllowlist.contains(socket.processName) else { continue }
       if let desc = Self.suspiciousPorts[socket.remotePort] {
         anomalies.append(.filesystem(
           name: socket.processName, path: "",

@@ -37,6 +37,9 @@ public final class ProcessStore: ObservableObject {
     /// Whether the ES extension is actively running
     @Published public internal(set) var esExtensionStatus: ESExtensionStatus = .unknown
 
+    /// Whether ExecPolicy enforcement is active (false = audit-only, true = blocking)
+    @Published public var enforcementEnabled = false
+
     public enum ESExtensionStatus: String {
         case unknown = "Unknown"
         case running = "Running"
@@ -77,7 +80,7 @@ public final class ProcessStore: ObservableObject {
     /// Refresh interval in seconds.
     /// Rationale: 2 seconds balances UI responsiveness with CPU usage.
     /// Process list changes infrequently, so faster polling adds overhead without benefit.
-    let refreshInterval: TimeInterval = 2.0
+    let refreshInterval: TimeInterval = 2.3
 
     /// Tracks PIDs already in history to avoid duplicates. Keyed by (pid, path) string.
     var historySeenKeys: Set<String> = []
@@ -127,6 +130,9 @@ public final class ProcessStore: ObservableObject {
         displayedProcesses = result
     }
 
+    /// Max process history entries before FIFO eviction.
+    private static let maxHistorySize = 10_000
+
     /// Merge current processes into session history. New entries only — deduped by (pid, path).
     func mergeIntoHistory(_ current: [ProcessInfo]) {
         var newEntries: [ProcessInfo] = []
@@ -139,6 +145,10 @@ public final class ProcessStore: ObservableObject {
         }
         if !newEntries.isEmpty {
             processHistory.append(contentsOf: newEntries)
+            if processHistory.count > Self.maxHistorySize {
+                let overflow = processHistory.count - Self.maxHistorySize
+                processHistory.removeFirst(overflow)
+            }
         }
     }
 
@@ -148,5 +158,10 @@ public final class ProcessStore: ObservableObject {
     /// - Parameter dataSource: Optional data source (nil uses XPC/local fallback)
     public init(dataSource: (any ProcessDataSourceProtocol)? = nil) {
         self.dataSource = dataSource
+    }
+
+    deinit {
+        refreshTimer?.invalidate()
+        xpcConnection?.invalidate()
     }
 }

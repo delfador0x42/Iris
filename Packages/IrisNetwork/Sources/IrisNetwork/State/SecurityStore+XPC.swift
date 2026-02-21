@@ -15,14 +15,7 @@ extension SecurityStore {
 
         logger.info("Connecting to security extension...")
 
-        let connection = NSXPCConnection(
-            machServiceName: NetworkXPCService.extensionServiceName,
-            options: []
-        )
-
-        connection.remoteObjectInterface = NSXPCInterface(
-            with: NetworkXPCProtocol.self
-        )
+        let connection = ProxyXPCInterface.createConnection()
 
         connection.invalidationHandler = { [weak self] in
             Task { @MainActor in

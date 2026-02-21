@@ -2,48 +2,39 @@ import Foundation
 
 // MARK: - Extension Type
 
-/// Types of system extensions managed by Iris
+/// Types of system extensions managed by Iris.
+/// Two extensions: Endpoint (EndpointSecurity) and Network (unified proxy).
 public enum ExtensionType: CaseIterable {
-    case network
-    case endpoint
-    case proxy
-    case dns
+    case endpoint   // EndpointSecurity — process monitoring, AUTH events
+    case network    // Unified network — proxy + DNS + firewall rules
 
     public var bundleIdentifier: String {
         switch self {
-        case .network: return "com.wudan.iris.network.extension"
         case .endpoint: return "com.wudan.iris.endpoint.extension"
-        case .proxy: return "com.wudan.iris.proxy.extension"
-        case .dns: return "com.wudan.iris.dns.extension"
+        case .network: return "com.wudan.iris.proxy.extension"
         }
     }
 
     /// Resolve extension type from bundle identifier (used in delegate callbacks)
     public init?(bundleIdentifier: String) {
         switch bundleIdentifier {
-        case "com.wudan.iris.network.extension": self = .network
         case "com.wudan.iris.endpoint.extension": self = .endpoint
-        case "com.wudan.iris.proxy.extension": self = .proxy
-        case "com.wudan.iris.dns.extension": self = .dns
+        case "com.wudan.iris.proxy.extension": self = .network
         default: return nil
         }
     }
 
     public var displayName: String {
         switch self {
-        case .network: return "Network Filter"
         case .endpoint: return "Process Monitor"
-        case .proxy: return "HTTPS Proxy"
-        case .dns: return "DNS Proxy"
+        case .network: return "Network Monitor"
         }
     }
 
     public var description: String {
         switch self {
-        case .network: return "Monitors and filters network connections"
-        case .endpoint: return "Monitors process execution"
-        case .proxy: return "Intercepts HTTPS traffic for inspection"
-        case .dns: return "Encrypts DNS queries via DoH"
+        case .endpoint: return "Monitors process execution and file system events"
+        case .network: return "Monitors network traffic, encrypts DNS, and inspects HTTPS"
         }
     }
 }
@@ -72,24 +63,5 @@ public enum ExtensionState: Equatable {
 
     public var isReady: Bool {
         self == .installed
-    }
-}
-
-// MARK: - Filter State
-
-/// State of the network filter
-public enum FilterState: Equatable {
-    case unknown
-    case disabled
-    case enabled
-    case configuring
-
-    public var description: String {
-        switch self {
-        case .unknown: return "Unknown"
-        case .disabled: return "Disabled"
-        case .enabled: return "Enabled"
-        case .configuring: return "Configuring..."
-        }
     }
 }

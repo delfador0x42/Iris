@@ -34,12 +34,12 @@ public actor LOLBinDetector {
         for pid in snap.pids {
             let path = snap.path(for: pid)
             guard !path.isEmpty else { continue }
-            let name = URL(fileURLWithPath: path).lastPathComponent
+            let name = (path as NSString).lastPathComponent
 
             let ppid = snap.parent(of: pid)
             let parentPath = snap.path(for: ppid)
             let parentName = parentPath.isEmpty ? "unknown" :
-                URL(fileURLWithPath: parentPath).lastPathComponent
+                (parentPath as NSString).lastPathComponent
 
             if let mitreID = Self.lolBins[name] {
                 anomalies += checkLineage(pid: pid, name: name, path: path,

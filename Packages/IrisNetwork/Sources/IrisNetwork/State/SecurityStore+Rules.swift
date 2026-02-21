@@ -7,7 +7,7 @@ extension SecurityStore {
 
     /// Add a new security rule
     public func addRule(_ rule: SecurityRule) async -> Bool {
-        guard let proxy = xpcConnection?.remoteObjectProxy as? NetworkXPCProtocol else {
+        guard let proxy = xpcConnection?.remoteObjectProxy as? ProxyXPCProtocol else {
             errorMessage = "Not connected to extension"
             return false
         }
@@ -35,7 +35,7 @@ extension SecurityStore {
 
     /// Remove a rule by ID
     public func removeRule(_ ruleId: UUID) async -> Bool {
-        guard let proxy = xpcConnection?.remoteObjectProxy as? NetworkXPCProtocol else {
+        guard let proxy = xpcConnection?.remoteObjectProxy as? ProxyXPCProtocol else {
             errorMessage = "Not connected to extension"
             return false
         }
@@ -54,7 +54,7 @@ extension SecurityStore {
 
     /// Toggle a rule's enabled state
     public func toggleRule(_ ruleId: UUID) async -> Bool {
-        guard let proxy = xpcConnection?.remoteObjectProxy as? NetworkXPCProtocol else {
+        guard let proxy = xpcConnection?.remoteObjectProxy as? ProxyXPCProtocol else {
             errorMessage = "Not connected to extension"
             return false
         }
@@ -148,7 +148,7 @@ extension SecurityStore {
 
     /// Update an existing rule via XPC
     public func updateRule(_ rule: SecurityRule) async -> Bool {
-        guard let proxy = xpcConnection?.remoteObjectProxy as? NetworkXPCProtocol else {
+        guard let proxy = xpcConnection?.remoteObjectProxy as? ProxyXPCProtocol else {
             errorMessage = "Not connected to extension"
             return false
         }

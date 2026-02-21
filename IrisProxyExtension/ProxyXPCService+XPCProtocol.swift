@@ -17,71 +17,33 @@ extension ProxyXPCService: ProxyXPCProtocol {
 
     var status = provider?.getStatus() ?? [:]
     flowsLock.lock()
+    defer { flowsLock.unlock() }
     let flowCount = capturedFlows.count
-    flowsLock.unlock()
     status["flowCount"] = flowCount
     status["interceptionEnabled"] = interceptionEnabled
 
     reply(status)
   }
 
-  func getFlows(reply: @escaping ([Data]) -> Void) {
-    logger.debug("XPC: getFlows")
-
-    flowsLock.lock()
-    let flows = capturedFlows
-    flowsLock.unlock()
-
-    let encoder = JSONEncoder()
-    encoder.dateEncodingStrategy = .iso8601
-
-    let data = flows.compactMap { try? encoder.encode($0) }
-    reply(data)
-  }
-
   func getFlowsSince(_ sinceSeq: UInt64, reply: @escaping (UInt64, [Data]) -> Void) {
+    // Snapshot under lock, encode outside to avoid blocking flow recording
     flowsLock.lock()
     let currentSeq = nextSequenceNumber - 1
     let changed = capturedFlows.filter { $0.sequenceNumber > sinceSeq }
     flowsLock.unlock()
 
-    let encoder = JSONEncoder()
-    encoder.dateEncodingStrategy = .iso8601
-    let data = changed.compactMap { try? encoder.encode($0) }
+    let data = changed.compactMap { try? Self.jsonEncoder.encode($0) }
 
     logger.debug("XPC: getFlowsSince(\(sinceSeq)) → \(data.count) changed, seq=\(currentSeq)")
     reply(currentSeq, data)
-  }
-
-  func getFlow(_ flowId: String, reply: @escaping (Data?) -> Void) {
-    logger.debug("XPC: getFlow(\(flowId))")
-
-    guard let uuid = UUID(uuidString: flowId) else {
-      reply(nil)
-      return
-    }
-
-    flowsLock.lock()
-    let flow = capturedFlows.first { $0.id == uuid }
-    flowsLock.unlock()
-
-    guard let flow = flow else {
-      reply(nil)
-      return
-    }
-
-    let encoder = JSONEncoder()
-    encoder.dateEncodingStrategy = .iso8601
-
-    reply(try? encoder.encode(flow))
   }
 
   func clearFlows(reply: @escaping (Bool) -> Void) {
     logger.debug("XPC: clearFlows")
 
     flowsLock.lock()
+    defer { flowsLock.unlock() }
     capturedFlows.removeAll()
-    flowsLock.unlock()
 
     reply(true)
   }
@@ -92,11 +54,6 @@ extension ProxyXPCService: ProxyXPCProtocol {
     reply(true)
   }
 
-  func isInterceptionEnabled(reply: @escaping (Bool) -> Void) {
-    logger.debug("XPC: isInterceptionEnabled")
-    reply(interceptionEnabled)
-  }
-
   func setCA(_ certData: Data, keyData: Data, reply: @escaping (Bool) -> Void) {
     logger.info("XPC: setCA (cert: \(certData.count) bytes, key: \(keyData.count) bytes)")
     let success = provider?.setCA(certData: certData, keyData: keyData) ?? false
@@ -104,26 +61,4 @@ extension ProxyXPCService: ProxyXPCProtocol {
     reply(success)
   }
 
-  func updateFlowBytes(
-    _ flowId: String, bytesIn: Int64, bytesOut: Int64,
-    ended: Bool, error: String?, reply: @escaping (Bool) -> Void
-  ) {
-    guard let uuid = UUID(uuidString: flowId) else {
-      reply(false)
-      return
-    }
-    if ended {
-      completeFlow(uuid, bytesIn: bytesIn, bytesOut: bytesOut, error: error)
-    } else {
-      flowsLock.lock()
-      if let index = capturedFlows.firstIndex(where: { $0.id == uuid }) {
-        capturedFlows[index].bytesIn = bytesIn
-        capturedFlows[index].bytesOut = bytesOut
-        capturedFlows[index].sequenceNumber = nextSequenceNumber
-        nextSequenceNumber += 1
-      }
-      flowsLock.unlock()
-    }
-    reply(true)
-  }
 }

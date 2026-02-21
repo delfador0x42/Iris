@@ -35,6 +35,12 @@ public actor ScriptBackdoorScanner {
     return anomalies
   }
 
+  /// Dangerous commands that indicate potential backdoor when found in scripts
+  private static let dangerousCommands = [
+    "curl", "wget", "nc", "ncat", "bash -i", "python -c", "perl -e",
+    "ruby -e", "osascript", "open -a Terminal", "launchctl",
+  ]
+
   /// Scan /Library paths for unexpected scripts
   private func scanLibraryScripts() -> [ProcessAnomaly] {
     var anomalies: [ProcessAnomaly] = []
@@ -44,23 +50,39 @@ public actor ScriptBackdoorScanner {
       var count = 0
       while let file = enumerator.nextObject() as? String {
         count += 1
-        if count > 5000 { break } // Limit scan depth
+        if count > 5000 { break }
         let ext = (file as NSString).pathExtension.lowercased()
         guard Self.scriptExtensions.contains(ext) else { continue }
         let fullPath = "\(dir)/\(file)"
         if Self.allowedPaths.contains(where: { fullPath.hasPrefix($0) }) { continue }
+
+        // Deobfuscate script content to detect hidden commands
+        var severity: AnomalySeverity = .medium
+        var evidence = [
+          "file=\((file as NSString).lastPathComponent)",
+          "path=\(fullPath)",
+          "extension=\(ext)",
+        ]
+        if let data = fm.contents(atPath: fullPath),
+           let content = String(data: data.prefix(8192), encoding: .utf8) {
+          let deobResult = ShellDeobfuscator.deobfuscate(content)
+          let lower = deobResult.decoded.lowercased()
+          let hasDangerous = Self.dangerousCommands.contains { lower.contains($0) }
+          if hasDangerous { severity = .high }
+          if !deobResult.evidence.isEmpty {
+            severity = .critical
+            for ev in deobResult.evidence { evidence.append("obfuscation=\(ev.factor)") }
+          }
+        }
+
         anomalies.append(.filesystem(
           name: (file as NSString).lastPathComponent, path: fullPath,
           technique: "Script in System Path",
           description: "Script found: \(fullPath)",
-          severity: .medium, mitreID: "T1059",
+          severity: severity, mitreID: "T1059",
           scannerId: "script_backdoor",
-          enumMethod: "FileManager.enumerator → system path script extension scan",
-          evidence: [
-            "file=\((file as NSString).lastPathComponent)",
-            "path=\(fullPath)",
-            "extension=\(ext)",
-          ]
+          enumMethod: "FileManager.enumerator + ShellDeobfuscator content analysis",
+          evidence: evidence
         ))
       }
     }
@@ -83,19 +105,29 @@ public actor ScriptBackdoorScanner {
         guard let data = fm.contents(atPath: path),
           let content = String(data: data, encoding: .utf8)
         else { continue }
-        if content.contains("osascript") || content.contains(".scpt") || content.contains(".applescript") {
+
+        // Deobfuscate content before checking
+        let deobResult = ShellDeobfuscator.deobfuscate(content)
+        let effective = deobResult.decoded
+
+        if effective.contains("osascript") || effective.contains(".scpt") || effective.contains(".applescript") {
+          var evidence = [
+            "plist=\(file)",
+            "path=\(path)",
+            "indicator=osascript or .scpt reference",
+          ]
+          for ev in deobResult.evidence {
+            evidence.append("obfuscation=\(ev.factor)")
+          }
+          let severity: AnomalySeverity = deobResult.evidence.isEmpty ? .high : .critical
           anomalies.append(.filesystem(
             name: file, path: path,
             technique: "AppleScript Persistence",
-            description: "LaunchAgent uses osascript: \(file) — XCSSET/OSAMiner technique",
-            severity: .high, mitreID: "T1059.002",
+            description: "LaunchAgent uses osascript: \(file) — XCSSET/OSAMiner technique\(deobResult.evidence.isEmpty ? "" : " [OBFUSCATED]")",
+            severity: severity, mitreID: "T1059.002",
             scannerId: "script_backdoor",
-            enumMethod: "NSDictionary(contentsOfFile:) → plist osascript/.scpt content scan",
-            evidence: [
-              "plist=\(file)",
-              "path=\(path)",
-              "indicator=osascript or .scpt reference",
-            ]
+            enumMethod: "plist content scan + ShellDeobfuscator",
+            evidence: evidence
           ))
         }
       }
@@ -112,28 +144,34 @@ public actor ScriptBackdoorScanner {
     for file in files {
       let path = "\(dir)/\(file)"
       guard let data = fm.contents(atPath: path) else { continue }
-      // Check if it's a script (starts with shebang)
-      if data.count > 2 && data[0] == 0x23 && data[1] == 0x21 {
-        // It's a script with shebang
-        guard let firstLine = String(data: data.prefix(200), encoding: .utf8)?
-          .components(separatedBy: "\n").first
-        else { continue }
-        if firstLine.contains("python") || firstLine.contains("bash") || firstLine.contains("ruby") {
-          anomalies.append(.filesystem(
-            name: file, path: path,
-            technique: "Script in /usr/local/bin",
-            description: "\(file): \(firstLine.prefix(80))",
-            severity: .low, mitreID: "T1059",
-            scannerId: "script_backdoor",
-            enumMethod: "FileManager.contents → shebang (#!) header check",
-            evidence: [
-              "file=\(file)",
-              "path=\(path)",
-              "shebang=\(firstLine.prefix(80))",
-            ]
-          ))
-        }
+      guard data.count > 2 && data[0] == 0x23 && data[1] == 0x21 else { continue }
+      guard let content = String(data: data.prefix(8192), encoding: .utf8) else { continue }
+      let firstLine = content.components(separatedBy: "\n").first ?? ""
+      guard firstLine.contains("python") || firstLine.contains("bash") || firstLine.contains("ruby") else { continue }
+
+      var severity: AnomalySeverity = .low
+      var evidence = [
+        "file=\(file)",
+        "path=\(path)",
+        "shebang=\(firstLine.prefix(80))",
+      ]
+      let deobResult = ShellDeobfuscator.deobfuscate(content)
+      let lower = deobResult.decoded.lowercased()
+      if Self.dangerousCommands.contains(where: { lower.contains($0) }) { severity = .medium }
+      if !deobResult.evidence.isEmpty {
+        severity = .high
+        for ev in deobResult.evidence { evidence.append("obfuscation=\(ev.factor)") }
       }
+
+      anomalies.append(.filesystem(
+        name: file, path: path,
+        technique: "Script in /usr/local/bin",
+        description: "\(file): \(firstLine.prefix(80))\(deobResult.evidence.isEmpty ? "" : " [OBFUSCATED]")",
+        severity: severity, mitreID: "T1059",
+        scannerId: "script_backdoor",
+        enumMethod: "shebang check + ShellDeobfuscator content analysis",
+        evidence: evidence
+      ))
     }
     return anomalies
   }

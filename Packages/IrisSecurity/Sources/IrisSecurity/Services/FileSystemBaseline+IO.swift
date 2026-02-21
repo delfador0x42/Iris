@@ -62,7 +62,7 @@ extension FileSystemBaseline {
     func saveBaseline() {
         guard let baseline = currentBaseline else { return }
         if let data = try? JSONEncoder().encode(baseline) {
-            try? data.write(to: URL(fileURLWithPath: baselinePath))
+            try? data.write(to: URL(fileURLWithPath: baselinePath), options: .atomic)
         }
     }
 

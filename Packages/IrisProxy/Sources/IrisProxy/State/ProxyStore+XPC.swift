@@ -109,15 +109,31 @@ extension ProxyStore {
 
         isLoading = true
 
-        await withCheckedContinuation { continuation in
-            proxy.getFlowsSince(lastSeenSequence) { [weak self] newSeq, flowDataArray in
-                Task { @MainActor in
-                    self?.mergeFlows(flowDataArray, newSequence: newSeq)
-                    self?.isLoading = false
-                    continuation.resume()
+        let gotResponse = await withTaskGroup(of: Bool.self) { group in
+            group.addTask { @MainActor in
+                await withCheckedContinuation { continuation in
+                    proxy.getFlowsSince(self.lastSeenSequence) { [weak self] newSeq, flowDataArray in
+                        Task { @MainActor in
+                            self?.mergeFlows(flowDataArray, newSequence: newSeq)
+                            continuation.resume()
+                        }
+                    }
                 }
+                return true
             }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                return false
+            }
+            let result = await group.next() ?? false
+            group.cancelAll()
+            return result
         }
+
+        if !gotResponse {
+            logger.warning("XPC getFlowsSince() timed out after 5s")
+        }
+        isLoading = false
     }
 
     /// Clears all captured flows.

@@ -63,6 +63,15 @@ extension ScannerEntry {
     ScannerEntry(id: "cloud_c2", name: "Cloud C2 Detector", tier: .fast) { ctx in
       await CloudC2Detector.shared.scan(connections: ctx.connections)
     },
+    ScannerEntry(id: "env_keying", name: "Environmental Keying", tier: .fast) { ctx in
+      await EnvironmentalKeyingDetector.shared.scan(snapshot: ctx.snapshot)
+    },
+    ScannerEntry(id: "process_hollowing", name: "Process Hollowing", tier: .fast) { ctx in
+      await ProcessHollowingDetector.shared.scan(snapshot: ctx.snapshot)
+    },
+    ScannerEntry(id: "inline_hook", name: "Inline Hook Detector", tier: .fast) { ctx in
+      await InlineHookDetector.shared.scan(snapshot: ctx.snapshot)
+    },
   ]
 
   // MARK: - Medium Tier (filesystem reads, plist parsing, sqlite)
@@ -200,7 +209,7 @@ extension ScannerEntry {
     ScannerEntry(id: "persistence_monitor", name: "Persistence Monitor", tier: .medium) { _ in
       (await PersistenceMonitor.shared.diffAgainstSnapshot()).map { change in
         ProcessAnomaly.filesystem(
-          name: change.processName.isEmpty ? URL(fileURLWithPath: change.path).lastPathComponent : change.processName,
+          name: change.processName.isEmpty ? (change.path as NSString).lastPathComponent : change.processName,
           path: change.path,
           technique: "Persistence \(change.eventType.rawValue.capitalized)",
           description: "\(change.persistenceType.rawValue) \(change.eventType.rawValue): \(change.path)\(change.pid > 0 ? " by PID \(change.pid)" : "")",
@@ -215,6 +224,9 @@ extension ScannerEntry {
             "pid: \(change.pid)",
           ])
       }
+    },
+    ScannerEntry(id: "timestomp", name: "Timestomp Detector", tier: .medium) { _ in
+      await TimestompDetector.shared.scan()
     },
   ]
 
@@ -271,6 +283,24 @@ extension ScannerEntry {
     },
     ScannerEntry(id: "browser_history", name: "Browser History", tier: .slow) { _ in
       await BrowserHistoryScanner.shared.scan()
+    },
+    ScannerEntry(id: "supply_chain", name: "Supply Chain Auditor", tier: .slow) { _ in
+      (await SupplyChainAuditor.shared.auditAll()).map { finding in
+        ProcessAnomaly(pid: 0, processName: finding.packageName, processPath: "",
+          parentPID: 0, parentName: "",
+          technique: "Supply Chain \(finding.source.rawValue)",
+          description: finding.finding + ": " + finding.details,
+          severity: finding.severity, mitreID: "T1195",
+          scannerId: "supply_chain",
+          enumMethod: "Package manager audit (\(finding.source.rawValue))",
+          evidence: [
+            "source: \(finding.source.rawValue)",
+            "package: \(finding.packageName)",
+          ])
+      }
+    },
+    ScannerEntry(id: "phantom_dylib", name: "Phantom Dylib", tier: .slow) { ctx in
+      await PhantomDylibDetector.shared.scan(snapshot: ctx.snapshot)
     },
   ]
 }

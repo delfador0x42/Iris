@@ -67,7 +67,7 @@ public actor EventTapScanner {
             let isSystemWide = tap.processBeingTapped == 0
             let rawPath = ProcessEnumeration.getProcessPath(tap.tappingProcess)
             let processPath = rawPath.isEmpty ? "unknown (\(tap.tappingProcess))" : rawPath
-            let processName = URL(fileURLWithPath: processPath).lastPathComponent
+            let processName = (processPath as NSString).lastPathComponent
 
             // Verify signing
             let (signing, identifier, apple) = verifier.verify(processPath)

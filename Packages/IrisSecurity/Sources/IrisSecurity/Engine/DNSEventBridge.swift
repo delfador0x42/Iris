@@ -72,9 +72,11 @@ actor DNSEventBridge {
 
     if !newEvents.isEmpty {
       await SecurityEventBus.shared.ingest(newEvents)
+      // Prune: reset to just the currently-live query IDs.
+      // Set.suffix() on an unordered Set gives ARBITRARY elements, not the
+      // most recent — previous code could keep old IDs and drop new ones.
       if seenIds.count > 100_000 {
-        let keep = seenIds.suffix(80_000)
-        seenIds = Set(keep)
+        seenIds = Set(queries.map(\.id))
       }
     }
   }

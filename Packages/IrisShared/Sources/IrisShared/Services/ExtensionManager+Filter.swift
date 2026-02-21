@@ -3,53 +3,10 @@ import Foundation
 import NetworkExtension
 import os.log
 
-// MARK: - Network Filter, DNS Proxy, Full Disk Access & System Settings
+// MARK: - Transparent Proxy, Full Disk Access & System Settings
 
 @MainActor
 extension ExtensionManager {
-
-  // MARK: - Network Filter Control
-
-  /// Enable the network filter
-  public func enableFilter() async {
-    filterState = .configuring
-    filterState = await NetworkFilterManager.enableFilter()
-    if filterState != .enabled {
-      lastError = "Failed to enable network filter"
-    }
-  }
-
-  /// Disable the network filter
-  public func disableFilter() async {
-    filterState = .configuring
-    filterState = await NetworkFilterManager.disableFilter()
-  }
-
-  /// Completely remove the network filter configuration
-  public func cleanNetworkFilterConfiguration() async {
-    await NetworkFilterManager.cleanConfiguration()
-    filterState = .disabled
-  }
-
-  // MARK: - DNS Proxy Control
-
-  /// Enable the DNS proxy via NEDNSProxyManager
-  public func enableDNSProxy() async {
-    let success = await DNSProxyManager.enableDNSProxy()
-    if !success {
-      lastError = "Failed to enable DNS proxy"
-    }
-  }
-
-  /// Disable the DNS proxy
-  public func disableDNSProxy() async {
-    await DNSProxyManager.disableDNSProxy()
-  }
-
-  /// Check DNS proxy status
-  public func checkDNSProxyStatus() async -> (isConfigured: Bool, isEnabled: Bool) {
-    return await DNSProxyManager.checkStatus()
-  }
 
   // MARK: - Transparent Proxy Control
 

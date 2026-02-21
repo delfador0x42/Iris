@@ -150,7 +150,7 @@ extension PersistenceScanner {
                       state == "activated_enabled",
                       let originPath = ext["originPath"] as? String else { continue }
 
-                let name = URL(fileURLWithPath: originPath).lastPathComponent
+                let name = (originPath as NSString).lastPathComponent
                 let (signing, identifier, apple) = verifyBinary(originPath)
 
                 var ev: [Evidence] = []

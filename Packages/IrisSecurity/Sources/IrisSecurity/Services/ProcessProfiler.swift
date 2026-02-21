@@ -70,7 +70,7 @@ public enum ProcessProfiler {
             seen.insert(parent)
             let path = ProcessEnumeration.getProcessPath(parent)
             let name = path.isEmpty ? (parent == 0 ? "kernel" : "unknown")
-                                    : URL(fileURLWithPath: path).lastPathComponent
+                                    : (path as NSString).lastPathComponent
             chain.append(Ancestor(pid: parent, name: name, path: path))
             if parent <= 1 { break }
             current = parent

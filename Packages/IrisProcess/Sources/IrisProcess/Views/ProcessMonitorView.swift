@@ -35,7 +35,7 @@ struct ProcessMonitorView: View {
     private func startMonitoring() {
         updateSuspiciousCache()
         refreshTreeSnapshot()
-        suspiciousTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { _ in
+        suspiciousTimer = Timer.scheduledTimer(withTimeInterval: 2.5, repeats: true) { _ in
             Task { @MainActor in updateSuspiciousCache() }
         }
         treeTimer = Timer.scheduledTimer(withTimeInterval: treeRefreshInterval, repeats: true) { _ in

@@ -26,7 +26,7 @@ extension PersistenceScanner {
                 }
                 guard let bookmark = bookmarkData else { continue }
                 guard let resolvedPath = resolveBookmark(bookmark) else { continue }
-                let name = URL(fileURLWithPath: resolvedPath).lastPathComponent
+                let name = (resolvedPath as NSString).lastPathComponent
 
                 let (signing, identifier, apple) = verifyBinary(resolvedPath)
 

@@ -7,6 +7,7 @@ public struct ThreatScanResult: Sendable {
   public let fsChanges: [FileSystemChange]
   public let scannerResults: [ScannerResult]
   public let correlations: [CorrelationEngine.Correlation]
+  public let fusion: FusionResult
   public let allowlistSuppressed: Int
   public let scanDuration: TimeInterval
   public let scannerCount: Int
@@ -17,16 +18,20 @@ public struct ThreatScanResult: Sendable {
   }
 
   public var criticalCount: Int {
-    anomalies.filter { $0.severity == .critical }.count
-      + fsChanges.filter { $0.severity == .critical }.count
-      + correlations.filter { $0.severity == .critical }.count
+    let a = anomalies.filter { $0.severity == .critical }.count
+    let f = fsChanges.filter { $0.severity == .critical }.count
+    let c = correlations.filter { $0.severity == .critical }.count
+    let fc = fusion.campaigns.filter { $0.severity == .critical }.count
+    return a + f + c + fc
   }
 
   public var highCount: Int {
-    anomalies.filter { $0.severity == .high }.count
-      + supplyChainFindings.filter { $0.severity == .high }.count
-      + fsChanges.filter { $0.severity == .high }.count
-      + correlations.filter { $0.severity == .high }.count
+    let a = anomalies.filter { $0.severity == .high }.count
+    let s = supplyChainFindings.filter { $0.severity == .high }.count
+    let f = fsChanges.filter { $0.severity == .high }.count
+    let c = correlations.filter { $0.severity == .high }.count
+    let fc = fusion.campaigns.filter { $0.severity == .high }.count
+    return a + s + f + c + fc
   }
 }
 
@@ -101,12 +106,20 @@ extension SecurityAssessor {
     let sc = await scFindings
     let fs = await fsChanges
 
+    // Cross-domain fusion: bridge batch findings + real-time alerts
+    let recentAlerts = await AlertStore.shared.alertsSince(start.addingTimeInterval(-3600))
+    let fusion = FusionEngine.fuse(
+      scannerResults: allResults,
+      correlations: correlations,
+      recentAlerts: recentAlerts)
+
     let result = ThreatScanResult(
       anomalies: allResults.flatMap(\.anomalies).sorted { $0.severity > $1.severity },
       supplyChainFindings: sc,
       fsChanges: fs,
       scannerResults: allResults,
       correlations: correlations,
+      fusion: fusion,
       allowlistSuppressed: totalSuppressed,
       scanDuration: Date().timeIntervalSince(start),
       scannerCount: allResults.count,

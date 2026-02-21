@@ -86,6 +86,73 @@ fn shannon_entropy(data: &[u8]) -> f64 {
     entropy
 }
 
+/// Chi-square test for uniform byte distribution.
+fn chi_square_test(data: &[u8]) -> f64 {
+    let mut counts = [0u64; 256];
+    for &b in data { counts[b as usize] += 1; }
+    let expected = data.len() as f64 / 256.0;
+    let mut chi = 0.0f64;
+    for &count in &counts {
+        let diff = count as f64 - expected;
+        chi += (diff * diff) / expected;
+    }
+    chi
+}
+
+/// Monte Carlo pi estimation — truly random data estimates pi accurately.
+/// Returns percent error from true pi.
+fn monte_carlo_pi(data: &[u8]) -> f64 {
+    if data.len() < 12 { return 100.0; }
+    let mut inside = 0u64;
+    let mut total = 0u64;
+    let max_val = 0xFFFFFF as f64;
+    let mut i = 0;
+    while i + 5 < data.len() {
+        let x = ((data[i] as u32) << 16 | (data[i+1] as u32) << 8 | data[i+2] as u32) as f64;
+        let y = ((data[i+3] as u32) << 16 | (data[i+4] as u32) << 8 | data[i+5] as u32) as f64;
+        let nx = x / max_val;
+        let ny = y / max_val;
+        if nx * nx + ny * ny <= 1.0 { inside += 1; }
+        total += 1;
+        i += 6;
+    }
+    if total == 0 { return 100.0; }
+    let estimated_pi = 4.0 * inside as f64 / total as f64;
+    100.0 * (std::f64::consts::PI - estimated_pi).abs() / std::f64::consts::PI
+}
+
+/// Known file format magic bytes (skip entropy analysis for these).
+fn is_known_format(data: &[u8]) -> bool {
+    if data.len() < 4 { return false; }
+    let h = &data[..4];
+    // PNG, JPEG, GIF, TIFF
+    if h == [0x89, 0x50, 0x4E, 0x47] { return true; }
+    if h[..2] == [0xFF, 0xD8] { return true; } // JPEG variants
+    if h == [0x47, 0x49, 0x46, 0x38] { return true; }
+    if h == [0x49, 0x49, 0x2A, 0x00] || h == [0x4D, 0x4D, 0x00, 0x2A] { return true; }
+    // gzip
+    if data.len() >= 3 && data[0] == 0x1F && data[1] == 0x8B && data[2] == 0x08 { return true; }
+    // ZIP, PDF
+    if h == [0x50, 0x4B, 0x03, 0x04] || h == [0x25, 0x50, 0x44, 0x46] { return true; }
+    false
+}
+
+const ENTROPY_THRESHOLD: f64 = 7.95;
+const MONTE_CARLO_THRESHOLD: f64 = 1.5;
+const CHI_SQUARE_THRESHOLD: f64 = 400.0;
+const MIN_FILE_SIZE: usize = 1024;
+const READ_CHUNK: usize = 3 * 1024 * 1024; // 3 MB
+
+/// Full entropy analysis result.
+#[repr(C)]
+pub struct IrisEntropyResult {
+    pub entropy: f64,
+    pub chi_square: f64,
+    pub monte_carlo_pi_error: f64,
+    pub is_encrypted: bool,
+    pub is_known_format: bool,
+}
+
 // ---- FFI exports ----
 
 /// Hash a single file. Returns hex string via out_hex (caller must free).
@@ -156,4 +223,57 @@ pub extern "C" fn iris_batch_sha256(
 pub extern "C" fn iris_batch_sha256_free(arr: *mut IrisCStringArray) {
     if arr.is_null() { return; }
     unsafe { free_c_string_array(&*arr); }
+}
+
+/// Full entropy analysis: Shannon entropy, chi-square, Monte Carlo pi, encrypted determination.
+/// Reads up to 3MB of the file. Skips known formats (images, archives, PDF).
+/// Returns 0=ok, -1=file error/too small, -2=arg error, -3=known format (skipped).
+#[no_mangle]
+pub extern "C" fn iris_file_entropy_full(path: *const c_char, out: *mut IrisEntropyResult) -> i32 {
+    if path.is_null() || out.is_null() { return -2; }
+    let p = match unsafe { CStr::from_ptr(path) }.to_str() {
+        Ok(s) => s, Err(_) => return -2,
+    };
+    let meta = match fs::metadata(p) {
+        Ok(m) => m, Err(_) => return -1,
+    };
+    if (meta.len() as usize) < MIN_FILE_SIZE { return -1; }
+
+    let mut file = match fs::File::open(p) {
+        Ok(f) => f, Err(_) => return -1,
+    };
+    use std::io::Read;
+    let mut buf = vec![0u8; READ_CHUNK];
+    let n = match file.read(&mut buf) {
+        Ok(n) => n, Err(_) => return -1,
+    };
+    if n < MIN_FILE_SIZE { return -1; }
+    let data = &buf[..n];
+
+    if is_known_format(data) {
+        unsafe {
+            (*out).is_known_format = true;
+            (*out).entropy = 0.0;
+            (*out).chi_square = 0.0;
+            (*out).monte_carlo_pi_error = 100.0;
+            (*out).is_encrypted = false;
+        }
+        return -3;
+    }
+
+    let entropy = shannon_entropy(data);
+    let chi = chi_square_test(data);
+    let pi_err = monte_carlo_pi(data);
+    let encrypted = entropy >= ENTROPY_THRESHOLD
+        && pi_err <= MONTE_CARLO_THRESHOLD
+        && !(pi_err > 0.5 && chi > CHI_SQUARE_THRESHOLD);
+
+    unsafe {
+        (*out).entropy = entropy;
+        (*out).chi_square = chi;
+        (*out).monte_carlo_pi_error = pi_err;
+        (*out).is_encrypted = encrypted;
+        (*out).is_known_format = false;
+    }
+    0
 }

@@ -102,6 +102,19 @@ public actor CloudC2Detector {
             )
         }
 
+        // Check ThreatIntelStore for known C2 domains
+        if let indicator = ThreatIntelStore.checkHostname(hostname) {
+            return NetworkAnomaly(
+                type: .rawIPConnection,
+                processName: processName,
+                remoteAddress: hostname,
+                description: "\(processName) (PID \(pid)) connecting to known C2: \(hostname) — \(indicator.malwareFamily) [\(indicator.mitreId)]",
+                severity: indicator.severity,
+                connectionCount: 1,
+                averageInterval: 0
+            )
+        }
+
         return nil
     }
 }

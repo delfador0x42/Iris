@@ -7,7 +7,6 @@ import Foundation
     // MARK: - Process Monitoring
 
     func getProcesses(reply: @escaping ([Data]) -> Void)
-    func getProcess(pid: Int32, reply: @escaping (Data?) -> Void)
 
     // MARK: - Event History
 
@@ -22,7 +21,6 @@ import Foundation
     // MARK: - Extension Control
 
     func getStatus(reply: @escaping ([String: Any]) -> Void)
-    func isEndpointSecurityAvailable(reply: @escaping (Bool) -> Void)
 
     // MARK: - ExecPolicy Configuration
 

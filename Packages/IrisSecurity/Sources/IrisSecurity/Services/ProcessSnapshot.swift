@@ -37,7 +37,7 @@ public struct ProcessSnapshot: Sendable {
     public func name(for pid: pid_t) -> String {
         let p = path(for: pid)
         guard !p.isEmpty else { return "unknown" }
-        return URL(fileURLWithPath: p).lastPathComponent
+        return (p as NSString).lastPathComponent
     }
 
     /// Walk the parent chain up to maxDepth. Returns [pid, parent, grandparent, ...]

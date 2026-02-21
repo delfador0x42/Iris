@@ -23,7 +23,7 @@ class AppProxyProvider: NETransparentProxyProvider {
   let xpcService = ProxyXPCService()
 
   /// Flow handler for processing intercepted connections
-  private var flowHandler: FlowHandler?
+  var flowHandler: FlowHandler?
 
   /// Active TCP flows being handled
   private var activeFlows: [UUID: NEAppProxyTCPFlow] = [:]
@@ -117,8 +117,26 @@ class AppProxyProvider: NETransparentProxyProvider {
     let port = Int(remoteEndpoint.port) ?? 0
     let flowId = UUID()
     let host = remoteEndpoint.hostname
-    let processPath = flow.metaData.sourceAppSigningIdentifier
-    let processName = processPath.components(separatedBy: ".").last ?? processPath
+    let signingId = flow.metaData.sourceAppSigningIdentifier
+    let processName = signingId.components(separatedBy: ".").last ?? signingId
+
+    // Get PID from audit token for process attribution
+    let pid: Int32
+    if let auditToken = flow.metaData.sourceAppAuditToken {
+      pid = audit_token_to_pid(auditToken)
+    } else {
+      pid = -1
+    }
+    let processPath = pid > 0 ? getProcessPath(pid: pid) : signingId
+
+    // Evaluate security rules — reject blocked flows before claiming
+    let allowed = xpcService.trackConnection(
+      flowId: flowId, pid: pid, processPath: processPath,
+      processName: processName, remoteHost: host,
+      remotePort: UInt16(clamping: port), proto: .tcp,
+      remoteHostname: flow.metaData.filterFlowIdentifier != nil ? host : nil
+    )
+    guard allowed else { return false }
 
     flowsLock.lock()
     activeFlows[flowId] = flow
@@ -146,8 +164,26 @@ class AppProxyProvider: NETransparentProxyProvider {
 
   private func handleUDPFlow(_ flow: NEAppProxyUDPFlow) -> Bool {
     let flowId = UUID()
-    let processPath = flow.metaData.sourceAppSigningIdentifier
-    let processName = processPath.components(separatedBy: ".").last ?? processPath
+    let signingId = flow.metaData.sourceAppSigningIdentifier
+    let processName = signingId.components(separatedBy: ".").last ?? signingId
+
+    // Get PID from audit token
+    let pid: Int32
+    if let auditToken = flow.metaData.sourceAppAuditToken {
+      pid = audit_token_to_pid(auditToken)
+    } else {
+      pid = -1
+    }
+    let processPath = pid > 0 ? getProcessPath(pid: pid) : signingId
+
+    // UDP flows don't have fixed destinations (each datagram can go anywhere),
+    // so we can't evaluate endpoint-scoped rules here. Process-scoped rules work.
+    let allowed = xpcService.trackConnection(
+      flowId: flowId, pid: pid, processPath: processPath,
+      processName: processName, remoteHost: "0.0.0.0",
+      remotePort: 0, proto: .udp
+    )
+    guard allowed else { return false }
 
     udpFlowsLock.lock()
     activeUDPFlows[flowId] = flow

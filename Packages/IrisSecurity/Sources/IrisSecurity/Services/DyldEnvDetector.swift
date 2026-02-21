@@ -59,7 +59,7 @@ public actor DyldEnvDetector {
             for (key, value) in envVars {
                 for dangerVar in Self.dangerousVars where key == dangerVar.name {
                     let path = snapshot.path(for: pid)
-                    let name = path.isEmpty ? "PID \(pid)" : URL(fileURLWithPath: path).lastPathComponent
+                    let name = path.isEmpty ? "PID \(pid)" : (path as NSString).lastPathComponent
 
                     // Apple processes with DYLD_ are especially suspicious
                     let isSystem = path.hasPrefix("/System/") || path.hasPrefix("/usr/")
@@ -150,7 +150,7 @@ public actor DyldEnvDetector {
                     if trimmed.contains(dangerVar.name) &&
                        (trimmed.contains("export") || trimmed.contains("=")) {
                         anomalies.append(.filesystem(
-                            name: URL(fileURLWithPath: profile).lastPathComponent, path: profile,
+                            name: (profile as NSString).lastPathComponent, path: profile,
                             technique: "Shell Profile \(dangerVar.name)",
                             description: "Shell profile \(profile) line \(lineNum + 1) sets \(dangerVar.name). Every shell session will inherit this injection.",
                             severity: dangerVar.severity, mitreID: "T1574.006",

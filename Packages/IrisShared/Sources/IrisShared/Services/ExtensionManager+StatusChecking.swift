@@ -8,32 +8,19 @@ import os.log
 @MainActor
 extension ExtensionManager {
 
-  /// Check status of all extensions (parallel — max(checks) instead of sum)
+  /// Check status of all extensions (parallel)
   public func checkAllExtensionStatuses() async {
     logger.info("[STATUS] Checking all extension statuses...")
-    async let network: Void = checkNetworkExtensionStatus()
     async let endpoint: Void = checkEndpointExtensionStatus()
-    async let proxy: Void = checkProxyExtensionStatus()
-    async let dns: Void = checkDNSExtensionStatus()
+    async let network: Void = checkNetworkExtensionStatus()
     async let fda: Void = checkFullDiskAccess()
-    _ = await (network, endpoint, proxy, dns, fda)
-    let netDesc = networkExtensionState.description
+    _ = await (endpoint, network, fda)
     let epDesc = endpointExtensionState.description
-    let prxDesc = proxyExtensionState.description
-    let dnsDesc = dnsExtensionState.description
+    let netDesc = networkExtensionState.description
     let fdaVal = hasFullDiskAccess
     logger.info(
-      "[STATUS] All checks complete: network=\(netDesc) endpoint=\(epDesc) proxy=\(prxDesc) dns=\(dnsDesc) fda=\(fdaVal)"
+      "[STATUS] All checks complete: endpoint=\(epDesc) network=\(netDesc) fda=\(fdaVal)"
     )
-  }
-
-  /// Check network extension status via NEFilterManager
-  public func checkNetworkExtensionStatus() async {
-    let (extensionState, filter) = await NetworkFilterManager.checkStatus()
-    networkExtensionState = extensionState
-    filterState = filter
-    logger.info(
-      "[STATUS] Network: state=\(extensionState.description) filter=\(filter.description)")
   }
 
   /// Check endpoint extension status by querying ES health via XPC getStatus()
@@ -53,11 +40,9 @@ extension ExtensionManager {
         "[STATUS] Endpoint XPC responded: esEnabled=\(esEnabled) mode=\(mode) processCount=\(processCount) esError=\(esError ?? "none")"
       )
 
-      // XPC responded → extension IS installed and running
       endpointExtensionState = .installed
     } else {
       logger.warning("[STATUS] Endpoint XPC: no response (timeout or not running)")
-      // Don't downgrade from transitional/positive states
       if endpointExtensionState != .installed && endpointExtensionState != .installing
         && endpointExtensionState != .needsUserApproval
       {
@@ -66,7 +51,7 @@ extension ExtensionManager {
     }
   }
 
-  /// Query the endpoint extension's getStatus() via XPC for real ES health info
+  /// Query the endpoint extension's getStatus() via XPC
   private func queryEndpointStatus() async -> [String: Any]? {
     let serviceName = "99HGW2AR62.com.wudan.iris.endpoint.xpc"
     logger.debug("[XPC] Connecting to \(serviceName) for status query...")
@@ -118,7 +103,6 @@ extension ExtensionManager {
         continuation.resume(returning: status)
       }
 
-      // Timeout after 2 seconds
       DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [self] in
         lock.lock()
         guard !didResume else {
@@ -134,28 +118,16 @@ extension ExtensionManager {
     }
   }
 
-  /// Check proxy extension status via NETransparentProxyManager
-  public func checkProxyExtensionStatus() async {
+  /// Check network extension status via NETransparentProxyManager
+  public func checkNetworkExtensionStatus() async {
     let (isConfigured, isEnabled) = await TransparentProxyManager.checkStatus()
     if isConfigured && isEnabled {
-      proxyExtensionState = .installed
-    } else if proxyExtensionState == .unknown {
-      proxyExtensionState = .notInstalled
+      networkExtensionState = .installed
+    } else if networkExtensionState == .unknown {
+      networkExtensionState = .notInstalled
     }
-    let proxyDesc = proxyExtensionState.description
-    logger.info("[STATUS] Proxy: configured=\(isConfigured) enabled=\(isEnabled) → \(proxyDesc)")
-  }
-
-  /// Check DNS extension status via NEDNSProxyManager
-  public func checkDNSExtensionStatus() async {
-    let (isConfigured, isEnabled) = await DNSProxyManager.checkStatus()
-    if isConfigured && isEnabled {
-      dnsExtensionState = .installed
-    } else if dnsExtensionState == .unknown {
-      dnsExtensionState = .notInstalled
-    }
-    let dnsStateDesc = dnsExtensionState.description
-    logger.info("[STATUS] DNS: configured=\(isConfigured) enabled=\(isEnabled) → \(dnsStateDesc)")
+    let netDesc = networkExtensionState.description
+    logger.info("[STATUS] Network: configured=\(isConfigured) enabled=\(isEnabled) → \(netDesc)")
   }
 
   // MARK: - Polling
@@ -207,13 +179,11 @@ extension ExtensionManager {
 
   // MARK: - XPC Ping
 
-  /// Try connecting to a Mach XPC service with a short timeout to check if extension is running
   func pingXPCService(machServiceName: String, protocol proto: Protocol) async -> Bool {
     await withCheckedContinuation { continuation in
       let connection = NSXPCConnection(machServiceName: machServiceName)
       connection.remoteObjectInterface = NSXPCInterface(with: proto)
 
-      // NSLock guards didResume to prevent double-resume crash
       let lock = NSLock()
       var didResume = false
 

@@ -40,7 +40,7 @@ public actor RansomwareDetector {
             reportedPIDs.insert(pid)
             let rawPath = ProcessEnumeration.getProcessPath(pid)
             let processPath = rawPath.isEmpty ? "unknown" : rawPath
-            let processName = URL(fileURLWithPath: processPath).lastPathComponent
+            let processName = (processPath as NSString).lastPathComponent
 
             let alert = RansomwareAlert(
                 processID: pid,

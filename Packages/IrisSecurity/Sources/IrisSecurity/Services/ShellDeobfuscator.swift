@@ -12,8 +12,18 @@ enum ShellDeobfuscator {
         let evidence: [Evidence]
     }
 
+    /// Max input length for deobfuscation. Beyond this, regex passes become too expensive
+    /// and the content is likely not a shell command. Returns evidence noting the skip.
+    private static let maxInputLength = 65_536
+
     /// Main entry: deobfuscate content and collect evidence
     static func deobfuscate(_ content: String) -> Result {
+        if content.count > maxInputLength {
+            return Result(decoded: content, evidence: [Evidence(
+                factor: "Command too long (\(content.count) bytes) — skipped deobfuscation",
+                weight: 0.3, category: .content
+            )])
+        }
         var ev: [Evidence] = []
         var text = content
 
@@ -32,6 +42,9 @@ enum ShellDeobfuscator {
 
         let (t5, e5) = decodeQuoteSplitting(text)
         text = t5; ev.append(contentsOf: e5)
+
+        let (t6, e6) = decodeBase64Payloads(text)
+        text = t6; ev.append(contentsOf: e6)
 
         // Phase 2: Detect patterns we can't fully decode but are suspicious
         ev.append(contentsOf: detectVariableSubstitution(content))
@@ -229,59 +242,53 @@ enum ShellDeobfuscator {
         return (decoded, [ev])
     }
 
-    // MARK: - Detection-only patterns (can't safely decode)
+    // MARK: - base64 decode
 
-    /// Variable-based command hiding: c=curl; $c http://evil.com
-    /// Uses string ops instead of regex — 16 regex/line was the #1 CPU bottleneck.
-    private static func detectVariableSubstitution(_ text: String) -> [Evidence] {
-        let dangerousCommands = ["curl", "wget", "nc", "bash", "sh", "python", "perl", "ruby"]
-        for line in text.split(separator: "\n") {
-            let trimmed = line.drop(while: { $0 == " " || $0 == "\t" })
-            if trimmed.hasPrefix("#") { continue }
-            guard let eqIdx = trimmed.firstIndex(of: "=") else { continue }
-            // Must have a letter/underscore before '=' (variable name)
-            guard eqIdx > trimmed.startIndex else { continue }
-            let beforeEq = trimmed[trimmed.startIndex..<eqIdx]
-            guard beforeEq.allSatisfy({ $0.isLetter || $0 == "_" || $0.isNumber }) else { continue }
-            // Extract value after '=', strip quotes
-            var value = trimmed[trimmed.index(after: eqIdx)...]
-            // Strip trailing ; if present
-            if value.hasSuffix(";") { value = value.dropLast() }
-            // Strip surrounding quotes
-            let stripped = value.trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
-            let lower = stripped.lowercased()
-            if dangerousCommands.contains(lower) {
-                return [Evidence(
-                    factor: "Variable hides command name — possible evasion",
-                    weight: 0.4, category: .content
-                )]
-            }
+    /// Decode base64 payloads from common shell patterns:
+    ///   echo "PAYLOAD" | base64 -d    echo "PAYLOAD" | base64 --decode
+    ///   base64 -d <<< "PAYLOAD"       $(echo PAYLOAD | base64 -d)
+    private static func decodeBase64Payloads(_ text: String) -> (String, [Evidence]) {
+        let lower = text.lowercased()
+        guard lower.contains("base64") && (lower.contains("-d") || lower.contains("--decode")) else {
+            return (text, [])
         }
-        return []
-    }
 
-    /// Backtick execution for command construction: `echo curl` http://evil.com
-    private static func detectBacktickExec(_ text: String) -> [Evidence] {
-        // Fast bail: no backticks at all
-        guard text.contains("`") else { return [] }
-        let dangerous = ["curl", "wget", "nc", "bash", "sh", "python"]
-        for line in text.split(separator: "\n") {
-            let trimmed = line.drop(while: { $0 == " " || $0 == "\t" })
-            if trimmed.hasPrefix("#") { continue }
-            // Find backtick pairs containing echo/printf
-            guard let first = trimmed.firstIndex(of: "`") else { continue }
-            let afterFirst = trimmed.index(after: first)
-            guard afterFirst < trimmed.endIndex,
-                  let second = trimmed[afterFirst...].firstIndex(of: "`") else { continue }
-            let inside = String(trimmed[first...second]).lowercased()
-            guard inside.contains("echo") || inside.contains("printf") else { continue }
-            if dangerous.contains(where: { inside.contains($0) }) {
-                return [Evidence(
-                    factor: "Backtick constructs command name — obfuscation",
-                    weight: 0.5, category: .content
-                )]
-            }
+        // Pattern 1: echo "..." | base64 -d   or   echo "..." | base64 --decode
+        // Pattern 2: base64 -d <<< "..."
+        guard let regex = try? NSRegularExpression(
+            pattern: #"(?:echo\s+['"]?([A-Za-z0-9+/=]{16,})['"]?\s*\|\s*base64\s+(?:-[dD]|--decode))|(?:base64\s+(?:-[dD]|--decode)\s*<<<\s*['"]?([A-Za-z0-9+/=]{16,})['"]?)"#
+        ) else { return (text, []) }
+
+        var decoded = text
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = regex.matches(in: text, range: range)
+        guard !matches.isEmpty else { return (text, []) }
+
+        var payloads: [String] = []
+        for match in matches.reversed() {
+            // Group 1 = echo pipe pattern, Group 2 = here-string pattern
+            let b64: String
+            if let r1 = Range(match.range(at: 1), in: decoded), !decoded[r1].isEmpty {
+                b64 = String(decoded[r1])
+            } else if let r2 = Range(match.range(at: 2), in: decoded), !decoded[r2].isEmpty {
+                b64 = String(decoded[r2])
+            } else { continue }
+
+            guard let data = Data(base64Encoded: b64),
+                  let plain = String(data: data, encoding: .utf8),
+                  plain.allSatisfy({ $0.isASCII }) else { continue }
+
+            payloads.append(plain)
+            let fullRange = Range(match.range, in: decoded)!
+            decoded.replaceSubrange(fullRange, with: plain)
         }
-        return []
+
+        guard !payloads.isEmpty else { return (text, []) }
+        let preview = payloads.first.map { $0.prefix(80) } ?? ""
+        let ev = Evidence(
+            factor: "base64-decoded payload (\(payloads.count)x): \(preview)",
+            weight: 0.7, category: .content
+        )
+        return (decoded, [ev])
     }
 }

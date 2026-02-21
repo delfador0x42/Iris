@@ -8,14 +8,13 @@ extension DNSStore {
 
     // MARK: - Connection
 
-    /// Connects to the DNS proxy extension via XPC.
+    /// Connects to the proxy extension via XPC (DNS is now handled by the unified proxy).
     public func connect() {
         guard xpcConnection == nil else { return }
 
-        logger.info("Connecting to DNS proxy extension...")
+        logger.info("Connecting to proxy extension for DNS...")
 
-        let connection = NSXPCConnection(machServiceName: DNSXPCInterface.serviceName, options: [])
-        connection.remoteObjectInterface = DNSXPCInterface.createInterface()
+        let connection = ProxyXPCInterface.createConnection()
 
         connection.invalidationHandler = { [weak self] in
             Task { @MainActor in
@@ -38,7 +37,7 @@ extension DNSStore {
             await refreshQueries()
         }
 
-        logger.info("Connected to DNS proxy extension")
+        logger.info("Connected to proxy extension for DNS")
     }
 
     /// Start periodic refresh timer. Call from view's .onAppear.
@@ -52,13 +51,13 @@ extension DNSStore {
         stopRefreshTimer()
     }
 
-    /// Disconnects from the DNS proxy extension.
+    /// Disconnects from the proxy extension.
     public func disconnect() {
         stopRefreshTimer()
         xpcConnection?.invalidate()
         xpcConnection = nil
         isActive = false
-        logger.info("Disconnected from DNS proxy extension")
+        logger.info("Disconnected from proxy extension DNS")
     }
 
     func handleConnectionInvalidated() {
@@ -66,7 +65,7 @@ extension DNSStore {
         stopRefreshTimer()
         xpcConnection = nil
         isActive = false
-        errorMessage = "Connection to DNS proxy extension lost"
+        errorMessage = "Connection to proxy extension lost"
     }
 
     func handleConnectionInterrupted() {
@@ -81,22 +80,42 @@ extension DNSStore {
 
     // MARK: - XPC Methods
 
-    /// Refreshes the DNS proxy status.
+    /// Refreshes DNS status from the proxy extension.
     public func refreshStatus() async {
-        guard let proxy = getDNSProxy() else {
+        guard let proxy = getProxy() else {
             isActive = false
             return
         }
 
+        // Get DNS statistics
         await withCheckedContinuation { continuation in
-            proxy.getStatus { [weak self] status in
+            proxy.getDNSStatistics { [weak self] stats in
                 Task { @MainActor in
-                    self?.isActive = status["isActive"] as? Bool ?? false
-                    self?.isEnabled = status["isActive"] as? Bool ?? false
-                    self?.totalQueries = status["totalQueries"] as? Int ?? 0
-                    self?.averageLatencyMs = status["averageLatencyMs"] as? Double ?? 0
-                    self?.serverName = status["serverName"] as? String ?? "Unknown"
+                    self?.totalQueries = stats["totalQueries"] as? Int ?? 0
+                    self?.averageLatencyMs = stats["averageLatencyMs"] as? Double ?? 0
+                    self?.successRate = stats["successRate"] as? Double ?? 1.0
                     self?.errorMessage = nil
+                    continuation.resume()
+                }
+            }
+        }
+
+        // Get DNS enabled state
+        await withCheckedContinuation { continuation in
+            proxy.isDNSEnabled { [weak self] enabled in
+                Task { @MainActor in
+                    self?.isEnabled = enabled
+                    self?.isActive = true
+                    continuation.resume()
+                }
+            }
+        }
+
+        // Get DNS server name
+        await withCheckedContinuation { continuation in
+            proxy.getDNSServer { [weak self] name in
+                Task { @MainActor in
+                    self?.serverName = name
                     continuation.resume()
                 }
             }
@@ -106,27 +125,43 @@ extension DNSStore {
     /// Refreshes the captured DNS queries using delta protocol.
     /// First call fetches all queries; subsequent calls only fetch new ones.
     public func refreshQueries() async {
-        guard let proxy = getDNSProxy() else { return }
+        guard let proxy = getProxy() else { return }
 
         isLoading = true
 
-        await withCheckedContinuation { continuation in
-            proxy.getQueriesSince(lastSeenSequence, limit: 10000) { [weak self] newSeq, queryDataArray in
-                Task { @MainActor in
-                    self?.mergeQueries(queryDataArray, newSequence: newSeq)
-                    self?.isLoading = false
-                    continuation.resume()
+        let gotResponse = await withTaskGroup(of: Bool.self) { group in
+            group.addTask { @MainActor in
+                await withCheckedContinuation { continuation in
+                    proxy.getDNSQueriesSince(self.lastSeenSequence, limit: 10000) { [weak self] newSeq, queryDataArray in
+                        Task { @MainActor in
+                            self?.mergeQueries(queryDataArray, newSequence: newSeq)
+                            continuation.resume()
+                        }
+                    }
                 }
+                return true
             }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                return false
+            }
+            let result = await group.next() ?? false
+            group.cancelAll()
+            return result
         }
+
+        if !gotResponse {
+            logger.warning("XPC getDNSQueriesSince() timed out after 5s")
+        }
+        isLoading = false
     }
 
     /// Clears all captured queries.
     public func clearQueries() async {
-        guard let proxy = getDNSProxy() else { return }
+        guard let proxy = getProxy() else { return }
 
         await withCheckedContinuation { continuation in
-            proxy.clearQueries { [weak self] success in
+            proxy.clearDNSQueries { [weak self] success in
                 Task { @MainActor in
                     if success {
                         self?.queries = []
@@ -141,10 +176,10 @@ extension DNSStore {
 
     /// Enables or disables encrypted DNS.
     public func setEnabled(_ enabled: Bool) async {
-        guard let proxy = getDNSProxy() else { return }
+        guard let proxy = getProxy() else { return }
 
         await withCheckedContinuation { continuation in
-            proxy.setEnabled(enabled) { [weak self] success in
+            proxy.setDNSEnabled(enabled) { [weak self] success in
                 Task { @MainActor in
                     if success {
                         self?.isEnabled = enabled
@@ -157,10 +192,10 @@ extension DNSStore {
 
     /// Changes the DoH server.
     public func setServer(_ name: String) async {
-        guard let proxy = getDNSProxy() else { return }
+        guard let proxy = getProxy() else { return }
 
         await withCheckedContinuation { continuation in
-            proxy.setServer(name) { [weak self] success in
+            proxy.setDNSServer(name) { [weak self] success in
                 Task { @MainActor in
                     if success {
                         self?.serverName = name
@@ -173,9 +208,9 @@ extension DNSStore {
 
     // MARK: - Private Helpers
 
-    func getDNSProxy() -> DNSXPCProtocol? {
+    func getProxy() -> ProxyXPCProtocol? {
         guard let connection = xpcConnection else {
-            errorMessage = "Not connected to DNS proxy extension"
+            errorMessage = "Not connected to proxy extension"
             return nil
         }
 
@@ -184,7 +219,7 @@ extension DNSStore {
                 self?.logger.error("DNS XPC error: \(error.localizedDescription)")
                 self?.errorMessage = error.localizedDescription
             }
-        } as? DNSXPCProtocol
+        } as? ProxyXPCProtocol
     }
 
     /// Merge delta queries into existing list. DNS queries are append-only (no updates).
@@ -212,7 +247,7 @@ extension DNSStore {
 
     func startRefreshTimer() {
         stopRefreshTimer()
-        refreshTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: 2.1, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 await self?.refreshQueries()
             }

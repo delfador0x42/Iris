@@ -7,6 +7,7 @@ import Foundation
   func getSecurityEventsSince(
     _ sinceSeq: UInt64, limit: Int,
     reply: @escaping (UInt64, [Data]) -> Void)
+  func getRecentEvents(limit: Int, reply: @escaping ([Data]) -> Void)
 }
 
 /// Mirror of ESSecurityEvent from IrisEndpointExtension.
@@ -29,9 +30,14 @@ enum RawESEventType: String, Codable {
   case setuid, setgid, sudo
   case remoteThreadCreate, getTask, ptrace
   case kextLoad, mount, tccModify, xpcConnect, btmLaunchItemAdd
+  case csInvalidated, signalSent
   case sshLogin, xprotectMalwareDetected
   case authExec, authOpen
   case mmap, mprotect, procSuspendResume
+  // Nation-state detection events
+  case iokitOpen, copyfile, chown
+  case uipcBind, uipcConnect
+  case authentication, sessionLogin, sessionLogout
 }
 
 struct RawESProcess: Codable {
@@ -72,12 +78,12 @@ extension RawESEvent {
     if let pp = parentPath, !pp.isEmpty {
       // Pre-resolved at event creation time (reliable — parent was alive)
       fields["parent_path"] = pp
-      fields["parent_name"] = parentName ?? URL(fileURLWithPath: pp).lastPathComponent
+      fields["parent_name"] = parentName ?? (pp as NSString).lastPathComponent
     } else if process.ppid > 1 {
       // Fallback: runtime lookup (may fail if parent already exited)
       let pp = ProcessEnumeration.getProcessPath(process.ppid)
       if !pp.isEmpty {
-        fields["parent_name"] = URL(fileURLWithPath: pp).lastPathComponent
+        fields["parent_name"] = (pp as NSString).lastPathComponent
         fields["parent_path"] = pp
       }
     }
@@ -121,9 +127,70 @@ extension RawESEventType {
     case .xprotectMalwareDetected: return "xprotect_malware"
     case .authExec: return "auth_exec"
     case .authOpen: return "auth_open"
+    case .csInvalidated: return "cs_invalidated"
+    case .signalSent: return "signal_sent"
     case .mmap: return "mmap"
     case .mprotect: return "mprotect"
     case .procSuspendResume: return "proc_suspend_resume"
+    // Nation-state detection events
+    case .iokitOpen: return "iokit_open"
+    case .copyfile: return "copyfile"
+    case .chown: return "chown"
+    case .uipcBind: return "uipc_bind"
+    case .uipcConnect: return "uipc_connect"
+    case .authentication: return "authentication"
+    case .sessionLogin: return "session_login"
+    case .sessionLogout: return "session_logout"
+    }
+  }
+}
+
+// MARK: - Process Lifecycle Event Decoding
+
+/// Mirrors ESProcessEvent from IrisEndpointExtension for XPC decoding.
+struct RawProcessEvent: Codable {
+  let eventType: RawProcessEventType
+  let process: RawESProcess
+  let timestamp: Date
+
+  func toSecurityEvent() -> SecurityEvent {
+    let isApple = process.codeSigningInfo?.isAppleSigned ?? false
+    var fields: [String: String] = [
+      "ppid": "\(process.ppid)",
+      "uid": "\(process.userId)",
+    ]
+    if !process.arguments.isEmpty {
+      fields["args"] = process.arguments.joined(separator: " ")
+    }
+    if let sid = process.codeSigningInfo?.signingId {
+      fields["signing_id"] = sid
+    }
+    if let tid = process.codeSigningInfo?.teamId {
+      fields["team_id"] = tid
+    }
+    return SecurityEvent(
+      source: .endpoint,
+      timestamp: timestamp,
+      eventType: eventType.securityEventType,
+      processName: process.name,
+      processPath: process.path,
+      pid: process.pid,
+      signingId: process.codeSigningInfo?.signingId,
+      isAppleSigned: isApple,
+      fields: fields)
+  }
+}
+
+enum RawProcessEventType: String, Codable {
+  case exec, fork, exit, signal, csInvalidated
+
+  var securityEventType: String {
+    switch self {
+    case .exec: return "exec"
+    case .fork: return "fork"
+    case .exit: return "exit"
+    case .signal: return "signal"
+    case .csInvalidated: return "cs_invalidated"
     }
   }
 }

@@ -24,9 +24,9 @@ extension ProxyXPCService {
 
     capturedFlows.append(stamped)
 
-    // Trim if over limit
-    if capturedFlows.count > maxFlows {
-      capturedFlows.removeFirst(capturedFlows.count - maxFlows)
+    // Trim if over limit — removeFirst is O(n), so batch evict to amortize
+    if capturedFlows.count > maxFlows + maxFlows / 10 {
+      capturedFlows = Array(capturedFlows.suffix(maxFlows))
     }
 
     // Notify connected clients
@@ -65,8 +65,10 @@ extension ProxyXPCService {
   }
 
   /// Notifies connected clients about a flow update.
+  /// Currently a no-op: the main app polls via getFlowsSince() delta fetch,
+  /// which already provides low-latency updates. Push would save a poll cycle
+  /// but requires a reverse XPC callback interface.
   func notifyFlowUpdate(_ flow: ProxyCapturedFlow) {
-    // TODO: Implement push notifications to connected clients
   }
 }
 
@@ -92,9 +94,9 @@ extension ProxyXPCService: NSXPCListenerDelegate {
       self?.connectionInvalidated(newConnection)
     }
 
-    connectionsLock.lock()
+    xpcConnectionsLock.lock()
+    defer { xpcConnectionsLock.unlock() }
     activeConnections.append(newConnection)
-    connectionsLock.unlock()
 
     newConnection.resume()
     logger.info("XPC connection accepted from PID \(pid)")
@@ -109,8 +111,13 @@ extension ProxyXPCService: NSXPCListenerDelegate {
       let guestCode = code
     else {
       // Extension (root) may lack access to DetachedSignatures DB for Debug builds
-      logger.warning("XPC: SecCodeCopyGuestWithAttributes failed for PID \(pid), accepting")
+      #if DEBUG
+      logger.warning("XPC: SecCodeCopyGuestWithAttributes failed for PID \(pid), accepting (DEBUG)")
       return true
+      #else
+      logger.error("XPC: SecCodeCopyGuestWithAttributes failed for PID \(pid), rejecting")
+      return false
+      #endif
     }
     var requirement: SecRequirement?
     let reqStr =
@@ -120,16 +127,15 @@ extension ProxyXPCService: NSXPCListenerDelegate {
     else { return false }
     let valid = SecCodeCheckValidity(guestCode, SecCSFlags(), req) == errSecSuccess
     if !valid {
-      // Debug builds: DetachedSignatures DB may be inaccessible from extension sandbox
-      logger.warning("XPC: code signing check failed for PID \(pid), accepting")
+      logger.warning("XPC: code signing check failed for PID \(pid)")
     }
-    return true
+    return valid
   }
 
   func connectionInvalidated(_ connection: NSXPCConnection) {
-    connectionsLock.lock()
+    xpcConnectionsLock.lock()
+    defer { xpcConnectionsLock.unlock() }
     activeConnections.removeAll { $0 === connection }
-    connectionsLock.unlock()
 
     logger.info("XPC connection invalidated")
   }

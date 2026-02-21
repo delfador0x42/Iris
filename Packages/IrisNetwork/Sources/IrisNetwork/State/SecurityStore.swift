@@ -39,7 +39,7 @@ public final class SecurityStore: ObservableObject {
 
   /// Refresh interval in seconds.
   /// Rationale: 2 seconds balances responsiveness with CPU/XPC overhead.
-  let refreshInterval: TimeInterval = 2.0
+  let refreshInterval: TimeInterval = 2.2
 
   /// Optional data source for dependency injection (used in tests)
   let dataSource: (any NetworkDataSourceProtocol)?
@@ -127,5 +127,10 @@ public final class SecurityStore: ObservableObject {
   /// - Parameter dataSource: Optional data source (nil uses XPC)
   public init(dataSource: (any NetworkDataSourceProtocol)? = nil) {
     self.dataSource = dataSource
+  }
+
+  deinit {
+    refreshTimer?.invalidate()
+    xpcConnection?.invalidate()
   }
 }

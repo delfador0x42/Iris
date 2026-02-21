@@ -49,6 +49,6 @@ extension SocketEnumerator {
     var pathBuf = [CChar](repeating: 0, count: Int(MAXPATHLEN))
     let r2 = proc_pidpath(pid, &pathBuf, UInt32(pathBuf.count))
     guard r2 > 0 else { return "unknown" }
-    return URL(fileURLWithPath: String(cString: pathBuf)).lastPathComponent
+    return (String(cString: pathBuf) as NSString).lastPathComponent
   }
 }

@@ -20,10 +20,14 @@ public actor AllowlistStore {
   }
 
   /// Check if an anomaly should be suppressed.
+  /// Entries must have at least one non-nil field to match; all-nil entries are ignored.
   public func isAllowed(_ anomaly: ProcessAnomaly, scannerId: String) -> Bool {
     if !loaded { loadSync() }
     return entries.contains { entry in
-      (entry.scannerId == nil || entry.scannerId == scannerId)
+      // Guard: all-nil entry would match everything — skip it
+      guard entry.scannerId != nil || entry.processName != nil || entry.technique != nil
+      else { return false }
+      return (entry.scannerId == nil || entry.scannerId == scannerId)
         && (entry.processName == nil || entry.processName == anomaly.processName)
         && (entry.technique == nil || entry.technique == anomaly.technique)
     }
@@ -38,10 +42,15 @@ public actor AllowlistStore {
   }
 
   /// Add a new allowlist entry and persist.
+  /// At least one of scannerId, processName, or technique must be non-nil.
   public func add(
     scannerId: String?, processName: String?,
     technique: String?, reason: String
   ) {
+    guard scannerId != nil || processName != nil || technique != nil else {
+      logger.warning("Rejected allowlist entry: at least one field must be non-nil")
+      return
+    }
     let entry = AllowlistEntry(
       id: UUID(), scannerId: scannerId, processName: processName,
       technique: technique, reason: reason, addedAt: Date())

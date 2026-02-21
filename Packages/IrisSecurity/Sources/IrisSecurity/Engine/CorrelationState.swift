@@ -14,6 +14,9 @@ actor CorrelationStateManager {
     /// Active correlations: [correlationKeyValue: [CorrelationProgress]]
     private var active: [String: [CorrelationProgress]] = [:]
 
+    /// Maximum unique keys to prevent memory DoS from many concurrent processes
+    private let maxKeys = 2000
+
     /// Extract the correlation key value from an event
     func keyValue(for event: SecurityEvent, key: CorrelationKey) -> String {
         switch key {
@@ -61,8 +64,16 @@ actor CorrelationStateManager {
             return newProgress
         }
 
-        // Store updated progress
-        if active[kv] == nil { active[kv] = [] }
+        // Store updated progress (with cap to prevent unbounded growth)
+        if active[kv] == nil {
+            if active.count >= maxKeys {
+                // Evict oldest key by earliest firstEventTime
+                if let oldest = active.min(by: { ($0.value.first?.firstEventTime ?? .distantFuture) < ($1.value.first?.firstEventTime ?? .distantFuture) }) {
+                    active.removeValue(forKey: oldest.key)
+                }
+            }
+            active[kv] = []
+        }
         active[kv]?.append(newProgress)
         return nil
     }

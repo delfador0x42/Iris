@@ -21,6 +21,26 @@ enum RustBatchOps {
         return out
     }
 
+    /// Full entropy analysis result from Rust.
+    struct EntropyAnalysis {
+        let entropy: Double
+        let chiSquare: Double
+        let monteCarloPIError: Double
+        let isEncrypted: Bool
+    }
+
+    /// Full entropy analysis: Shannon entropy, chi-square, Monte Carlo pi, encrypted detection.
+    /// Returns nil if file is too small, unreadable, or a known format (image/archive/PDF).
+    static func entropyAnalysis(path: String) -> EntropyAnalysis? {
+        var out = IrisEntropyResult(entropy: 0, chi_square: 0, monte_carlo_pi_error: 0,
+                                    is_encrypted: false, is_known_format: false)
+        let rc = path.withCString { iris_file_entropy_full($0, &out) }
+        guard rc == 0 else { return nil }
+        return EntropyAnalysis(
+            entropy: out.entropy, chiSquare: out.chi_square,
+            monteCarloPIError: out.monte_carlo_pi_error, isEncrypted: out.is_encrypted)
+    }
+
     /// Batch SHA256: hash multiple files in one call. Returns array of hex digests.
     /// Empty string for files that failed.
     static func batchSHA256(paths: [String]) -> [String] {
@@ -35,8 +55,12 @@ enum RustBatchOps {
         let rc = ptrs.withMemoryRebound(to: UnsafePointer<CChar>?.self, capacity: paths.count) {
             iris_batch_sha256($0, paths.count, &out)
         }
-        guard rc == 0, out.count > 0, let items = out.items else { return [] }
         defer { iris_batch_sha256_free(&out) }
+        guard rc == 0, out.count > 0, let items = out.items else { return [] }
+        guard out.count == paths.count else {
+            assertionFailure("Rust FFI returned \(out.count) results for \(paths.count) paths")
+            return []
+        }
 
         return (0..<out.count).map { i in
             guard let cstr = items.advanced(by: i).pointee else { return "" }

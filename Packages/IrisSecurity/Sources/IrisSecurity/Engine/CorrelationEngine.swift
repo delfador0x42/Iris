@@ -16,12 +16,17 @@ public struct CorrelationEngine: Sendable {
   }
 
   /// Analyze scanner results for cross-scanner patterns.
+  /// Groups by PID (not processName) to avoid false correlations
+  /// across distinct instances of the same binary (e.g. multiple Chrome helpers).
   public static func correlate(_ results: [ScannerResult]) -> [Correlation] {
     var correlations: [Correlation] = []
     let byProcess = groupByProcess(results)
+    // Build reverse map: anomaly ID → scanner ID (O(1) lookup instead of O(n*m))
+    let anomalyToScanner = buildReverseMap(results)
 
-    for (processName, anomalies) in byProcess {
-      let scannerIds = Set(anomalies.compactMap { findScanner($0, in: results) })
+    for (_, anomalies) in byProcess {
+      let processName = anomalies.first?.processName ?? "Unknown"
+      let scannerIds = Set(anomalies.compactMap { anomalyToScanner[$0.id] })
       guard scannerIds.count >= 2 else { continue }
 
       for chain in chainChecks {
@@ -132,21 +137,28 @@ public struct CorrelationEngine: Sendable {
 
   // MARK: - Helpers
 
+  /// Group anomalies by PID. Falls back to processPath for scanners
+  /// that report pid=0 (e.g. offline/static analysis scanners).
   private static func groupByProcess(
     _ results: [ScannerResult]
   ) -> [String: [ProcessAnomaly]] {
     var map: [String: [ProcessAnomaly]] = [:]
     for r in results {
       for a in r.anomalies where !a.processName.isEmpty {
-        map[a.processName, default: []].append(a)
+        let key = a.pid != 0 ? "\(a.pid)" : a.processPath
+        map[key, default: []].append(a)
       }
     }
     return map
   }
 
-  private static func findScanner(
-    _ anomaly: ProcessAnomaly, in results: [ScannerResult]
-  ) -> String? {
-    results.first { $0.anomalies.contains(where: { $0.id == anomaly.id }) }?.id
+  /// Build anomaly ID → scanner ID map in O(total anomalies) once,
+  /// replacing O(anomalies × scanners × anomaliesPerScanner) per-lookup scan.
+  private static func buildReverseMap(_ results: [ScannerResult]) -> [UUID: String] {
+    var map: [UUID: String] = [:]
+    for r in results {
+      for a in r.anomalies { map[a.id] = r.id }
+    }
+    return map
   }
 }

@@ -156,10 +156,10 @@ extension FlowHandler {
               }
             }
 
-            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-              flow.write(serverData) { _ in continuation.resume() }
+            let writeError: Error? = await withCheckedContinuation { continuation in
+              flow.write(serverData) { error in continuation.resume(returning: error) }
             }
-            if shouldCloseAfterWrite { break }
+            if writeError != nil || shouldCloseAfterWrite { break }
           } catch {
             // Connection closed — capture unframed response body if pending
             if let response = parsedResponseHeaders, state.hasRequest, !state.hasResponse {

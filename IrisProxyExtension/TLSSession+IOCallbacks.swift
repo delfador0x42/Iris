@@ -10,7 +10,6 @@
 import Foundation
 import Security
 import NetworkExtension
-import os.log
 
 extension TLSSession {
 

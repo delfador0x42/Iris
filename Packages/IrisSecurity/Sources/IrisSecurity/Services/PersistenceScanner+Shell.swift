@@ -27,7 +27,7 @@ extension PersistenceScanner {
         ]
         for config in systemConfigs {
             guard fm.fileExists(atPath: config) else { continue }
-            let name = URL(fileURLWithPath: config).lastPathComponent
+            let name = (config as NSString).lastPathComponent
             let isBaseline = baseline.isBaselineShellConfig(config)
             let ev = shellConfigEvidence(path: config)
             items.append(PersistenceItem(
@@ -142,7 +142,7 @@ extension PersistenceScanner {
 
                 items.append(PersistenceItem(
                     type: .loginHook,
-                    name: "\(key): \(URL(fileURLWithPath: hookPath).lastPathComponent)",
+                    name: "\(key): \((hookPath as NSString).lastPathComponent)",
                     path: hookPath,
                     binaryPath: hookPath,
                     signingStatus: signing,
@@ -171,7 +171,7 @@ extension PersistenceScanner {
             let ev = [Evidence(factor: "Startup script exists (unusual on modern macOS)", weight: 0.4, category: .context)]
             items.append(PersistenceItem(
                 type: .startupScript,
-                name: URL(fileURLWithPath: script).lastPathComponent,
+                name: (script as NSString).lastPathComponent,
                 path: script,
                 evidence: ev
             ))
@@ -250,7 +250,7 @@ extension PersistenceScanner {
 
         for dir in dirs {
             guard let contents = try? fm.contentsOfDirectory(atPath: dir) else { continue }
-            let period = URL(fileURLWithPath: dir).lastPathComponent
+            let period = (dir as NSString).lastPathComponent
             for file in contents {
                 let path = "\(dir)/\(file)"
                 let isBaseline = baseline.isBaselinePeriodicScript("\(period)/\(file)")

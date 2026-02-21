@@ -32,7 +32,7 @@ public enum ProcessKnowledgeBase {
 
     /// Lookup by full path — extracts basename automatically.
     public static func lookup(path: String) -> Info? {
-        let name = URL(fileURLWithPath: path).lastPathComponent
+        let name = (path as NSString).lastPathComponent
         return knownProcesses[name]
     }
 

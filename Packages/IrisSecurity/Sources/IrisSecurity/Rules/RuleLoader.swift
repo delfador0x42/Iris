@@ -14,6 +14,7 @@ public enum RuleLoader {
         rules.append(contentsOf: InjectionRules.rules())
         rules.append(contentsOf: ExfiltrationRules.rules())
         rules.append(contentsOf: APTRules.rules())
+        rules.append(contentsOf: NationStateRules.rules())
         return rules
     }
 

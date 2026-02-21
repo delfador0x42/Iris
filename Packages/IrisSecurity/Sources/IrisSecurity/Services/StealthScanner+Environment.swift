@@ -16,7 +16,7 @@ extension StealthScanner {
                    lowerKey == "dyld_framework_path" ||
                    lowerKey == "dyld_library_path" {
                     let path = snapshot.path(for: pid)
-                    let name = path.isEmpty ? "unknown" : URL(fileURLWithPath: path).lastPathComponent
+                    let name = path.isEmpty ? "unknown" : (path as NSString).lastPathComponent
                     anomalies.append(.forProcess(
                         pid: pid, name: name, path: path,
                         technique: "DYLD Environment Injection",

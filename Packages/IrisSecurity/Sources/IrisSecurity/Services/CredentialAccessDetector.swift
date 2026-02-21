@@ -90,7 +90,7 @@ public actor CredentialAccessDetector {
             guard pid > 0 else { continue }
             let path = snapshot.path(for: pid)
             guard !path.isEmpty else { continue }
-            let name = URL(fileURLWithPath: path).lastPathComponent
+            let name = (path as NSString).lastPathComponent
 
             // Check if this is a known credential access binary
             if let credInfo = Self.credentialBinaries[name] {

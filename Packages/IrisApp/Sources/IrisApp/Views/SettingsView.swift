@@ -30,13 +30,9 @@ public struct SettingsView: View {
                         .padding(.bottom, 8)
 
                     // System Extensions Section
-                    networkExtensionSection
-
                     endpointExtensionSection
 
-                    proxyExtensionSection
-
-                    dnsExtensionSection
+                    networkExtensionSection
 
                     // Network Capture Section
                     networkCaptureSection

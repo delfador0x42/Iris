@@ -58,4 +58,8 @@ public final class WiFiStore: ObservableObject {
     public init() {
         self.wifiClient = CWWiFiClient.shared()
     }
+
+    deinit {
+        refreshTimer?.invalidate()
+    }
 }

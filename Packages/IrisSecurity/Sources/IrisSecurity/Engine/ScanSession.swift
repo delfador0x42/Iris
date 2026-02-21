@@ -13,6 +13,7 @@ public final class ScanSession: ObservableObject {
   @Published public var scanResult: ThreatScanResult?
   @Published public var diff: FindingsDiff?
   @Published public var correlations: [CorrelationEngine.Correlation] = []
+  @Published public var fusion: FusionResult = .empty
   @Published public var allowlistSuppressedCount = 0
   @Published public var vtResults: [String: VTVerdict] = [:]
   @Published public var vtChecking = false
@@ -43,6 +44,7 @@ public final class ScanSession: ObservableObject {
 
     scanResult = result
     correlations = result.correlations
+    fusion = result.fusion
     allowlistSuppressedCount = result.allowlistSuppressed
     if let previous = previousResult {
       diff = FindingsDiff.compute(current: result, previous: previous)
@@ -138,7 +140,8 @@ public final class ScanSession: ObservableObject {
       anomalies: scannerResults.flatMap(\.anomalies),
       supplyChainFindings: [], fsChanges: [],
       scannerResults: scannerResults,
-      correlations: correlations, allowlistSuppressed: allowlistSuppressedCount,
+      correlations: correlations, fusion: fusion,
+      allowlistSuppressed: allowlistSuppressedCount,
       scanDuration: 0, scannerCount: scannerResults.count,
       timestamp: Date()
     )

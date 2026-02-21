@@ -35,7 +35,7 @@ enum ProcessEnumeration {
     static func getProcessName(_ pid: pid_t) -> String {
         let path = getProcessPath(pid)
         guard !path.isEmpty else { return "unknown" }
-        return URL(fileURLWithPath: path).lastPathComponent
+        return (path as NSString).lastPathComponent
     }
 
     /// Get command-line arguments for a PID via KERN_PROCARGS2.

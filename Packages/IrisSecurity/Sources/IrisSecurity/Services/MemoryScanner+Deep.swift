@@ -51,7 +51,7 @@ public enum TextIntegrityChecker {
     /// Returns anomaly if they differ, nil if they match or can't check.
     public static func check(pid: pid_t, binaryPath: String) -> ProcessAnomaly? {
         guard !binaryPath.isEmpty else { return nil }
-        let name = URL(fileURLWithPath: binaryPath).lastPathComponent
+        let name = (binaryPath as NSString).lastPathComponent
 
         // Read on-disk __TEXT
         guard let diskHash = hashDiskText(path: binaryPath) else { return nil }

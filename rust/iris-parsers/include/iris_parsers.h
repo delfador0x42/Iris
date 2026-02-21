@@ -170,4 +170,17 @@ int32_t iris_file_entropy(const char *path, double *out);
 int32_t iris_batch_sha256(const char **paths, size_t count, IrisCStringArray *out);
 void iris_batch_sha256_free(IrisCStringArray *arr);
 
+/// Full entropy analysis result.
+typedef struct {
+    double entropy;               // Shannon entropy (0.0–8.0)
+    double chi_square;            // Chi-square for uniform distribution
+    double monte_carlo_pi_error;  // % error from true pi
+    bool is_encrypted;            // Combined determination
+    bool is_known_format;         // Magic bytes matched (analysis skipped)
+} IrisEntropyResult;
+
+/// Full entropy analysis: Shannon, chi-square, Monte Carlo pi, encrypted detection.
+/// Reads up to 3MB. Returns 0=ok, -1=too small/error, -2=arg error, -3=known format.
+int32_t iris_file_entropy_full(const char *path, IrisEntropyResult *out);
+
 #endif

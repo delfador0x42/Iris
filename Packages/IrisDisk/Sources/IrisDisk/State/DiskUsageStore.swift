@@ -66,6 +66,10 @@ public final class DiskUsageStore: ObservableObject {
         self.scanner = scanner
     }
 
+    deinit {
+        scanTask?.cancel()
+    }
+
     // MARK: - Public Actions
 
     /// Load cached results if available
@@ -181,7 +185,7 @@ public final class DiskUsageStore: ObservableObject {
 
         do {
             let data = try JSONEncoder().encode(cache)
-            try data.write(to: Self.cacheURL)
+            try data.write(to: Self.cacheURL, options: .atomic)
         } catch {
             logger.error("Failed to save disk scan cache: \(error.localizedDescription)")
         }

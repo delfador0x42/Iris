@@ -60,7 +60,7 @@ public enum MachTaskEnumerator {
             mach_port_deallocate(mach_task_self_, task)
             guard pid >= 0 else { continue }
             let path = pidPath(pid)
-            let name = path.isEmpty ? pidName(pid) : URL(fileURLWithPath: path).lastPathComponent
+            let name = path.isEmpty ? pidName(pid) : (path as NSString).lastPathComponent
             results.append(MachTask(pid: pid, path: path, name: name))
         }
 

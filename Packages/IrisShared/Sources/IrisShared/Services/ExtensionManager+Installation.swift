@@ -16,14 +16,10 @@ extension ExtensionManager {
     pendingInstallationType = type
 
     switch type {
-    case .network:
-      networkExtensionState = .installing
     case .endpoint:
       endpointExtensionState = .installing
-    case .proxy:
-      proxyExtensionState = .installing
-    case .dns:
-      dnsExtensionState = .installing
+    case .network:
+      networkExtensionState = .installing
     }
     lastError = nil
 
@@ -104,66 +100,50 @@ extension ExtensionManager {
     logger.info("Endpoint extension uninstalled, cleaning config and reinstalling...")
     endpointExtensionState = .notInstalled
 
-    await cleanNetworkFilterConfiguration()
+    await cleanTransparentProxyConfiguration()
     try? await Task.sleep(nanoseconds: 500_000_000)
 
     pendingOperation = .reinstallAfterCleanup
-    pendingInstallationType = .network
-    networkExtensionState = .installing
+    pendingInstallationType = .endpoint
+    endpointExtensionState = .installing
 
     let request = OSSystemExtensionRequest.activationRequest(
-      forExtensionWithIdentifier: ExtensionType.network.bundleIdentifier,
+      forExtensionWithIdentifier: ExtensionType.endpoint.bundleIdentifier,
       queue: .main
     )
     request.delegate = self
     OSSystemExtensionManager.shared.submitRequest(request)
   }
 
-  /// Sequence: network → endpoint → proxy → dns
-  /// Keep pendingOperation = .reinstallAfterCleanup until the final extension completes,
-  /// otherwise handleSuccessfulCompletion falls to completeNormalInstall and breaks the chain.
+  /// Sequence: endpoint → network
   func completeReinstall(for type: ExtensionType) async {
     await completeNormalInstall(for: type)
 
     switch type {
-    case .network:
-      installExtension(.endpoint)
     case .endpoint:
-      installExtension(.proxy)
-    case .proxy:
-      installExtension(.dns)
-    case .dns:
+      installExtension(.network)
+    case .network:
       pendingOperation = .none
     }
   }
 
   func completeNormalInstall(for type: ExtensionType) async {
     switch type {
-    case .network:
-      networkExtensionState = .installed
-      await enableFilter()
-      onNetworkExtensionReady?()
     case .endpoint:
       endpointExtensionState = .installed
       onEndpointExtensionReady?()
-    case .proxy:
-      proxyExtensionState = .installed
+    case .network:
+      networkExtensionState = .installed
       await enableTransparentProxy()
-      onProxyExtensionReady?()
-    case .dns:
-      dnsExtensionState = .installed
-      await enableDNSProxy()
-      onDNSExtensionReady?()
+      onNetworkExtensionReady?()
     }
   }
 
   /// Helper to set extension state by type
   func setExtensionState(_ type: ExtensionType, to state: ExtensionState) {
     switch type {
-    case .network: networkExtensionState = state
     case .endpoint: endpointExtensionState = state
-    case .proxy: proxyExtensionState = state
-    case .dns: dnsExtensionState = state
+    case .network: networkExtensionState = state
     }
   }
 }

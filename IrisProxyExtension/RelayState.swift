@@ -40,7 +40,7 @@ final class RelayState: @unchecked Sendable {
 
   func appendToRequestBuffer(_ data: Data) {
     lock.lock()
-    if _requestBuffer.count < Self.maxBufferSize {
+    if _requestBuffer.count + data.count <= Self.maxBufferSize {
       _requestBuffer.append(data)
     }
     lock.unlock()
@@ -48,7 +48,7 @@ final class RelayState: @unchecked Sendable {
 
   func appendToResponseBuffer(_ data: Data) {
     lock.lock()
-    if _responseBuffer.count < Self.maxBufferSize {
+    if _responseBuffer.count + data.count <= Self.maxBufferSize {
       _responseBuffer.append(data)
     }
     lock.unlock()

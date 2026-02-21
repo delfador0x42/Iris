@@ -94,7 +94,7 @@ public actor SystemIntegrityScanner {
                mod > Date().addingTimeInterval(-86400 * 7) {
                 // KC modified within last 7 days outside update cycle
                 result.append(.filesystem(
-                    name: URL(fileURLWithPath: kc).lastPathComponent, path: kc,
+                    name: (kc as NSString).lastPathComponent, path: kc,
                     technique: "Recent KC Modification", description: "Kernel collection modified recently. May indicate kext tampering.",
                     severity: .high, mitreID: "T1547.006",
                     scannerId: "system_integrity",

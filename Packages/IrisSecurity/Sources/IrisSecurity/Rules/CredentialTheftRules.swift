@@ -41,14 +41,14 @@ public enum CredentialTheftRules {
                 mitreId: "T1555.001",
                 mitreName: "Keychain"
             ),
-            // sqlite3 accessing browser DBs (CookieMiner technique)
+            // Non-browser accessing browser cookie DBs (CookieMiner, Banshee, AtomicStealer)
             DetectionRule(
                 id: "cred_sqlite3_browser_db",
-                name: "sqlite3 reading browser credential database",
+                name: "Non-browser accessing browser cookie database",
                 eventType: "file_open",
                 conditions: [
                     .fieldContains("target_path", "/Cookies"),
-                    .processNameNotIn(browserSigningIds + ["sqlite3"]),
+                    .processNameNotIn(browserSigningIds),
                 ],
                 severity: .high,
                 mitreId: "T1555.003",

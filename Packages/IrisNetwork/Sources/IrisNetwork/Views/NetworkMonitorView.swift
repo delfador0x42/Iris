@@ -34,7 +34,7 @@ public enum NetworkViewMode: String, CaseIterable {
 
 /// Main view for network monitoring - displays per-process connections
 public struct NetworkMonitorView: View {
-    @StateObject var store = SecurityStore()
+    @StateObject var store = SecurityStore.shared
     @StateObject var extensionManager = ExtensionManager.shared
     @State var expandedProcesses: Set<String> = []
     @State var viewMode: NetworkViewMode = .list

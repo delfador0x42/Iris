@@ -1,4 +1,3 @@
-import CryptoKit
 import Foundation
 import os.log
 
@@ -182,9 +181,7 @@ public actor TCCMonitor {
   }
 
   private func hashFile(_ path: String) -> String? {
-    guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)) else { return nil }
-    let digest = SHA256.hash(data: data)
-    return digest.map { String(format: "%02x", $0) }.joined()
+    RustBatchOps.sha256(path: path)
   }
 
   private func dateFromTimestamp(_ str: String) -> Date? {

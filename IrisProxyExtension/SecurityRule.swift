@@ -1,6 +1,14 @@
+//
+//  SecurityRule.swift
+//  IrisProxyExtension
+//
+//  Firewall security rules and internal NetworkConnection model.
+//  Absorbed from IrisNetworkExtension.
+//
+
 import Foundation
 
-// MARK: - Security Rule (matches app-side SecurityRule encoding)
+// MARK: - Security Rule
 
 struct SecurityRule: Codable {
     let id: UUID
@@ -60,7 +68,7 @@ struct SecurityRule: Codable {
     }
 }
 
-// MARK: - Network Connection
+// MARK: - Network Connection (internal extension model)
 
 struct NetworkConnection: Codable {
     let id: UUID

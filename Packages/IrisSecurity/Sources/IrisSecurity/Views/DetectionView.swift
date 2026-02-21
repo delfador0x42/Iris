@@ -76,7 +76,7 @@ public struct DetectionView: View {
 
     private func startRefresh() {
         Task { await refresh() }
-        refreshTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { _ in
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: 2.4, repeats: true) { _ in
             Task { await refresh() }
         }
     }

@@ -7,9 +7,10 @@ enum RustHTTPParser {
 
     static func parseRequest(from data: Data) -> HTTPParser.ParsedRequest? {
         var req = IrisHttpRequest()
-        let rc = data.withUnsafeBytes { buf in
-            iris_http_parse_request(
-                buf.baseAddress!.assumingMemoryBound(to: UInt8.self),
+        let rc = data.withUnsafeBytes { buf -> Int32 in
+            guard let base = buf.baseAddress else { return -1 }
+            return iris_http_parse_request(
+                base.assumingMemoryBound(to: UInt8.self),
                 buf.count,
                 &req
             )
@@ -40,9 +41,10 @@ enum RustHTTPParser {
 
     static func parseResponse(from data: Data) -> HTTPParser.ParsedResponse? {
         var resp = IrisHttpResponse()
-        let rc = data.withUnsafeBytes { buf in
-            iris_http_parse_response(
-                buf.baseAddress!.assumingMemoryBound(to: UInt8.self),
+        let rc = data.withUnsafeBytes { buf -> Int32 in
+            guard let base = buf.baseAddress else { return -1 }
+            return iris_http_parse_response(
+                base.assumingMemoryBound(to: UInt8.self),
                 buf.count,
                 &resp
             )

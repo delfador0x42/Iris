@@ -1,20 +1,21 @@
 //
-//  ExtensionDoHClient.swift
-//  IrisDNSExtension
+//  DoHClient.swift
+//  IrisProxyExtension
 //
-//  Lightweight DoH client for use within the system extension.
-//  Sends DNS wire format queries to configurable DoH servers via HTTPS POST (RFC 8484).
+//  DNS-over-HTTPS client. Sends DNS wire format queries to configurable
+//  DoH servers via HTTPS POST (RFC 8484). Uses bootstrap IPs to avoid
+//  chicken-and-egg DNS resolution. Traffic from within the extension
+//  automatically bypasses the proxy's own interception.
 //
 
 import Foundation
 import Network
 import os.log
 
-/// DNS-over-HTTPS client for the DNS proxy extension.
-/// Uses bootstrap IPs to avoid chicken-and-egg DNS resolution.
-final class ExtensionDoHClient: @unchecked Sendable {
+/// DNS-over-HTTPS client for the proxy extension.
+final class DoHClient: @unchecked Sendable {
 
-    private let logger = Logger(subsystem: "com.wudan.iris.dns", category: "DoHClient")
+    private let logger = Logger(subsystem: "com.wudan.iris.proxy", category: "DoHClient")
 
     /// URL session configured for DoH
     private let session: URLSession
@@ -30,44 +31,37 @@ final class ExtensionDoHClient: @unchecked Sendable {
         let name: String
         let primaryURL: String
         let fallbackURL: String?
-        let bootstrapIP: String
     }
 
     private static let servers: [String: ServerConfig] = [
         "Cloudflare": ServerConfig(
             name: "Cloudflare",
             primaryURL: "https://1.1.1.1/dns-query",
-            fallbackURL: "https://1.0.0.1/dns-query",
-            bootstrapIP: "1.1.1.1"
+            fallbackURL: "https://1.0.0.1/dns-query"
         ),
         "Cloudflare Family": ServerConfig(
             name: "Cloudflare Family",
             primaryURL: "https://1.1.1.3/dns-query",
-            fallbackURL: "https://1.0.0.3/dns-query",
-            bootstrapIP: "1.1.1.3"
+            fallbackURL: "https://1.0.0.3/dns-query"
         ),
         "Google": ServerConfig(
             name: "Google",
             primaryURL: "https://8.8.8.8/dns-query",
-            fallbackURL: "https://8.8.4.4/dns-query",
-            bootstrapIP: "8.8.8.8"
+            fallbackURL: "https://8.8.4.4/dns-query"
         ),
         "Quad9": ServerConfig(
             name: "Quad9",
             primaryURL: "https://9.9.9.9:5053/dns-query",
-            fallbackURL: "https://149.112.112.112:5053/dns-query",
-            bootstrapIP: "9.9.9.9"
+            fallbackURL: "https://149.112.112.112:5053/dns-query"
         )
     ]
 
     // MARK: - Initialization
 
     init() {
-        // Use IP addresses directly to avoid DNS resolution chicken-and-egg problem
         self.serverURL = URL(string: "https://1.1.1.1/dns-query")!
         self.fallbackURL = URL(string: "https://1.0.0.1/dns-query")
 
-        // Configure URL session for DoH
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 5
         config.timeoutIntervalForResource = 10
@@ -81,23 +75,13 @@ final class ExtensionDoHClient: @unchecked Sendable {
 
     // MARK: - Query
 
-    /// Returns current server URLs (synchronous, avoids NSLock in async context).
-    private func getServerURLs() -> (primary: URL, fallback: URL?) {
-        configLock.lock()
-        defer { configLock.unlock() }
-        return (serverURL, fallbackURL)
-    }
-
-    /// Result of a DNS query, including whether encryption (DoH) was used.
     struct QueryResult {
         let data: Data
         let isEncrypted: Bool
     }
 
     /// Sends a DNS wire format query via DoH and returns the wire format response.
-    /// Falls back to direct DNS (UDP port 53) if all DoH servers are unreachable.
-    /// The `isEncrypted` flag indicates whether the query was resolved via DoH (true)
-    /// or fell back to plaintext UDP DNS (false).
+    /// Falls back to direct UDP DNS if all DoH servers are unreachable.
     func query(_ queryData: Data) async throws -> QueryResult {
         let (primary, fallback) = getServerURLs()
 
@@ -111,48 +95,39 @@ final class ExtensionDoHClient: @unchecked Sendable {
             let (data, response) = try await session.data(for: request)
 
             guard let httpResponse = response as? HTTPURLResponse else {
-                throw DoHClientError.invalidResponse
+                throw DoHError.invalidResponse
             }
 
             guard httpResponse.statusCode == 200 else {
                 if let fallback = fallback {
                     return try await queryFallback(queryData, url: fallback)
                 }
-                throw DoHClientError.httpError(httpResponse.statusCode)
+                throw DoHError.httpError(httpResponse.statusCode)
             }
 
             guard !data.isEmpty else {
-                throw DoHClientError.emptyResponse
+                throw DoHError.emptyResponse
             }
 
             return QueryResult(data: data, isEncrypted: true)
 
-        } catch let error as DoHClientError {
-            do {
-                let data = try await directDNSFallback(queryData)
-                return QueryResult(data: data, isEncrypted: false)
-            } catch {
-                throw error
-            }
+        } catch is DoHError {
+            let data = try await directDNSFallback(queryData)
+            return QueryResult(data: data, isEncrypted: false)
         } catch {
             if let fallback = fallback {
                 do {
                     return try await queryFallback(queryData, url: fallback)
-                } catch {
-                    // Fallback DoH also failed
-                }
+                } catch {}
             }
             do {
                 let data = try await directDNSFallback(queryData)
                 return QueryResult(data: data, isEncrypted: false)
-            } catch {
-                // All resolution paths exhausted
-            }
-            throw DoHClientError.networkError(error)
+            } catch {}
+            throw DoHError.networkError(error)
         }
     }
 
-    /// Queries the fallback DoH server (still encrypted).
     private func queryFallback(_ queryData: Data, url: URL) async throws -> QueryResult {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -165,14 +140,13 @@ final class ExtensionDoHClient: @unchecked Sendable {
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200,
               !data.isEmpty else {
-            throw DoHClientError.fallbackFailed
+            throw DoHError.fallbackFailed
         }
 
         return QueryResult(data: data, isEncrypted: true)
     }
 
-    /// Last-resort fallback: send raw DNS query via UDP to 8.8.8.8:53.
-    /// Bypasses DoH entirely — keeps DNS alive when HTTPS is broken.
+    /// Last-resort: send raw DNS query via UDP to 8.8.8.8:53.
     private func directDNSFallback(_ queryData: Data) async throws -> Data {
         logger.warning("DoH unreachable, falling back to direct DNS")
         return try await withCheckedThrowingContinuation { continuation in
@@ -201,51 +175,55 @@ final class ExtensionDoHClient: @unchecked Sendable {
                             if let data = data, !data.isEmpty {
                                 continuation.resume(returning: data)
                             } else {
-                                continuation.resume(throwing: error ?? DoHClientError.emptyResponse)
+                                continuation.resume(throwing: error ?? DoHError.emptyResponse)
                             }
                         }
                     })
                 case .failed(let error):
                     guard resumed.trySet() else { return }
+                    connection.cancel()
                     continuation.resume(throwing: error)
                 case .cancelled:
                     guard resumed.trySet() else { return }
-                    continuation.resume(throwing: DoHClientError.fallbackFailed)
+                    continuation.resume(throwing: DoHError.fallbackFailed)
                 default:
                     break
                 }
             }
             connection.start(queue: .global(qos: .userInitiated))
 
-            // Timeout after 3 seconds
             DispatchQueue.global().asyncAfter(deadline: .now() + 3) {
                 guard resumed.trySet() else { return }
                 connection.cancel()
-                continuation.resume(throwing: DoHClientError.fallbackFailed)
+                continuation.resume(throwing: DoHError.fallbackFailed)
             }
         }
     }
 
     // MARK: - Configuration
 
-    /// Changes the active DoH server.
     func setServer(_ name: String) {
         guard let config = Self.servers[name] else {
             logger.warning("Unknown server name: \(name), keeping current")
             return
         }
-
         configLock.lock()
+        defer { configLock.unlock() }
         serverURL = URL(string: config.primaryURL)!
         fallbackURL = config.fallbackURL.flatMap { URL(string: $0) }
-        configLock.unlock()
         logger.info("DoH server switched to \(name) (\(config.primaryURL))")
+    }
+
+    private func getServerURLs() -> (primary: URL, fallback: URL?) {
+        configLock.lock()
+        defer { configLock.unlock() }
+        return (serverURL, fallbackURL)
     }
 }
 
 // MARK: - Errors
 
-enum DoHClientError: Error, LocalizedError {
+enum DoHError: Error, LocalizedError {
     case invalidResponse
     case httpError(Int)
     case emptyResponse

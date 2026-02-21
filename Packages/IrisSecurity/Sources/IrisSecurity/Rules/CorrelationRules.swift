@@ -140,6 +140,205 @@ public enum CorrelationRuleDefinitions {
                 mitreId: "T1055",
                 mitreName: "Thread injection + shellcode + C2"
             ),
+
+            // === NATION-STATE KILL CHAINS ===
+
+            // Recon → credential theft → exfil (APT29/Cozy Bear pattern)
+            // Process discovers environment, then steals creds, then phones home
+            CorrelationRule(
+                id: "corr_ns_recon_steal_exfil",
+                name: "Recon → credential theft → exfiltration",
+                stages: [
+                    RuleStage(
+                        eventType: "auth_exec",
+                        conditions: [
+                            .processNameIn(["system_profiler", "sw_vers", "sysctl",
+                                            "networksetup", "ifconfig", "arp"]),
+                        ]
+                    ),
+                    RuleStage(
+                        eventType: "file_open",
+                        conditions: [
+                            .fieldMatchesRegex("target_path",
+                                "(keychain|Login Data|Cookies|key4\\.db|ssh/id_)"),
+                        ]
+                    ),
+                    RuleStage(eventType: "connection"),
+                ],
+                timeWindow: 300,
+                correlationKey: .processPath,
+                severity: .critical,
+                mitreId: "T1082 → T1555 → T1041",
+                mitreName: "APT recon → credential theft → exfiltration"
+            ),
+
+            // Lateral movement chain: SSH key theft → SSH connection
+            CorrelationRule(
+                id: "corr_ns_ssh_lateral",
+                name: "SSH key theft + lateral movement",
+                stages: [
+                    RuleStage(
+                        eventType: "file_open",
+                        conditions: [.fieldMatchesRegex("target_path", "\\.ssh/(id_|known_hosts|config)")]
+                    ),
+                    RuleStage(
+                        eventType: "auth_exec",
+                        conditions: [.processNameIn(["ssh", "scp", "sftp"])]
+                    ),
+                ],
+                timeWindow: 120,
+                correlationKey: .processPath,
+                severity: .critical,
+                mitreId: "T1552.004 → T1021.004",
+                mitreName: "SSH key theft + lateral movement"
+            ),
+
+            // Persistence install → code sign strip → execution (evasion chain)
+            CorrelationRule(
+                id: "corr_ns_persist_evade_exec",
+                name: "Persistence + signature strip + execution",
+                stages: [
+                    RuleStage(
+                        eventType: "file_write",
+                        conditions: [
+                            .fieldMatchesRegex("target_path",
+                                "(LaunchAgents|LaunchDaemons|StartupItems)/"),
+                        ]
+                    ),
+                    RuleStage(
+                        eventType: "auth_exec",
+                        conditions: [.processNameIn(["codesign", "xattr"])]
+                    ),
+                    RuleStage(
+                        eventType: "auth_exec",
+                        conditions: [.processNotAppleSigned]
+                    ),
+                ],
+                timeWindow: 180,
+                correlationKey: .processPath,
+                severity: .critical,
+                mitreId: "T1543 → T1553 → T1204",
+                mitreName: "Persistence + evasion + execution chain"
+            ),
+
+            // Data collection → archive → exfil (exfiltration chain)
+            CorrelationRule(
+                id: "corr_ns_collect_archive_exfil",
+                name: "Data collection → archive → exfiltration",
+                stages: [
+                    RuleStage(
+                        eventType: "file_open",
+                        conditions: [
+                            .fieldMatchesRegex("target_path",
+                                "(Documents|Desktop|Downloads)/"),
+                        ]
+                    ),
+                    RuleStage(
+                        eventType: "auth_exec",
+                        conditions: [.processNameIn(["zip", "tar", "ditto"])]
+                    ),
+                    RuleStage(eventType: "connection"),
+                ],
+                timeWindow: 300,
+                correlationKey: .processPath,
+                severity: .high,
+                mitreId: "T1005 → T1560 → T1041",
+                mitreName: "Collection → archive → exfiltration"
+            ),
+
+            // Environmental keying → payload drop → execution (conditional deployment)
+            CorrelationRule(
+                id: "corr_ns_keying_drop_exec",
+                name: "Environment check → payload drop → execution",
+                stages: [
+                    RuleStage(
+                        eventType: "auth_exec",
+                        conditions: [
+                            .processNameIn(["sysctl", "ioreg", "system_profiler"]),
+                        ]
+                    ),
+                    RuleStage(
+                        eventType: "file_write",
+                        conditions: [
+                            .fieldMatchesRegex("target_path", "(/tmp/|/var/tmp/|/var/folders/)"),
+                        ]
+                    ),
+                    RuleStage(
+                        eventType: "auth_exec",
+                        conditions: [.processNotAppleSigned]
+                    ),
+                ],
+                timeWindow: 120,
+                correlationKey: .processPath,
+                severity: .critical,
+                mitreId: "T1497 → T1074 → T1204",
+                mitreName: "Environmental keying → staging → execution"
+            ),
+
+            // Process hollowing chain: get_task → mprotect → execution from trusted path
+            CorrelationRule(
+                id: "corr_ns_hollow_chain",
+                name: "Task port access → memory modify → suspicious execution",
+                stages: [
+                    RuleStage(eventType: "get_task", conditions: [.processNotAppleSigned]),
+                    RuleStage(eventType: "mprotect"),
+                    RuleStage(eventType: "connection"),
+                ],
+                timeWindow: 60,
+                correlationKey: .pid,
+                severity: .critical,
+                mitreId: "T1055.012 → T1071",
+                mitreName: "Process hollowing + C2 activation"
+            ),
+
+            // Privilege escalation chain: sudo → persistence → execution
+            CorrelationRule(
+                id: "corr_ns_privesc_persist",
+                name: "Privilege escalation → persistence → payload",
+                stages: [
+                    RuleStage(eventType: "sudo", conditions: [.processNotAppleSigned]),
+                    RuleStage(
+                        eventType: "file_write",
+                        conditions: [
+                            .fieldMatchesRegex("target_path",
+                                "(LaunchDaemons|com\\.apple\\.|/etc/)"),
+                        ]
+                    ),
+                    RuleStage(eventType: "auth_exec", conditions: [.processNotAppleSigned]),
+                ],
+                timeWindow: 300,
+                correlationKey: .processPath,
+                severity: .critical,
+                mitreId: "T1548 → T1543 → T1059",
+                mitreName: "Privilege escalation → persistence → execution"
+            ),
+
+            // Defense evasion chain: kill security tool → drop payload → execute
+            CorrelationRule(
+                id: "corr_ns_kill_defender_exec",
+                name: "Security tool kill → payload drop → execution",
+                stages: [
+                    RuleStage(
+                        eventType: "auth_exec",
+                        conditions: [
+                            .processNameIn(["kill", "killall", "pkill"]),
+                        ]
+                    ),
+                    RuleStage(
+                        eventType: "file_write",
+                        conditions: [.processNotAppleSigned]
+                    ),
+                    RuleStage(
+                        eventType: "auth_exec",
+                        conditions: [.processNotAppleSigned]
+                    ),
+                ],
+                timeWindow: 60,
+                correlationKey: .processPath,
+                severity: .critical,
+                mitreId: "T1562 → T1074 → T1204",
+                mitreName: "Kill defender → drop → execute chain"
+            ),
         ]
     }
 }

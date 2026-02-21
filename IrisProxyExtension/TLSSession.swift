@@ -40,9 +40,11 @@ final class TLSSession {
     var readBuffer = Data()
     let readBufferLock = NSLock()
 
-    /// Async waiters for new data (replaces DispatchSemaphore)
+    /// Async waiters for new data (replaces DispatchSemaphore).
+    /// Bounded to prevent unbounded growth from misbehaving callers.
     var dataWaiters: [CheckedContinuation<Void, Never>] = []
     let waiterLock = NSLock()
+    private let maxWaiters = 64
 
     /// Whether the flow is closed
     var isClosed = false
@@ -100,16 +102,16 @@ final class TLSSession {
     // MARK: - Close
 
     func close() {
-        // Run SSLClose on sslQueue to prevent racing with SSLRead/SSLWrite.
-        // retainedRef release MUST happen inside the sync block to prevent
-        // use-after-free: if release() deallocates self while another thread
-        // is suspended in SSLRead/SSLWrite, the callback would access freed memory.
-        // isClosed MUST be set inside the sync block to prevent double-release
-        // from concurrent close() calls.
-        sslQueue.sync { [weak self] in
+        // Set isClosed immediately so readers/writers stop before async block runs.
+        // The flag is monotonic (false→true) so no lock needed for the store.
+        guard !isClosed else { return }
+        isClosed = true
+
+        // SSLClose and retainedRef release run on sslQueue to avoid racing with
+        // SSLRead/SSLWrite. Uses async (not sync) to prevent deadlock when deinit
+        // fires on sslQueue itself.
+        sslQueue.async { [weak self] in
             guard let self else { return }
-            guard !self.isClosed else { return }
-            self.isClosed = true
             if let ctx = self.sslContext {
                 SSLClose(ctx)
                 self.sslContext = nil
@@ -148,6 +150,11 @@ final class TLSSession {
                 return
             }
             readBufferLock.unlock()
+            if dataWaiters.count >= maxWaiters {
+                waiterLock.unlock()
+                continuation.resume()
+                return
+            }
             dataWaiters.append(continuation)
             waiterLock.unlock()
         }
@@ -156,9 +163,9 @@ final class TLSSession {
     /// Wakes all tasks waiting for data.
     func signalDataAvailable() {
         waiterLock.lock()
+        defer { waiterLock.unlock() }
         let waiters = dataWaiters
         dataWaiters.removeAll()
-        waiterLock.unlock()
         for waiter in waiters {
             waiter.resume()
         }

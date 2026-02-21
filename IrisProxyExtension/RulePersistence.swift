@@ -1,11 +1,17 @@
+//
+//  RulePersistence.swift
+//  IrisProxyExtension
+//
+//  Persists SecurityRule array to extension container as JSON.
+//  Absorbed from IrisNetworkExtension.
+//
+
 import Foundation
 import os.log
 
-/// Persists SecurityRule array to extension container as JSON.
-/// Called after every rule mutation (add/remove/update/toggle).
 enum RulePersistence {
     private static let logger = Logger(
-        subsystem: "com.wudan.iris.network",
+        subsystem: "com.wudan.iris.proxy",
         category: "RulePersistence"
     )
 
@@ -15,7 +21,7 @@ enum RulePersistence {
             in: .userDomainMask
         ).first else { return nil }
 
-        let dir = support.appendingPathComponent("com.wudan.iris.network.extension")
+        let dir = support.appendingPathComponent("com.wudan.iris.proxy.extension")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("rules.json")
     }

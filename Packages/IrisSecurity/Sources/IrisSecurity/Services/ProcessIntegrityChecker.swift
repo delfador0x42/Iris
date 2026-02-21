@@ -59,7 +59,7 @@ public actor ProcessIntegrityChecker {
     /// Aggregates per-process — one finding with all undeclared dylibs, not one per dylib.
     /// System framework loads from sealed volume are whitelisted (can't be tampered).
     private func checkInjectedDylibs(pid: pid_t, binaryPath: String) -> [ProcessAnomaly] {
-        let processName = URL(fileURLWithPath: binaryPath).lastPathComponent
+        let processName = (binaryPath as NSString).lastPathComponent
 
         guard let machInfo = RustMachOParser.parse(binaryPath) else { return [] }
 
@@ -112,7 +112,7 @@ public actor ProcessIntegrityChecker {
     /// Check code signing flags for anomalies (two layers: proc_bsdinfo + csops kernel)
     private func checkCodeSigningFlags(pid: pid_t, path: String) -> [ProcessAnomaly] {
         var anomalies: [ProcessAnomaly] = []
-        let processName = URL(fileURLWithPath: path).lastPathComponent
+        let processName = (path as NSString).lastPathComponent
 
         // Layer 1: proc_bsdinfo flags
         var info = proc_bsdinfo()
@@ -188,7 +188,7 @@ public actor ProcessIntegrityChecker {
 
     /// Check if a system binary on disk has been modified (no time window — always flag).
     private func checkBinaryHash(pid: pid_t, path: String) async -> ProcessAnomaly? {
-        let processName = URL(fileURLWithPath: path).lastPathComponent
+        let processName = (path as NSString).lastPathComponent
         let isSystem = path.hasPrefix("/System/") || path.hasPrefix("/usr/")
 
         // System binaries: check if modified after OS install (no time limit)
@@ -224,7 +224,7 @@ public actor ProcessIntegrityChecker {
 
     /// Extract leaf filename from a dylib path (strips @rpath/, @executable_path/, etc.)
     private func dylibLeafName(_ path: String) -> String {
-        URL(fileURLWithPath: path).lastPathComponent
+        (path as NSString).lastPathComponent
     }
 
     /// System libraries from the sealed system volume / dyld shared cache.

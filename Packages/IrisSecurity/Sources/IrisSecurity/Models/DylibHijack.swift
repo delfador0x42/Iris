@@ -30,7 +30,7 @@ public struct DylibHijack: Identifiable, Sendable, Codable, Equatable {
         self.id = id
         self.type = type
         self.binaryPath = binaryPath
-        self.binaryName = URL(fileURLWithPath: binaryPath).lastPathComponent
+        self.binaryName = (binaryPath as NSString).lastPathComponent
         self.dylibPath = dylibPath
         self.isActiveHijack = isActiveHijack
         self.details = details

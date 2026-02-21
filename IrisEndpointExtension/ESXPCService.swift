@@ -49,11 +49,12 @@ class ESXPCService: NSObject {
         listener = nil
 
         connectionsLock.lock()
-        for connection in activeConnections {
-            connection.invalidate()
-        }
+        let snapshot = activeConnections
         activeConnections.removeAll()
         connectionsLock.unlock()
+        for connection in snapshot {
+            connection.invalidate()
+        }
 
         logger.info("XPC service stopped")
     }
@@ -82,9 +83,9 @@ extension ESXPCService: NSXPCListenerDelegate {
         }
 
         connectionsLock.lock()
+        defer { connectionsLock.unlock() }
         activeConnections.append(newConnection)
         let count = activeConnections.count
-        connectionsLock.unlock()
 
         newConnection.resume()
         logger.info("[XPC] ACCEPTED connection from PID \(pid) (total active: \(count))")
@@ -117,9 +118,9 @@ extension ESXPCService: NSXPCListenerDelegate {
     private func connectionInvalidated(_ connection: NSXPCConnection) {
         let pid = connection.processIdentifier
         connectionsLock.lock()
+        defer { connectionsLock.unlock() }
         activeConnections.removeAll { $0 === connection }
         let count = activeConnections.count
-        connectionsLock.unlock()
 
         logger.info("[XPC] Connection from PID \(pid) invalidated (remaining: \(count))")
     }
@@ -143,19 +144,6 @@ extension ESXPCService: EndpointXPCProtocol {
         let data = processes.compactMap { try? encoder.encode($0) }
         logger.info("[XPC] getProcesses → \(processes.count) tracked, \(data.count) encoded")
         reply(data)
-    }
-
-    func getProcess(pid: Int32, reply: @escaping (Data?) -> Void) {
-        guard let client = esClient,
-              let process = client.getProcess(pid: pid) else {
-            logger.debug("[XPC] getProcess(\(pid)) → not found")
-            reply(nil)
-            return
-        }
-
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        reply(try? encoder.encode(process))
     }
 
     func getRecentEvents(limit: Int, reply: @escaping ([Data]) -> Void) {
@@ -192,7 +180,7 @@ extension ESXPCService: EndpointXPCProtocol {
 
     func getStatus(reply: @escaping ([String: Any]) -> Void) {
         let isRunning = esClient?.isRunning ?? false
-        let processCount = esClient?.getTrackedProcesses().count ?? 0
+        let processCount = esClient?.processCount ?? 0
         let startupError = esClient?.startupError
 
         logger.info("[XPC] getStatus → esEnabled=\(isRunning) processCount=\(processCount) error=\(startupError ?? "none")")
@@ -201,7 +189,8 @@ extension ESXPCService: EndpointXPCProtocol {
             "version": "1.0.0",
             "esEnabled": isRunning,
             "processCount": processCount,
-            "mode": isRunning ? "active" : "inactive"
+            "mode": isRunning ? "active" : "inactive",
+            "enforcementEnabled": !ExecPolicy.auditMode,
         ]
 
         if let error = startupError {
@@ -209,12 +198,6 @@ extension ESXPCService: EndpointXPCProtocol {
         }
 
         reply(status)
-    }
-
-    func isEndpointSecurityAvailable(reply: @escaping (Bool) -> Void) {
-        let available = esClient?.isRunning ?? false
-        logger.debug("[XPC] isEndpointSecurityAvailable → \(available)")
-        reply(available)
     }
 
     func updateBlocklists(paths: [String], teamIds: [String], signingIds: [String],
