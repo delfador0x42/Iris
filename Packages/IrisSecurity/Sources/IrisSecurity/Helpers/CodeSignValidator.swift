@@ -135,7 +135,7 @@ public enum CodeSignValidator {
   public static func kernelCSInfo(pid: pid_t) -> KernelCSInfo? {
     var flags: UInt32 = 0
     // csops(pid, CS_OPS_STATUS, &flags, sizeof(flags))
-    let result = csops(pid, 0 /* CS_OPS_STATUS */, &flags, MemoryLayout<UInt32>.size)
+    let result = iris_csops(pid, 0 /* CS_OPS_STATUS */, &flags, MemoryLayout<UInt32>.size)
     guard result == 0 else { return nil }
     return KernelCSInfo(
       flags: flags,
@@ -148,7 +148,3 @@ public enum CodeSignValidator {
     )
   }
 }
-
-// csops() is not in public headers — declare it
-@_silgen_name("csops")
-private func csops(_ pid: pid_t, _ ops: UInt32, _ useraddr: UnsafeMutableRawPointer, _ usersize: Int) -> Int32

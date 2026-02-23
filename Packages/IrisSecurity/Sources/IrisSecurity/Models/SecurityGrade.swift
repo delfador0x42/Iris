@@ -17,32 +17,26 @@ public struct SecurityGrade: Sendable, Codable, Equatable {
             return SecurityGrade(letter: "?", score: 0, categoryScores: [:])
         }
 
+        // Single pass: accumulate overall + per-category weights simultaneously
         var totalWeight = 0
         var earnedWeight = 0
+        var catTotal: [SecurityCategory: Int] = [:]
+        var catEarned: [SecurityCategory: Int] = [:]
 
         for check in checks {
             let w = check.severity.weight
+            let earned = check.status == .pass ? w : (check.status == .warning ? w / 2 : 0)
             totalWeight += w
-            if check.status == .pass { earnedWeight += w }
-            if check.status == .warning { earnedWeight += w / 2 }
+            earnedWeight += earned
+            catTotal[check.category, default: 0] += w
+            catEarned[check.category, default: 0] += earned
         }
 
         let score = totalWeight > 0 ? earnedWeight * 100 / totalWeight : 0
 
-        // Per-category breakdown
         var catScores: [SecurityCategory: Int] = [:]
-        for category in SecurityCategory.allCases {
-            let catChecks = checks.filter { $0.category == category }
-            guard !catChecks.isEmpty else { continue }
-            var catTotal = 0
-            var catEarned = 0
-            for check in catChecks {
-                let w = check.severity.weight
-                catTotal += w
-                if check.status == .pass { catEarned += w }
-                if check.status == .warning { catEarned += w / 2 }
-            }
-            catScores[category] = catTotal > 0 ? catEarned * 100 / catTotal : 0
+        for (cat, total) in catTotal {
+            catScores[cat] = total > 0 ? (catEarned[cat, default: 0]) * 100 / total : 0
         }
 
         return SecurityGrade(

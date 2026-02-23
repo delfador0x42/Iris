@@ -16,6 +16,13 @@ extension ProbeRunner {
             DNSContradictionProbe.shared,
             TimingOracleProbe.shared,
             TrustCacheProbe.shared,
+            // Phase 3: ground truth probes from GROUND_TRUTH_APIS.md
+            KernelBootProbe.shared,
+            MACPolicyProbe.shared,
+            // Phase 4: additional ground truth probes
+            CodeSignContradictionProbe.shared,
+            IOKitGroundTruthProbe.shared,
+            ArchitectureContradictionProbe.shared,
         ])
     }
 }

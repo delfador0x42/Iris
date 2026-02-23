@@ -1,19 +1,11 @@
 import Foundation
 import os.log
 
-// Private dyld APIs — from <mach-o/dyld_priv.h>
-// These are available in libdyld.dylib on all macOS versions
-@_silgen_name("_dyld_get_shared_cache_uuid")
-private func _dyld_get_shared_cache_uuid(_ uuid: UnsafeMutablePointer<uuid_t>) -> Bool
-
-@_silgen_name("_dyld_get_shared_cache_range")
-private func _dyld_get_shared_cache_range(_ length: UnsafeMutablePointer<Int>) -> UnsafeRawPointer?
-
 /// Compares the dyld shared cache UUID on disk against what the runtime reports.
 ///
 /// Lie detected: "The shared cache in memory is the one Apple shipped"
 /// Ground truth: Read the cache file header directly from disk, extract UUID.
-///               Query _dyld_get_shared_cache_uuid() for what the runtime thinks.
+///               Query iris_dyld_get_shared_cache_uuid() for what the runtime thinks.
 ///               If they differ, someone replaced the cache or is intercepting the API.
 ///
 /// Also checks: The cache file's UUID matches what's mapped into OUR process.
@@ -62,7 +54,7 @@ public actor DyldCacheContradictionProbe {
                     description: "CRITICAL: dyld shared cache UUID on disk does NOT match runtime UUID. The loaded shared cache has been replaced or the UUID API is hooked.",
                     severity: .critical, mitreID: "T1574.006",
                     scannerId: "dyld_cache_contradiction",
-                    enumMethod: "disk cache header UUID vs _dyld_get_shared_cache_uuid()",
+                    enumMethod: "disk cache header UUID vs iris_dyld_get_shared_cache_uuid()",
                     evidence: [
                         "cache_path: \(cachePath)",
                         "disk_uuid: \(diskUUID)",
@@ -81,10 +73,10 @@ public actor DyldCacheContradictionProbe {
                     name: "dyld_shared_cache",
                     path: "memory://\(String(format: "0x%llx", mappedAddr))",
                     technique: "Shared Cache API Hooking",
-                    description: "CRITICAL: _dyld_get_shared_cache_uuid() returns different UUID than what's actually mapped in memory. The API is being hooked.",
+                    description: "CRITICAL: iris_dyld_get_shared_cache_uuid() returns different UUID than what's actually mapped in memory. The API is being hooked.",
                     severity: .critical, mitreID: "T1574.006",
                     scannerId: "dyld_cache_contradiction",
-                    enumMethod: "mapped memory UUID vs _dyld_get_shared_cache_uuid()",
+                    enumMethod: "mapped memory UUID vs iris_dyld_get_shared_cache_uuid()",
                     evidence: [
                         "mapped_addr: \(String(format: "0x%llx", mappedAddr))",
                         "mapped_size: \(mappedSize)",
@@ -102,7 +94,7 @@ public actor DyldCacheContradictionProbe {
 
     private func getRuntimeCacheUUID() -> String? {
         var uuid = uuid_t(0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0)
-        guard _dyld_get_shared_cache_uuid(&uuid) else { return nil }
+        guard iris_dyld_get_shared_cache_uuid(&uuid) else { return nil }
         return uuidToString(uuid)
     }
 
@@ -110,7 +102,7 @@ public actor DyldCacheContradictionProbe {
 
     private func getMappedCacheRange() -> (UInt64, UInt64)? {
         var length: Int = 0
-        guard let ptr = _dyld_get_shared_cache_range(&length), length > 0 else { return nil }
+        guard let ptr = iris_dyld_get_shared_cache_range(&length), length > 0 else { return nil }
         return (UInt64(Int(bitPattern: ptr)), UInt64(length))
     }
 

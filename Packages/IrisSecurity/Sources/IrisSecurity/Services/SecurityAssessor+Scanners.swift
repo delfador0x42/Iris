@@ -106,12 +106,14 @@ extension SecurityAssessor {
     let sc = await scFindings
     let fs = await fsChanges
 
-    // Cross-domain fusion: bridge batch findings + real-time alerts
+    // Cross-domain fusion: bridge batch findings + real-time alerts + probe contradictions
     let recentAlerts = await AlertStore.shared.alertsSince(start.addingTimeInterval(-3600))
+    let probeResults = ProbeRunner.shared.results
     let fusion = FusionEngine.fuse(
       scannerResults: allResults,
       correlations: correlations,
-      recentAlerts: recentAlerts)
+      recentAlerts: recentAlerts,
+      probeResults: probeResults)
 
     let result = ThreatScanResult(
       anomalies: allResults.flatMap(\.anomalies).sorted { $0.severity > $1.severity },

@@ -62,6 +62,7 @@ public enum EvidenceSource: String, Sendable {
     case scanner
     case realtime
     case correlation
+    case probe
 }
 
 // MARK: - Entity
@@ -114,14 +115,15 @@ public struct FusionResult: Sendable {
 /// assessment with kill chain mapping, cross-domain scoring, and campaign detection.
 public struct FusionEngine: Sendable {
 
-    /// Fuse scanner results + real-time alerts into cross-domain threat assessment.
+    /// Fuse scanner results + real-time alerts + probe contradictions into cross-domain threat assessment.
     public static func fuse(
         scannerResults: [ScannerResult],
         correlations: [CorrelationEngine.Correlation],
-        recentAlerts: [SecurityAlert]
+        recentAlerts: [SecurityAlert],
+        probeResults: [ProbeResult] = []
     ) -> FusionResult {
         var evidence: [ThreatEvidence] = []
-        evidence.reserveCapacity(scannerResults.count * 4 + recentAlerts.count)
+        evidence.reserveCapacity(scannerResults.count * 4 + recentAlerts.count + probeResults.count)
 
         // Scanner anomalies → evidence
         for r in scannerResults {
@@ -162,6 +164,22 @@ public struct FusionEngine: Sendable {
                 timestamp: alert.timestamp, detail: alert.description))
         }
 
+        // Probe contradictions → evidence (highest weight — ground truth disagreement)
+        for probe in probeResults where probe.verdict == .contradiction {
+            let mismatches = probe.comparisons.filter { !$0.matches }
+            for mismatch in mismatches {
+                evidence.append(ThreatEvidence(
+                    source: .probe, processPath: "contradiction:\(probe.probeId)",
+                    signingId: nil, networkPeer: nil,
+                    technique: "\(probe.probeName) Contradiction",
+                    severity: .critical,
+                    mitreId: "T1014",
+                    stage: probeStageMap[probe.probeId] ?? .defenseEvasion,
+                    timestamp: probe.timestamp,
+                    detail: "\(mismatch.label): \(mismatch.sourceA.source)=\(mismatch.sourceA.value) vs \(mismatch.sourceB.source)=\(mismatch.sourceB.value)"))
+            }
+        }
+
         guard !evidence.isEmpty else { return .empty }
 
         // Group by entity type and score
@@ -199,6 +217,9 @@ public struct FusionEngine: Sendable {
             case .low:      s += 0.04
             }
         }
+        // Probe contradiction multiplier: ground truth disagreement = strongest signal
+        let hasProbeContradiction = evidence.contains { $0.source == .probe }
+        if hasProbeContradiction { s *= 1.5 }
         // Cross-domain multiplier: evidence from N sources → 1.0 + 0.3*(N-1)
         s *= 1.0 + 0.3 * Double(domains.count - 1)
         // Kill chain breadth: covering N stages → 1.0 + 0.2*(N-1)
@@ -356,6 +377,22 @@ public struct FusionEngine: Sendable {
         "browser_history": .collection, "supply_chain": .initialAccess,
         "phantom_dylib": .persistence,
         "inline_hook": .defenseEvasion,
+    ]
+
+    // MARK: - Probe → Stage Map
+
+    private static let probeStageMap: [String: KillChainStage] = [
+        "sip-status": .defenseEvasion,
+        "process-census": .defenseEvasion,
+        "dyld-cache": .defenseEvasion,
+        "binary-integrity": .defenseEvasion,
+        "network-ghost": .c2,
+        "kext-census": .persistence,
+        "dns-contradiction": .c2,
+        "timing-oracle": .defenseEvasion,
+        "trust-cache": .defenseEvasion,
+        "kernel-boot": .defenseEvasion,
+        "mac-policy": .defenseEvasion,
     ]
 
     // MARK: - Helpers

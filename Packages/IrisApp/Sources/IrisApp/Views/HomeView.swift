@@ -1,160 +1,158 @@
 import SwiftUI
 
 enum MenuDestination: String, CaseIterable {
-  case satelliteTracker = "Satellite Tracker"
-  case statistics = "Statistics"
-  case processList = "Process List"
-  case firewall = "Firewall Rules"
-  case securityAssessment = "Security Assessment"
+  case securityAssessment = "Security"
+  case processList = "Processes"
+  case networkMonitor = "Network"
+  case proxyMonitor = "Proxy"
+  case wifiMonitor = "WiFi"
+  case statistics = "Disk"
   case settings = "Settings"
-  case networkMonitor = "Network Monitor"
-  case proxyMonitor = "Proxy Monitor"
-  case wifiMonitor = "WiFi Monitor"
 
   var icon: String {
     switch self {
-    case .satelliteTracker: return "satellite.fill"
-    case .statistics: return "internaldrive.fill"
-    case .processList: return "list.bullet.rectangle.fill"
-    case .firewall: return "flame.fill"
     case .securityAssessment: return "shield.checkered"
-    case .settings: return "gearshape.fill"
+    case .processList: return "list.bullet.rectangle.fill"
     case .networkMonitor: return "network.badge.shield.half.filled"
     case .proxyMonitor: return "lock.open.display"
     case .wifiMonitor: return "wifi"
+    case .statistics: return "internaldrive.fill"
+    case .settings: return "gearshape.fill"
     }
   }
 
   var description: String {
     switch self {
-    case .satelliteTracker: return "Track satellites in real-time"
-    case .statistics: return "View disk usage"
-    case .processList: return "View running processes"
-    case .firewall: return "Manage network rules"
-    case .securityAssessment: return "System security posture"
-    case .settings: return "Extension & permissions"
-    case .networkMonitor: return "Monitor network & HTTP traffic"
-    case .proxyMonitor: return "Decrypted HTTPS traffic"
+    case .securityAssessment: return "Threat scanning & integrity probes"
+    case .processList: return "Live process monitoring"
+    case .networkMonitor: return "Connection tracking & firewall"
+    case .proxyMonitor: return "Decrypted HTTPS inspection"
     case .wifiMonitor: return "WiFi signal & networks"
+    case .statistics: return "Disk usage analysis"
+    case .settings: return "Extensions & permissions"
     }
   }
 }
 
 public struct HomeView: View {
-  @StateObject private var renderer = HomeRenderer()
+  @StateObject private var extensionManager = ExtensionManager.shared
   @State private var navigationPath = NavigationPath()
 
-  // Button layout: 8 buttons arranged clockwise from top
-  private let destinations: [MenuDestination] = [
-    .satelliteTracker,  // Top (0)
-    .statistics,  // Top-right (1)
-    .processList,  // Right (2)
-    .securityAssessment,  // Bottom-right (3)
-    .settings,  // Bottom (4)
-    .networkMonitor,  // Bottom-left (5)
-    .proxyMonitor,  // Left (6)
-    .wifiMonitor,  // Top-left (7)
-  ]
+  private let destinations: [MenuDestination] = MenuDestination.allCases
 
   public init() {}
 
   public var body: some View {
     NavigationStack(path: $navigationPath) {
       ZStack {
-        // Metal-rendered stone circle with flames
-        HomeMetalView(renderer: renderer) { buttonIndex in
-          if buttonIndex >= 0 && buttonIndex < destinations.count {
-            navigationPath.append(destinations[buttonIndex])
-          }
-        }
-        .ignoresSafeArea()
+        BackgroundGradient()
 
-        // Overlay: Button labels on hover
-        if let hoveredIndex = renderer.hoveredButton,
-          hoveredIndex >= 0 && hoveredIndex < destinations.count
-        {
-          VStack {
-            Spacer()
+        VStack(spacing: 32) {
+          // Status header
+          statusHeader
 
-            HStack(spacing: 12) {
-              Image(systemName: destinations[hoveredIndex].icon)
-                .font(.title2)
-
-              VStack(alignment: .leading, spacing: 2) {
-                Text(destinations[hoveredIndex].rawValue)
-                  .font(.headline)
-                Text(destinations[hoveredIndex].description)
-                  .font(.caption)
-                  .foregroundColor(.gray)
+          // Navigation grid
+          LazyVGrid(columns: [
+            GridItem(.flexible(), spacing: 16),
+            GridItem(.flexible(), spacing: 16),
+            GridItem(.flexible(), spacing: 16),
+          ], spacing: 16) {
+            ForEach(destinations, id: \.self) { dest in
+              Button {
+                navigationPath.append(dest)
+              } label: {
+                navCard(dest)
               }
+              .buttonStyle(.plain)
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-            .padding(.bottom, 40)
           }
-          .transition(.opacity.combined(with: .move(edge: .bottom)))
-          .animation(.easeInOut(duration: 0.2), value: renderer.hoveredButton)
+          .padding(.horizontal, 40)
+
+          Spacer()
         }
+        .padding(.top, 40)
       }
       .navigationDestination(for: MenuDestination.self) { destination in
         switch destination {
-        case .satelliteTracker:
-          SatelliteView()
-        case .statistics:
-          DiskUsageView()
+        case .securityAssessment:
+          SecurityHubView()
         case .processList:
           ProcessListView()
         case .networkMonitor:
           NetworkMonitorView()
-        case .wifiMonitor:
-          WiFiMonitorView()
         case .proxyMonitor:
           ProxyMonitorView()
-        case .securityAssessment:
-          SecurityHubView()
+        case .wifiMonitor:
+          WiFiMonitorView()
+        case .statistics:
+          DiskUsageView()
         case .settings:
           SettingsView()
-        default:
-          PlaceholderView(title: destination.rawValue, description: destination.description)
         }
       }
     }
   }
-}
 
-struct PlaceholderView: View {
-  let title: String
-  let description: String
-
-  var body: some View {
-    ZStack {
-      // Dark gradient background
-      LinearGradient(
-        colors: [
-          Color(red: 0.02, green: 0.03, blue: 0.05),
-          Color(red: 0.05, green: 0.07, blue: 0.1),
-        ],
-        startPoint: .top,
-        endPoint: .bottom
-      )
-      .ignoresSafeArea()
-
-      VStack(spacing: 24) {
-        Text(title)
-          .font(.system(size: 36, weight: .bold, design: .serif))
-          .foregroundColor(.white)
-
-        Text(description)
-          .font(.title3)
-          .foregroundColor(.gray)
-
-        Text("Coming Soon")
+  private var statusHeader: some View {
+    HStack(spacing: 24) {
+      // Extension status
+      HStack(spacing: 8) {
+        Circle()
+          .fill(extensionManager.isEndpointExtensionReady ? .green : .red)
+          .frame(width: 8, height: 8)
+        Text("Endpoint")
           .font(.caption)
-          .foregroundColor(Color(red: 0.4, green: 0.6, blue: 1.0))
-          .padding(.top, 20)
+          .foregroundColor(.secondary)
       }
+
+      HStack(spacing: 8) {
+        Circle()
+          .fill(extensionManager.isNetworkExtensionReady ? .green : .red)
+          .frame(width: 8, height: 8)
+        Text("Network")
+          .font(.caption)
+          .foregroundColor(.secondary)
+      }
+
+      Spacer()
+
+      Text("Iris")
+        .font(.system(size: 28, weight: .bold, design: .serif))
+        .foregroundColor(.white)
+
+      Spacer()
+
+      // Placeholder for alert count — will be wired in Phase 2
+      Text("Ready")
+        .font(.caption)
+        .foregroundColor(.secondary)
     }
+    .padding(.horizontal, 40)
+  }
+
+  private func navCard(_ dest: MenuDestination) -> some View {
+    VStack(spacing: 12) {
+      Image(systemName: dest.icon)
+        .font(.system(size: 28))
+        .foregroundColor(.white)
+      Text(dest.rawValue)
+        .font(.headline)
+        .foregroundColor(.white)
+      Text(dest.description)
+        .font(.caption)
+        .foregroundColor(.gray)
+        .multilineTextAlignment(.center)
+    }
+    .frame(maxWidth: .infinity)
+    .frame(height: 140)
+    .background(
+      RoundedRectangle(cornerRadius: 12)
+        .fill(Color.white.opacity(0.05))
+        .overlay(
+          RoundedRectangle(cornerRadius: 12)
+            .strokeBorder(Color.white.opacity(0.1), lineWidth: 1)
+        )
+    )
   }
 }
 

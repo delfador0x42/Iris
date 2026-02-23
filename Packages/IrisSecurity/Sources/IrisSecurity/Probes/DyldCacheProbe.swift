@@ -1,13 +1,6 @@
 import Foundation
 import os.log
 
-// Private dyld APIs — from <mach-o/dyld_priv.h>
-@_silgen_name("_dyld_get_shared_cache_uuid")
-private func _dyld_get_shared_cache_uuid(_ uuid: UnsafeMutablePointer<uuid_t>) -> Bool
-
-@_silgen_name("_dyld_get_shared_cache_range")
-private func _dyld_get_shared_cache_range(_ length: UnsafeMutablePointer<Int>) -> UnsafeRawPointer?
-
 /// Three-way contradiction: disk cache header UUID vs runtime API vs mapped memory.
 /// If any two disagree, the shared cache has been tampered with or the API is hooked.
 public actor DyldCacheProbe: ContradictionProbe {
@@ -19,7 +12,7 @@ public actor DyldCacheProbe: ContradictionProbe {
 
     public nonisolated let metadata = ProbeMetadata(
         whatLie: "The dyld shared cache in memory is the one Apple shipped",
-        groundTruth: "Read UUID from disk cache header (offset 0x58), query _dyld_get_shared_cache_uuid(), read UUID from mapped memory directly",
+        groundTruth: "Read UUID from disk cache header (offset 0x58), query iris_dyld_get_shared_cache_uuid(), read UUID from mapped memory directly",
         adversaryCost: "Must patch 3 independent sources simultaneously: disk file, dyld API return value, and mapped memory region",
         positiveDetection: "Shows which source disagrees and exact UUID values from each",
         falsePositiveRate: "Near zero — UUIDs are deterministic, only changes on OS update"
@@ -55,7 +48,7 @@ public actor DyldCacheProbe: ContradictionProbe {
             comparisons.append(SourceComparison(
                 label: "disk header UUID vs runtime API UUID",
                 sourceA: SourceValue("disk header (0x58)", disk),
-                sourceB: SourceValue("_dyld_get_shared_cache_uuid()", runtime),
+                sourceB: SourceValue("iris_dyld_get_shared_cache_uuid()", runtime),
                 matches: match))
         }
 
@@ -64,7 +57,7 @@ public actor DyldCacheProbe: ContradictionProbe {
             if !match { hasContradiction = true }
             comparisons.append(SourceComparison(
                 label: "runtime API UUID vs mapped memory UUID",
-                sourceA: SourceValue("_dyld_get_shared_cache_uuid()", runtime),
+                sourceA: SourceValue("iris_dyld_get_shared_cache_uuid()", runtime),
                 sourceB: SourceValue("mapped memory (0x58)", memory),
                 matches: match))
         }
@@ -106,13 +99,13 @@ public actor DyldCacheProbe: ContradictionProbe {
 
     private func getRuntimeCacheUUID() -> String? {
         var uuid = uuid_t(0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0)
-        guard _dyld_get_shared_cache_uuid(&uuid) else { return nil }
+        guard iris_dyld_get_shared_cache_uuid(&uuid) else { return nil }
         return uuidToString(uuid)
     }
 
     private func getMappedMemoryUUID() -> String? {
         var length: Int = 0
-        guard let ptr = _dyld_get_shared_cache_range(&length), length > 0 else { return nil }
+        guard let ptr = iris_dyld_get_shared_cache_range(&length), length > 0 else { return nil }
         let magic = String(cString: ptr.assumingMemoryBound(to: CChar.self))
         guard magic.hasPrefix("dyld_v1") else { return nil }
         let uuidPtr = (ptr + uuidOffset).assumingMemoryBound(to: uuid_t.self)

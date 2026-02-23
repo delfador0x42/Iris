@@ -244,7 +244,59 @@ iris/
 
 - Target: macOS 26.2 (25C56) and above ONLY
 - Private frameworks ARE accessible and can be used
-- References: `references/program_examples/` has airport, mitmproxy, WARP binaries
+
+## Reference Materials (`references/`)
+
+All reference code lives in `references/` — use for architecture study, API patterns, and reverse engineering.
+
+### Endpoint Security & macOS Security Tools
+| Directory | What It Is | Use For |
+|-----------|-----------|---------|
+| `objective_see/` | LuLu, ProcessMonitor, BlockBlock, OverSight, FileMonitor, KnockKnock, ReiKey, TaskExplorer, RansomWhere, DylibHijackScanner, Mach-O parser, DumpBTM, sniffMK | ES event handling patterns, kext detection, persistence monitoring, dylib hijack detection, process introspection |
+| `mac-monitor/` | AtomicESClient ring buffer implementation | ES client architecture, ring buffer pattern for high-throughput event processing |
+| `endpointsecurity_header_files_for_reference/` | Raw ES framework headers | API surface, event struct layouts, auth vs notify semantics |
+| `program_examples/wazuh/` | Wazuh agent source | Threat detection rules, log analysis patterns, agent architecture |
+
+### Network & Proxy
+| Directory | What It Is | Use For |
+|-----------|-----------|---------|
+| `program_examples/mitmproxy/` | mitmproxy Python source | TLS interception patterns, HTTP parsing, flow lifecycle |
+| `program_examples/Cloudflare WARP.app/` | WARP binary (disassemble with otool/nm) | NEAppProxy patterns, tunnel implementation, cert pinning |
+| `transparent_proxy_examples/` | sing-tun, tproxy, dae, squid, asuswrt configs | Transparent proxy architectures across platforms |
+| `program_examples/airport` | macOS WiFi diagnostic binary | CoreWLAN internals, private API usage |
+
+### Kernel & Systems
+| Directory | What It Is | Use For |
+|-----------|-----------|---------|
+| `xnu/` | XNU kernel source (bsd, osfmk, iokit, libsyscall, security) | Mach traps, syscall internals, process accounting, IPC, kauth |
+| `gamozolabs_backup/` | Fuzzer infrastructure (89 files) | Low-level systems code patterns, Mach port manipulation, vm_read/write |
+
+### High-Quality Code References (style & architecture)
+| Directory | What It Is | Use For |
+|-----------|-----------|---------|
+| `cannoli/` | Rust binary instrumentation framework | Zero-overhead design, clean Rust architecture, minimal abstractions |
+| `dalvik/` | Dalvik VM implementation | Bytecode interpreter patterns, tight C code, memory management |
+| `goblin/` | Rust Mach-O/ELF/PE parser | Binary format parsing, zero-copy design, error handling |
+| `ripgrep/` | Fast regex search tool | High-performance Rust, parallel processing, clean CLI design |
+| `dust/` | Disk usage analyzer (Rust) | Filesystem traversal, parallel scanning, terminal UI |
+
+### ML & GPU
+| Directory | What It Is | Use For |
+|-----------|-----------|---------|
+| `llama.cpp/` | LLM inference engine | GGUF format, Metal compute shaders, quantization |
+| `gpt4all/` | Local LLM runtime | Model loading, inference pipeline |
+| `tinygrad/` | Minimal ML framework | GPU kernel patterns, compute graph |
+| `metal-rs/` | Rust Metal bindings | Metal API from Rust, compute pipeline setup |
+| `lindera/`, `tantivy/` | Japanese tokenizer, search engine (Rust) | Text processing, index structures |
+
+### Other
+| Directory | What It Is | Use For |
+|-----------|-----------|---------|
+| `tauri/` | Desktop app framework (Rust+Web) | Cross-platform app patterns |
+| `vscode/` | VS Code source | Extension architecture, IPC patterns |
+| `coreaudio-research-__-Reversing-the-Silence/` | CoreAudio reverse engineering | Audio subsystem internals, private API discovery methodology |
+| `old_amaranthine/` | Previous knowledge store implementation | Architectural evolution reference |
+| `x-algorithm/` | Algorithm implementations | Reference algorithms |
 
 ## Current Development State (2026-02-15)
 
@@ -269,6 +321,31 @@ All 5 targets build (including CodeSign). 11 packages, 4 system extensions, ~444
 **Now working (SIP disabled):** TCCMonitor reads both user and system TCC.db via native SQLiteReader (no shell-out), queries flags/LENGTH(csreq)/pid columns, flags suspicious grants (missing code signing requirement, non-user auth_reason), wired to SecurityHubView. NetworkAnomalyDetector uses structured NEFilter connection data for PID-to-connection mapping, detects C2 beaconing via coefficient of variation analysis. SocketEnumerator (native proc_pidfdinfo, ~1.5ms full system scan) replaces lsof shell-out for fallback network scanning.
 
 **Architecture is optimal:** NEFilterDataProvider + NEAppProxyProvider + NEDNSProxyProvider. NEPacketTunnelProvider was researched and rejected (see DESIGN_DECISIONS.md).
+
+## Available Tools
+
+### MCP Servers
+- **XcodeBuildMCP**: build_macos, test_macos, list_schemes, build settings, log capture
+- **context7**: up-to-date library documentation and code examples
+- **helix**: cross-session knowledge store — `store`, `batch`, `search`, `brief`, `read`, `edit`, `topics`, `trace`, `_reload`
+- **apple-docs**: Apple Developer Documentation search, WWDC transcripts, code examples
+
+### Scripts (`scripts/`)
+| Script | Purpose |
+|--------|---------|
+| `iris-ctl.swift` | CLI remote control (status/reinstall/startProxy/sendCA) |
+| `iris-diag.sh` | System extension diagnostics |
+| `iris-logs.sh` | Extension log streaming with filters |
+| `iris-test-proxy.sh` | End-to-end MITM pipeline test |
+
+### System Tools (sudo available, SIP disabled)
+- **Reverse engineering**: otool, nm, strings, objdump, lldb, class-dump
+- **System inspection**: dtrace, fs_usage, lsof, netstat, nettop, tcpdump, dtruss
+- **macOS internals**: systemextensionsctl, launchctl, csrutil, spctl, codesign, security
+- **Build tools**: xcodebuild, swiftc, xcrun, swift-format, swift build
+- **Log analysis**: `log show/stream` with predicate filters
+- **Database**: sqlite3 (TCC.db, etc. — SIP disabled, full access)
+- **Network**: scutil, networksetup, dns-sd, curl
 
 ## Related Documents
 

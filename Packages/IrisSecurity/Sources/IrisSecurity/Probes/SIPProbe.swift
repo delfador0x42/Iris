@@ -12,12 +12,6 @@ public actor SIPProbe: ContradictionProbe {
     public static let shared = SIPProbe()
     private let logger = Logger(subsystem: "com.wudan.iris", category: "SIPProbe")
 
-    @_silgen_name("csr_get_active_config")
-    private static func csr_get_active_config(_ config: UnsafeMutablePointer<UInt32>) -> Int32
-
-    @_silgen_name("csr_check")
-    private static func csr_check(_ mask: UInt32) -> Int32
-
     private static let CSR_ALLOW_UNRESTRICTED_FS: UInt32 = 1 << 1
     private static let CSR_ALLOW_TASK_FOR_PID:    UInt32 = 1 << 2
 
@@ -39,7 +33,7 @@ public actor SIPProbe: ContradictionProbe {
 
         // Source 1: Kernel config
         var kernelConfig: UInt32 = 0
-        let kernelOK = Self.csr_get_active_config(&kernelConfig) == 0
+        let kernelOK = iris_csr_get_active_config(&kernelConfig) == 0
         let kernelSaysDisabled = kernelOK && (kernelConfig & Self.CSR_ALLOW_UNRESTRICTED_FS) != 0
 
         // Source 2: Behavioral probe
@@ -49,7 +43,7 @@ public actor SIPProbe: ContradictionProbe {
         let nvramConfig = readNVRAMCSRConfig()
 
         // Source 4: csr_check per-flag
-        let csrCheckSaysTaskForPidAllowed = Self.csr_check(Self.CSR_ALLOW_TASK_FOR_PID) == 0
+        let csrCheckSaysTaskForPidAllowed = iris_csr_check(Self.CSR_ALLOW_TASK_FOR_PID) == 0
         let configSaysTaskForPidAllowed = (kernelConfig & Self.CSR_ALLOW_TASK_FOR_PID) != 0
 
         // Comparison 1: kernel config vs behavioral write

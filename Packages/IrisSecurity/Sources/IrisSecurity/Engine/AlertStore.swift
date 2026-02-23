@@ -88,6 +88,16 @@ public actor AlertStore {
 
         logger.info("[ALERT] \(alert.severity.label): \(alert.name) — \(alert.processName)")
 
+        // Stream to real-time event log + persist to diagnostic archive
+        Task {
+            await EventLogger.shared.log(alert)
+            await DiagnosticReporter.shared.recordAlert(DiagnosticAlert(
+                ruleId: alert.ruleId, name: alert.name,
+                severity: alert.severity.label, mitreId: alert.mitreId,
+                processName: alert.processName, processPath: alert.processPath,
+                description: alert.description, timestamp: alert.timestamp))
+        }
+
         if alert.severity == .critical || alert.severity == .high {
             postSystemNotification(alert)
         }

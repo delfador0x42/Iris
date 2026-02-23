@@ -42,6 +42,9 @@ struct IrisMainApp: App {
       // 6. Bridge network + DNS data into the detection pipeline
       await NetworkEventBridge.shared.start()
       await DNSEventBridge.shared.start()
+
+      // 7. Start contradiction engine (periodic probe execution)
+      await ContradictionEngine.shared.start()
     }
   }
 

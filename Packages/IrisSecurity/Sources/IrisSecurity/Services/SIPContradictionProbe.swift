@@ -13,13 +13,6 @@ public actor SIPContradictionProbe {
     public static let shared = SIPContradictionProbe()
     private let logger = Logger(subsystem: "com.wudan.iris", category: "SIPProbe")
 
-    // Undocumented but stable syscall — in libsystem_kernel since 10.11
-    @_silgen_name("csr_get_active_config")
-    private static func csr_get_active_config(_ config: UnsafeMutablePointer<UInt32>) -> Int32
-
-    @_silgen_name("csr_check")
-    private static func csr_check(_ mask: UInt32) -> Int32
-
     // CSR flag bits from XNU bsd/sys/csr.h
     private static let CSR_ALLOW_UNTRUSTED_KEXTS:    UInt32 = 1 << 0
     private static let CSR_ALLOW_UNRESTRICTED_FS:    UInt32 = 1 << 1
@@ -33,7 +26,7 @@ public actor SIPContradictionProbe {
 
         // ── Source 1: Kernel-reported CSR config ──────────────
         var kernelConfig: UInt32 = 0
-        let kernelOK = Self.csr_get_active_config(&kernelConfig) == 0
+        let kernelOK = iris_csr_get_active_config(&kernelConfig) == 0
         let kernelSaysDisabled = kernelOK && (kernelConfig & Self.CSR_ALLOW_UNRESTRICTED_FS) != 0
 
         // ── Source 2: Behavioral probe — try SIP-protected write ──
@@ -125,7 +118,7 @@ public actor SIPContradictionProbe {
     /// Verify task_for_pid works when CSR says it should
     private func validateTaskForPid(kernelConfig: UInt32) -> [ProcessAnomaly] {
         let csrSaysAllowed = (kernelConfig & Self.CSR_ALLOW_TASK_FOR_PID) != 0
-        let csr_check_says = Self.csr_check(Self.CSR_ALLOW_TASK_FOR_PID) == 0
+        let csr_check_says = iris_csr_check(Self.CSR_ALLOW_TASK_FOR_PID) == 0
 
         if csrSaysAllowed != csr_check_says {
             return [.filesystem(

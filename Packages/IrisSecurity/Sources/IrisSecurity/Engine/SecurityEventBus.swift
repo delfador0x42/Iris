@@ -49,12 +49,14 @@ public actor SecurityEventBus {
   public func ingest(_ events: [SecurityEvent]) async {
     guard !events.isEmpty else { return }
     totalIngested += UInt64(events.count)
+    await EventLogger.shared.log(events)
     await DetectionEngine.shared.processBatch(events)
   }
 
   /// Feed a single event
   public func ingest(_ event: SecurityEvent) async {
     totalIngested += 1
+    await EventLogger.shared.log([event])
     await DetectionEngine.shared.process(event)
   }
 
@@ -104,6 +106,7 @@ public actor SecurityEventBus {
 
     if !secEvents.isEmpty {
       totalIngested += UInt64(secEvents.count)
+      await EventLogger.shared.log(secEvents)
       await DetectionEngine.shared.processBatch(secEvents)
 
       // Forward file events to PersistenceMonitor for real-time persistence detection
@@ -156,6 +159,7 @@ public actor SecurityEventBus {
     if !secEvents.isEmpty {
       lastProcessTimestamp = maxTimestamp
       totalIngested += UInt64(secEvents.count)
+      await EventLogger.shared.log(secEvents)
       await DetectionEngine.shared.processBatch(secEvents)
     }
   }

@@ -94,11 +94,6 @@
 			path = Packages/IrisNetwork/Sources/IrisNetwork;
 			sourceTree = "<group>";
 		};
-		3F0001002F28000000000006 /* Packages/IrisSatellite/Sources/IrisSatellite */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = Packages/IrisSatellite/Sources/IrisSatellite;
-			sourceTree = "<group>";
-		};
 		3F0001002F28000000000007 /* Packages/IrisApp/Sources/IrisApp */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = Packages/IrisApp/Sources/IrisApp;
@@ -201,7 +196,6 @@
 				3F0001002F28000000000003 /* Packages/IrisDisk/Sources/IrisDisk */,
 				3F0001002F28000000000004 /* Packages/IrisProcess/Sources/IrisProcess */,
 				3F0001002F28000000000005 /* Packages/IrisNetwork/Sources/IrisNetwork */,
-				3F0001002F28000000000006 /* Packages/IrisSatellite/Sources/IrisSatellite */,
 				3F0001002F28000000000007 /* Packages/IrisApp/Sources/IrisApp */,
 				3F0001002F28000000000008 /* Packages/IrisProxy/Sources/IrisProxy */,
 				3F0001002F28000000000009 /* Packages/IrisCertificates/Sources/IrisCertificates */,
@@ -249,7 +243,6 @@
 				3F0001002F28000000000003 /* Packages/IrisDisk/Sources/IrisDisk */,
 				3F0001002F28000000000004 /* Packages/IrisProcess/Sources/IrisProcess */,
 				3F0001002F28000000000005 /* Packages/IrisNetwork/Sources/IrisNetwork */,
-				3F0001002F28000000000006 /* Packages/IrisSatellite/Sources/IrisSatellite */,
 				3F0001002F28000000000007 /* Packages/IrisApp/Sources/IrisApp */,
 				3F0001002F28000000000008 /* Packages/IrisProxy/Sources/IrisProxy */,
 				3F0001002F28000000000009 /* Packages/IrisCertificates/Sources/IrisCertificates */,

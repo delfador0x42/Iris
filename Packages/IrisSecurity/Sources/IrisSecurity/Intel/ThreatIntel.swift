@@ -30,29 +30,27 @@ public struct ThreatIndicator: Sendable {
     }
 }
 
-/// Central threat intelligence lookup
+/// Central threat intelligence lookup.
+/// Indicator arrays are built once (static let) to avoid per-call allocation.
 public enum ThreatIntelStore {
+
+    // Cached indicator arrays — built once at first access
+    private static let persistenceIndicators = MalwarePersistence.indicators()
+    private static let c2Indicators = MalwareC2.indicators()
+    private static let pathIndicators = TargetedPaths.indicators()
 
     /// All indicators from all modules
     public static func allIndicators() -> [ThreatIndicator] {
-        var all: [ThreatIndicator] = []
-        all.append(contentsOf: MalwarePersistence.indicators())
-        all.append(contentsOf: MalwareC2.indicators())
-        all.append(contentsOf: TargetedPaths.indicators())
-        return all
+        persistenceIndicators + c2Indicators + pathIndicators
     }
 
     /// Lookup a persistence label against known malware
     public static func checkPersistenceLabel(_ label: String) -> ThreatIndicator? {
-        MalwarePersistence.indicators().first {
-            $0.type == .persistenceLabel && label.contains($0.value)
-        }
+        persistenceIndicators.first { label.contains($0.value) }
     }
 
     /// Lookup a hostname against known C2 infrastructure
     public static func checkHostname(_ hostname: String) -> ThreatIndicator? {
-        MalwareC2.indicators().first {
-            $0.type == .c2Domain && hostname.contains($0.value)
-        }
+        c2Indicators.first { hostname.contains($0.value) }
     }
 }
