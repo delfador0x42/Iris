@@ -81,7 +81,7 @@ struct SimpleInfoRow: View {
         httpRawResponse: "HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: 1234\r\nDate: Thu, 06 Feb 2026 12:00:00 GMT\r\n"
     )
 
-    return IPDetailPopover(
+    IPDetailPopover(
         aggregated: AggregatedConnection(
             id: "140.82.113.22",
             remoteAddress: "140.82.113.22",

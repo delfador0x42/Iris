@@ -8,7 +8,7 @@ struct ProcessConnectionRow: View {
     let onToggle: () -> Void
     var onViewTraffic: ((NetworkConnection) -> Void)?
     var onViewPlaintext: ((NetworkConnection) -> Void)?
-    @EnvironmentObject private var store: SecurityStore
+    var store = SecurityStore.shared
 
     /// Aggregate connections by remote IP for deduplication
     private var aggregatedConnections: [AggregatedConnection] {

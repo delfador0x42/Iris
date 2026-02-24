@@ -44,54 +44,69 @@ public actor HiddenProcessDetector {
         }
 
         // Layer 2: Mach processor_set_tasks() vs sysctl (deepest)
+        // Contradiction-based: only compare if BOTH sources returned data.
+        // If processor_set_tasks() returns empty (non-root), the source is
+        // degraded — we cannot draw conclusions from an empty comparison.
         let machTasks = MachTaskEnumerator.enumerateAll()
         let machPids = Set(machTasks.map(\.pid))
 
-        // PIDs in Mach but not in sysctl — hidden from userland
-        let machOnly = machPids.subtracting(sysctlPids)
-        for machPid in machOnly {
-            // Only skip by PID, never by name (a rootkit can name itself "kernel_task")
-            if machPid == 0 || machPid == 1 { continue }
-            let task = machTasks.first { $0.pid == machPid }
-            let name = task?.name ?? "unknown"
-            let pathStr = task?.path ?? ""
-            // Don't double-report if already found by kill brute-force
-            if hiddenFromSysctl.contains(machPid) { continue }
-            anomalies.append(.forProcess(
-                pid: machPid, name: name, path: pathStr,
-                technique: "Hidden Process (Mach task walk)",
-                description: "PID \(machPid) (\(name)) found via processor_set_tasks() but not in sysctl. Deep rootkit.",
-                severity: .critical, mitreID: "T1014",
-                scannerId: "hidden_process",
-                enumMethod: "processor_set_tasks() vs sysctl(KERN_PROC_ALL)",
-                evidence: [
-                    "detection: processor_set_tasks() → pid_for_task()",
-                    "not_in: sysctl snapshot (\(sysctlPids.count) PIDs)",
-                    "mach_total: \(machTasks.count) tasks",
-                    "proc_path: \(pathStr.isEmpty ? "(no binary on disk)" : pathStr)",
-                ]
-            ))
-        }
+        if machTasks.isEmpty {
+            // Source degraded: processor_set_tasks() returned nothing (likely non-root).
+            // No contradiction possible — log and skip, don't flag the entire process table.
+            logger.info("Mach source degraded (0 tasks returned, need root). Skipping sysctl↔mach comparison.")
+        } else {
+            // Both sources have data — contradictions are meaningful.
 
-        // PIDs in sysctl but not in Mach — possible DKOM (task list manipulation)
-        let sysctlOnly = sysctlPids.subtracting(machPids)
-        for sPid in sysctlOnly where sPid > 0 {
-            let name = snapshot.name(for: sPid)
-            let path = snapshot.path(for: sPid)
-            anomalies.append(.forProcess(
-                pid: sPid, name: name, path: path,
-                technique: "Ghost Process (DKOM suspected)",
-                description: "PID \(sPid) (\(name)) in sysctl but not in Mach task list. Possible DKOM.",
-                severity: .high, mitreID: "T1014",
-                scannerId: "hidden_process",
-                enumMethod: "sysctl(KERN_PROC_ALL) vs processor_set_tasks()",
-                evidence: [
-                    "in_sysctl: true",
-                    "in_mach: false",
-                    "sysctl_count: \(sysctlPids.count)",
-                    "mach_count: \(machTasks.count)",
-                ]
-            ))
+            // PIDs in Mach but not in sysctl — hidden from userland
+            let machOnly = machPids.subtracting(sysctlPids)
+            for machPid in machOnly {
+                if machPid == 0 || machPid == 1 { continue }
+                let task = machTasks.first { $0.pid == machPid }
+                let name = task?.name ?? "unknown"
+                let pathStr = task?.path ?? ""
+                if hiddenFromSysctl.contains(machPid) { continue }
+                anomalies.append(.forProcess(
+                    pid: machPid, name: name, path: pathStr,
+                    technique: "Hidden Process (Mach task walk)",
+                    description: "PID \(machPid) (\(name)) found via processor_set_tasks() but not in sysctl. Deep rootkit.",
+                    severity: .critical, mitreID: "T1014",
+                    scannerId: "hidden_process",
+                    enumMethod: "processor_set_tasks() vs sysctl(KERN_PROC_ALL)",
+                    evidence: [
+                        "detection: processor_set_tasks() → pid_for_task()",
+                        "not_in: sysctl snapshot (\(sysctlPids.count) PIDs)",
+                        "mach_total: \(machTasks.count) tasks",
+                        "proc_path: \(pathStr.isEmpty ? "(no binary on disk)" : pathStr)",
+                    ]
+                ))
+            }
+
+            // PIDs in sysctl but not in Mach — possible DKOM.
+            // Allow small transient window: short-lived processes can appear in
+            // sysctl but exit before processor_set_tasks() runs. Only flag if
+            // the process is still alive (kill(0) confirms existence).
+            let sysctlOnly = sysctlPids.subtracting(machPids)
+            for sPid in sysctlOnly where sPid > 0 {
+                // Cross-validate: is the process still alive?
+                guard processExists(sPid) else { continue }  // Exited during scan, not DKOM
+                let name = snapshot.name(for: sPid)
+                let path = snapshot.path(for: sPid)
+                anomalies.append(.forProcess(
+                    pid: sPid, name: name, path: path,
+                    technique: "Ghost Process (DKOM suspected)",
+                    description: "PID \(sPid) (\(name)) in sysctl but not in Mach task list. Possible DKOM.",
+                    severity: .high, mitreID: "T1014",
+                    scannerId: "hidden_process",
+                    enumMethod: "sysctl(KERN_PROC_ALL) vs processor_set_tasks()",
+                    evidence: [
+                        "in_sysctl: true",
+                        "in_mach: false",
+                        "still_alive: true",
+                        "sysctl_count: \(sysctlPids.count)",
+                        "mach_count: \(machTasks.count)",
+                    ]
+                ))
+            }
         }
 
         // Layer 3: Duplicate system process names (masquerading)

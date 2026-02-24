@@ -2,8 +2,11 @@ import Foundation
 import os.log
 
 /// Event bus that polls ES extension for security events via XPC
-/// and feeds them to the DetectionEngine in real time.
-/// Uses delta-fetch (sequence numbers) to avoid re-processing.
+/// and feeds them through the single unified data path:
+///   Raw ES → Event → EventStream (THE ONE LOG)
+///                   → ThreatEngine (rules) → AlertStore
+///
+/// EventStream is the single source of truth for all consumers (GUI, CLI, Claude).
 public actor SecurityEventBus {
   public static let shared = SecurityEventBus()
 
@@ -19,14 +22,16 @@ public actor SecurityEventBus {
   private var lastProcessTimestamp = Date.distantPast
   private var isRunning = false
   private var pollTask: Task<Void, Never>?
+  private var alertBridgeTask: Task<Void, Never>?
   private var connection: NSXPCConnection?
   private var totalIngested: UInt64 = 0
 
-  /// Start polling all event sources
+  /// Start polling all event sources + alert bridge subscriber
   public func start() {
     guard !isRunning else { return }
     isRunning = true
     pollTask = Task { await pollLoop() }
+    alertBridgeTask = Task { await bridgeThreatAlerts() }
     logger.info("[BUS] Event bus started")
   }
 
@@ -35,6 +40,8 @@ public actor SecurityEventBus {
     isRunning = false
     pollTask?.cancel()
     pollTask = nil
+    alertBridgeTask?.cancel()
+    alertBridgeTask = nil
     connection?.invalidate()
     connection = nil
     logger.info("[BUS] Event bus stopped")
@@ -45,19 +52,50 @@ public actor SecurityEventBus {
     (isRunning, totalIngested, esSequence)
   }
 
-  /// Feed events from an external source (e.g. ProcessStore)
-  public func ingest(_ events: [SecurityEvent]) async {
+  /// Subscribe to EventStream for ThreatEngine alerts → forward to AlertStore
+  /// for system notifications and HomeView display.
+  private func bridgeThreatAlerts() async {
+    let (subId, stream) = await EventStream.shared.subscribe()
+    defer { Task { await EventStream.shared.unsubscribe(subId) } }
+
+    for await event in stream {
+      guard !Task.isCancelled else { break }
+      guard event.source == .engine,
+            case .alert(let rule, let name, let mitre, let detail, _) = event.kind
+      else { continue }
+
+      let severity: AnomalySeverity = switch event.severity {
+      case .info, .low: .low
+      case .medium: .medium
+      case .high: .high
+      case .critical: .critical
+      }
+
+      let alert = SecurityAlert(
+        ruleId: rule, name: name, severity: severity,
+        mitreId: mitre, mitreName: "",
+        processName: (event.process.path as NSString).lastPathComponent,
+        processPath: event.process.path,
+        description: detail)
+      await AlertStore.shared.add(alert)
+    }
+  }
+
+  /// Feed events from an external source (e.g. DNSEventBridge, NetworkEventBridge)
+  public func ingest(_ events: [Event]) async {
     guard !events.isEmpty else { return }
     totalIngested += UInt64(events.count)
-    await EventLogger.shared.log(events)
-    await DetectionEngine.shared.processBatch(events)
+    for event in events {
+      await EventStream.shared.emit(event)
+      await ThreatEngine.shared.process(event)
+    }
   }
 
   /// Feed a single event
-  public func ingest(_ event: SecurityEvent) async {
+  public func ingest(_ event: Event) async {
     totalIngested += 1
-    await EventLogger.shared.log([event])
-    await DetectionEngine.shared.process(event)
+    await EventStream.shared.emit(event)
+    await ThreatEngine.shared.process(event)
   }
 
   // MARK: - Polling
@@ -80,19 +118,19 @@ public actor SecurityEventBus {
     }) as? ESXPCBridge else { return }
 
     let sinceSeq = esSequence
-    let events: (UInt64, [Data]) = await withCheckedContinuation { cont in
+    let result: (UInt64, [Data]) = await withCheckedContinuation { cont in
       proxy.getSecurityEventsSince(sinceSeq, limit: 500) { maxSeq, data in
         cont.resume(returning: (maxSeq, data))
       }
     }
 
-    let (maxSeq, dataArray) = events
+    let (maxSeq, dataArray) = result
     guard maxSeq > esSequence else { return }
     esSequence = maxSeq
 
-    // Decode and convert
-    var secEvents: [SecurityEvent] = []
-    secEvents.reserveCapacity(dataArray.count)
+    // Decode directly to Event (no SecurityEvent intermediate)
+    var events: [Event] = []
+    events.reserveCapacity(dataArray.count)
     for data in dataArray {
       let raw: RawESEvent
       do {
@@ -101,26 +139,31 @@ public actor SecurityEventBus {
         logger.error("[BUS] Decode failed: \(error.localizedDescription)")
         continue
       }
-      secEvents.append(raw.toSecurityEvent())
+      events.append(raw.toEvent())
     }
 
-    if !secEvents.isEmpty {
-      totalIngested += UInt64(secEvents.count)
-      await EventLogger.shared.log(secEvents)
-      await DetectionEngine.shared.processBatch(secEvents)
+    if !events.isEmpty {
+      totalIngested += UInt64(events.count)
+
+      // EventStream is the ONE data path
+      for event in events {
+        await EventStream.shared.emit(event)
+        await ThreatEngine.shared.process(event)
+      }
 
       // Forward file events to PersistenceMonitor for real-time persistence detection
-      for event in secEvents {
-        guard let path = event.fields["target_path"] else { continue }
-        let fileEvent: FileEventType? = switch event.eventType {
-        case "file_write": .modified
-        case "file_unlink": .deleted
-        case "file_rename": .renamed
-        default: nil
+      for event in events {
+        let path: String
+        let fe: FileEventType
+        switch event.kind {
+        case .fileWrite(let p, _): path = p; fe = .modified
+        case .fileCreate(let p): path = p; fe = .created
+        case .fileUnlink(let p): path = p; fe = .deleted
+        case .fileRename(_, let dst): path = dst; fe = .renamed
+        default: continue
         }
-        guard let fe = fileEvent else { continue }
         await PersistenceMonitor.shared.processFileEvent(
-          path: path, eventType: fe, pid: event.pid, processPath: event.processPath)
+          path: path, eventType: fe, pid: event.process.pid, processPath: event.process.path)
       }
     }
   }
@@ -141,7 +184,7 @@ public actor SecurityEventBus {
 
     let cutoff = lastProcessTimestamp
     var maxTimestamp = cutoff
-    var secEvents: [SecurityEvent] = []
+    var events: [Event] = []
 
     for data in dataArray {
       let raw: RawProcessEvent
@@ -153,14 +196,18 @@ public actor SecurityEventBus {
       }
       guard raw.timestamp > cutoff else { continue }
       if raw.timestamp > maxTimestamp { maxTimestamp = raw.timestamp }
-      secEvents.append(raw.toSecurityEvent())
+      events.append(raw.toEvent())
     }
 
-    if !secEvents.isEmpty {
+    if !events.isEmpty {
       lastProcessTimestamp = maxTimestamp
-      totalIngested += UInt64(secEvents.count)
-      await EventLogger.shared.log(secEvents)
-      await DetectionEngine.shared.processBatch(secEvents)
+      totalIngested += UInt64(events.count)
+
+      // EventStream is the ONE data path
+      for event in events {
+        await EventStream.shared.emit(event)
+        await ThreatEngine.shared.process(event)
+      }
     }
   }
 

@@ -6,7 +6,7 @@ import os.log
 /// Cross-checks IOPlatformExpertDevice properties against sysctl values.
 ///
 /// Source 1: IOKit IOPlatformExpertDevice (UUID, serial, model, target-type)
-/// Source 2: sysctl hw.model, kern.uuid
+/// Source 2: sysctl hw.model (kern.uuid is kernel boot UUID, NOT hardware UUID)
 /// Source 3: NVRAM values (csr-active-config, boot-args) via IOKit
 ///
 /// Detects: NVRAM tampering, platform identity spoofing, VM detection evasion.
@@ -35,9 +35,10 @@ public actor IOKitGroundTruthProbe: ContradictionProbe {
         let iokitUUID = readIOKitProperty("IOPlatformUUID")
         let iokitSerial = readIOKitProperty("IOPlatformSerialNumber")
 
-        // Source 2: sysctl
+        // Source 2: sysctl hw.model
+        // NOTE: kern.uuid is the KERNEL boot UUID (changes every boot), NOT the hardware UUID.
+        // Do NOT compare it with IOPlatformUUID — they are fundamentally different values.
         let sysctlModel = readSysctl("hw.model")
-        let sysctlUUID = readSysctl("kern.uuid")
 
         // Comparison 1: Model — IOKit vs sysctl
         if let iokit = iokitModel, let sysctl = sysctlModel {
@@ -50,15 +51,21 @@ public actor IOKitGroundTruthProbe: ContradictionProbe {
                 matches: match))
         }
 
-        // Comparison 2: UUID — IOKit vs sysctl
-        if let iokit = iokitUUID, let sysctl = sysctlUUID {
-            let match = iokit.lowercased() == sysctl.lowercased()
+        // Comparison 2: Hardware UUID consistency — read IOKit twice to detect tampering.
+        // If someone hooks IORegistryEntryCreateCFProperty, consecutive reads may differ.
+        if let uuid1 = iokitUUID {
+            let uuid2 = readIOKitProperty("IOPlatformUUID")
+            let match = uuid1 == uuid2
             if !match { hasContradiction = true }
+            let isValidFormat = uuid1.count == 36
+                && uuid1.filter({ $0 == "-" }).count == 4
+                && uuid1.allSatisfy({ $0.isHexDigit || $0 == "-" })
+            if !isValidFormat { hasContradiction = true }
             comparisons.append(SourceComparison(
-                label: "hardware UUID",
-                sourceA: SourceValue("IOKit IOPlatformUUID", iokit),
-                sourceB: SourceValue("sysctl kern.uuid", sysctl),
-                matches: match))
+                label: "hardware UUID stability + format",
+                sourceA: SourceValue("IOKit IOPlatformUUID (read 1)", uuid1),
+                sourceB: SourceValue("IOKit IOPlatformUUID (read 2)", uuid2 ?? "nil"),
+                matches: match && isValidFormat))
         }
 
         // Comparison 3: Serial number exists and is reasonable

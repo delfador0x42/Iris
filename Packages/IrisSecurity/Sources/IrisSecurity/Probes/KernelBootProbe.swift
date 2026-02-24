@@ -54,7 +54,7 @@ public actor KernelBootProbe: ContradictionProbe {
 
         // Source 4: IOKit kernel build version
         let iokitBuild = readIOKitBuildVersion()
-        let sysctlBuild = readSysctl("kern.osversion")
+        let sysctlBuild = readSysctl("kern.version")
 
         // Comparison 1: KASLR slide consistency (should be stable within a boot)
         if let currentSlide = slide {
@@ -96,14 +96,17 @@ public actor KernelBootProbe: ContradictionProbe {
             }
         }
 
-        // Comparison 3: IOKit build version vs sysctl kern.osversion
+        // Comparison 3: IOKit build version vs sysctl kern.version
+        // NOTE: kern.osversion is the macOS BUILD NUMBER ("25D125"), not the kernel version.
+        // IOKitBuildVersion contains the full Darwin kernel version string.
+        // kern.version contains the same Darwin string — correct comparison.
         if let iokit = iokitBuild, let sysctl = sysctlBuild {
-            let match = iokit.contains(sysctl)
+            let match = iokit == sysctl
             if !match { hasContradiction = true }
             comparisons.append(SourceComparison(
                 label: "kernel build: IOKit vs sysctl",
                 sourceA: SourceValue("IOKit IOKitBuildVersion", iokit),
-                sourceB: SourceValue("kern.osversion", sysctl),
+                sourceB: SourceValue("kern.version", sysctl),
                 matches: match))
         }
 

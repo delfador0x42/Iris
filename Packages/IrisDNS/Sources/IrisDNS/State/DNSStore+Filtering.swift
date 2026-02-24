@@ -1,21 +1,9 @@
 import Foundation
-import Combine
 
 // MARK: - Filtering & Search
 
 @MainActor
 extension DNSStore {
-
-    // MARK: - Search Debounce
-
-    func setupSearchDebounce() {
-        $searchQuery
-            .debounce(for: .milliseconds(300), scheduler: RunLoop.main)
-            .sink { [weak self] _ in
-                self?.updateFilteredQueries()
-            }
-            .store(in: &cancellables)
-    }
 
     // MARK: - Derived State
 

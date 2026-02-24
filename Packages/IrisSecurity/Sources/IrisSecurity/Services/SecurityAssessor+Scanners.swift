@@ -128,6 +128,25 @@ extension SecurityAssessor {
       timestamp: Date())
 
     lastResult = result
+
+    // Emit all findings to new EventStream (parallel path)
+    for sr in allResults {
+      for anomaly in sr.anomalies {
+        let sev: Severity = switch anomaly.severity {
+        case .low: .low
+        case .medium: .medium
+        case .high: .high
+        case .critical: .critical
+        }
+        let event = EventBridge.fromFinding(
+          pid: anomaly.pid, processPath: anomaly.processPath, signingId: nil,
+          scannerId: sr.id, technique: anomaly.technique,
+          mitre: anomaly.mitreID, severity: sev,
+          evidence: anomaly.evidence, description: anomaly.description)
+        await EventStream.shared.emit(event)
+      }
+    }
+
     return result
   }
 }

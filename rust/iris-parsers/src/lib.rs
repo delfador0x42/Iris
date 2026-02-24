@@ -4,3 +4,4 @@ mod macho;
 mod dns;
 mod der;
 mod batch;
+mod tlsh;

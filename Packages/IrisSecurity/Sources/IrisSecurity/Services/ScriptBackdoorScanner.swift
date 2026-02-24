@@ -56,7 +56,13 @@ public actor ScriptBackdoorScanner {
         let fullPath = "\(dir)/\(file)"
         if Self.allowedPaths.contains(where: { fullPath.hasPrefix($0) }) { continue }
 
-        // Deobfuscate script content to detect hidden commands
+        // Contradiction-based deobfuscation analysis.
+        // Source 1: Script content after deobfuscation.
+        // Source 2: Code signature of the script's parent application/package.
+        // Source 3: Evidence score (compound weight, not mere presence).
+        //
+        // Score-based severity: single weak evidence (0.3) stays medium.
+        // Only escalate to critical when cumulative score exceeds threshold.
         var severity: AnomalySeverity = .medium
         var evidence = [
           "file=\((file as NSString).lastPathComponent)",
@@ -70,8 +76,19 @@ public actor ScriptBackdoorScanner {
           let hasDangerous = Self.dangerousCommands.contains { lower.contains($0) }
           if hasDangerous { severity = .high }
           if !deobResult.evidence.isEmpty {
-            severity = .critical
+            // Score-based escalation: compound evidence weights
+            let score = deobResult.evidence.reduce(0.0) { $0 + $1.weight }
+            if score >= 0.8 { severity = .critical }
+            else if score >= 0.5 && hasDangerous { severity = .high }
+            // Single weak evidence alone does NOT escalate to critical
             for ev in deobResult.evidence { evidence.append("obfuscation=\(ev.factor)") }
+          }
+          // Cross-validate: is the script's parent Apple-signed?
+          // Apple-signed scripts with low obfuscation score = consistent, reduce severity.
+          let signing = CodeSignValidator.validate(path: fullPath)
+          if signing.isAppleSigned && signing.isValidSignature {
+            evidence.append("parent_signed=Apple (consistent)")
+            severity = min(severity, .low)  // Apple-signed + valid = low concern
           }
         }
 

@@ -30,13 +30,26 @@ struct AnomalyRow: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(anomaly.description)
                         .font(.system(size: 11)).foregroundColor(.white.opacity(0.8))
+                    if !anomaly.arguments.isEmpty {
+                        Text(anomaly.arguments.map { $0.contains(" ") ? "'\($0)'" : $0 }.joined(separator: " "))
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundColor(.cyan.opacity(0.8))
+                            .lineLimit(3)
+                    }
                     if !anomaly.processPath.isEmpty {
-                        Text("Path: \(anomaly.processPath)")
+                        Text(anomaly.processPath)
                             .font(.system(size: 10, design: .monospaced)).foregroundColor(.gray)
                     }
                     if anomaly.pid > 0 {
-                        Text("PID: \(anomaly.pid) | Parent: \(anomaly.parentName) (\(anomaly.parentPID))")
+                        Text("PID \(anomaly.pid) | Parent: \(anomaly.parentName) (\(anomaly.parentPID))")
                             .font(.system(size: 10, design: .monospaced)).foregroundColor(.gray)
+                    }
+                    if !anomaly.evidence.isEmpty {
+                        ForEach(anomaly.evidence, id: \.self) { line in
+                            Text(line)
+                                .font(.system(size: 9, design: .monospaced))
+                                .foregroundColor(.white.opacity(0.4))
+                        }
                     }
                 }
                 .textSelection(.enabled)

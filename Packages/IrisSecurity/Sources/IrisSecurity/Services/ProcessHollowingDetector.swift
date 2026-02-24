@@ -9,21 +9,14 @@ import os.log
 /// with implant code → execute in the trusted process's context.
 ///
 /// Detection layers:
-/// 1. Compare on-disk Mach-O __TEXT hash vs in-memory __TEXT hash
-/// 2. Detect processes where executable region doesn't map to the declared path
-/// 3. Detect anomalous VM region patterns (executable anonymous memory after __TEXT)
-/// 4. Detect task_for_pid usage patterns (prerequisite for hollowing)
+/// 1. Compare on-disk Mach-O header vs in-memory header (64 bytes)
+/// 2. Count anonymous executable regions with Mach-O structure (injected code)
+///
+/// ZERO-TRUST: No process name allowlists. No path-based skips.
+/// Every process is checked — a compromised kernel can lie about paths.
 public actor ProcessHollowingDetector {
     public static let shared = ProcessHollowingDetector()
     private let logger = Logger(subsystem: "com.wudan.iris", category: "ProcessHollow")
-
-    /// Processes that legitimately modify their own __TEXT (JIT, self-patching)
-    private static let exemptProcesses: Set<String> = [
-        "WebContent", "com.apple.WebKit.WebContent",
-        "JavaScriptCore", "jsc",
-        "qemu-system-aarch64", "qemu-system-x86_64",
-        "rosetta", "oah",
-    ]
 
     public func scan(snapshot: ProcessSnapshot) async -> [ProcessAnomaly] {
         var anomalies: [ProcessAnomaly] = []
@@ -32,10 +25,6 @@ public actor ProcessHollowingDetector {
             guard pid > 1 else { continue }
             let name = snapshot.name(for: pid)
             let path = snapshot.path(for: pid)
-
-            // Skip system processes and exempt JIT processes
-            if path.hasPrefix("/System/") || path.hasPrefix("/usr/") { continue }
-            if Self.exemptProcesses.contains(name) { continue }
             if path.isEmpty { continue }
 
             // Compare disk vs memory Mach-O headers
@@ -44,8 +33,7 @@ public actor ProcessHollowingDetector {
                 anomalies.append(finding)
             }
 
-            // Check for executable anonymous regions after __TEXT
-            // (injected code that doesn't correspond to any file)
+            // Check for anonymous executable regions containing Mach-O structures
             anomalies.append(contentsOf: checkAnomalousExecutableRegions(
                 pid: pid, name: name, path: path))
         }
@@ -98,8 +86,10 @@ public actor ProcessHollowingDetector {
         return nil
     }
 
-    /// Check for executable anonymous memory regions that appear after the
-    /// legitimate __TEXT segment — indicates injected code.
+    /// Check for anonymous executable regions containing Mach-O structures.
+    /// Uses VM_REGION_EXTENDED_INFO for proper anonymous detection (share_mode).
+    /// JIT code lives in anonymous executable memory but does NOT have Mach-O headers.
+    /// Injected code has Mach-O headers in anonymous memory.
     private func checkAnomalousExecutableRegions(
         pid: pid_t, name: String, path: String
     ) -> [ProcessAnomaly] {
@@ -108,53 +98,72 @@ public actor ProcessHollowingDetector {
         defer { mach_port_deallocate(mach_task_self_, task) }
 
         var address: mach_vm_address_t = 0
-        var execAnonCount = 0
-        var execAnonRegions: [String] = []
+        var machoAnonCount = 0
+        var machoAnonRegions: [String] = []
 
         while true {
             var size: mach_vm_size_t = 0
-            var info = vm_region_basic_info_data_64_t()
+            var info = vm_region_extended_info_data_t()
             var infoCount = mach_msg_type_number_t(
-                MemoryLayout<vm_region_basic_info_data_64_t>.size / MemoryLayout<Int32>.size)
+                MemoryLayout<vm_region_extended_info_data_t>.size / MemoryLayout<Int32>.size)
             var objectName: mach_port_t = 0
             let kr = withUnsafeMutablePointer(to: &info) { ptr in
                 ptr.withMemoryRebound(to: Int32.self, capacity: Int(infoCount)) {
                     mach_vm_region(task, &address, &size,
-                                  VM_REGION_BASIC_INFO_64, $0, &infoCount, &objectName)
+                                  VM_REGION_EXTENDED_INFO, $0, &infoCount, &objectName)
                 }
             }
             guard kr == KERN_SUCCESS else { break }
 
             let isExec = info.protection & VM_PROT_EXECUTE != 0
-            // user_tag == 0 = anonymous (not mapped from a file)
-            let isAnon = info.reserved == 0
+            let isAnonymous = info.share_mode == UInt8(SM_PRIVATE)
+                || info.share_mode == UInt8(SM_EMPTY)
 
-            if isExec && isAnon && size > 4096 {
-                execAnonCount += 1
-                execAnonRegions.append(
-                    "0x\(String(address, radix: 16))+\(size / 1024)KB")
+            // Only flag anonymous executable regions that contain Mach-O structures.
+            // JIT code = anonymous + executable but NO Mach-O magic.
+            // Injected Mach-O = anonymous + executable + Mach-O magic.
+            if isExec && isAnonymous && size > 4096 {
+                if hasMachOMagic(task: task, addr: address) {
+                    machoAnonCount += 1
+                    machoAnonRegions.append(
+                        "0x\(String(address, radix: 16))+\(size / 1024)KB")
+                }
             }
 
             address += size
             if address == 0 { break }
         }
 
-        // Multiple executable anonymous regions = strong indicator
-        if execAnonCount >= 3 {
+        // Any anonymous region with Mach-O structure = injected code
+        if machoAnonCount > 0 {
             return [.forProcess(
                 pid: pid, name: name, path: path,
-                technique: "Suspicious Executable Anonymous Memory",
-                description: "\(name) has \(execAnonCount) executable anonymous memory regions. Possible process hollowing or shellcode injection.",
-                severity: .high, mitreID: "T1055.012",
+                technique: "Mach-O in Anonymous Memory",
+                description: "\(name) has \(machoAnonCount) anonymous executable region(s) containing Mach-O headers. Code injection.",
+                severity: .critical, mitreID: "T1055.012",
                 scannerId: "process_hollowing",
-                enumMethod: "mach_vm_region anonymous executable region scan",
+                enumMethod: "mach_vm_region(VM_REGION_EXTENDED_INFO) + magic check",
                 evidence: [
                     "pid: \(pid)",
-                    "anon_exec_count: \(execAnonCount)",
-                    "regions: \(execAnonRegions.prefix(5).joined(separator: ", "))",
+                    "macho_anon_count: \(machoAnonCount)",
+                    "regions: \(machoAnonRegions.prefix(5).joined(separator: ", "))",
                 ])]
         }
         return []
+    }
+
+    /// Check first 4 bytes for Mach-O magic
+    private func hasMachOMagic(task: mach_port_t, addr: mach_vm_address_t) -> Bool {
+        var magic: UInt32 = 0
+        var outSize: mach_vm_size_t = 0
+        let kr = withUnsafeMutablePointer(to: &magic) { ptr in
+            mach_vm_read_overwrite(
+                task, addr, 4,
+                mach_vm_address_t(UInt(bitPattern: ptr)), &outSize)
+        }
+        guard kr == KERN_SUCCESS else { return false }
+        return magic == MH_MAGIC_64 || magic == MH_MAGIC
+            || magic == FAT_MAGIC || magic == FAT_CIGAM
     }
 
     /// Find the __TEXT segment address by scanning VM regions
@@ -199,11 +208,56 @@ public actor ProcessHollowingDetector {
         }
     }
 
-    /// Read first 64 bytes of a Mach-O from disk
+    /// Read Mach-O header from disk, handling FAT/universal binaries.
+    /// For FAT binaries: find the arm64 slice and read from that offset.
+    /// For thin binaries: read from offset 0.
     private func readDiskMachOHeader(path: String) -> [UInt8]? {
         guard let fh = FileHandle(forReadingAtPath: path) else { return nil }
         defer { fh.closeFile() }
-        guard let data = try? fh.read(upToCount: 64), data.count == 64 else { return nil }
-        return Array(data)
+        guard let headerData = try? fh.read(upToCount: 4096), headerData.count >= 64
+        else { return nil }
+
+        let magic = headerData.withUnsafeBytes { $0.load(as: UInt32.self) }
+
+        // Thin Mach-O — read directly
+        if magic == MH_MAGIC_64 || magic == MH_MAGIC {
+            return Array(headerData.prefix(64))
+        }
+
+        // FAT/universal binary — find arm64 slice
+        let isBE = (magic == FAT_MAGIC)
+        let isLE = (magic == FAT_CIGAM)
+        guard isBE || isLE else { return nil }
+
+        return headerData.withUnsafeBytes { raw in
+            guard raw.count >= 8 else { return nil as [UInt8]? }
+            let nArch = isBE
+                ? UInt32(bigEndian: raw.load(fromByteOffset: 4, as: UInt32.self))
+                : raw.load(fromByteOffset: 4, as: UInt32.self)
+
+            for i in 0..<Int(min(nArch, 8)) {
+                let entryOff = 8 + i * MemoryLayout<fat_arch>.size
+                guard entryOff + MemoryLayout<fat_arch>.size <= raw.count else { break }
+                let arch = raw.load(fromByteOffset: entryOff, as: fat_arch.self)
+                let cpuType = isBE ? Int32(bigEndian: arch.cputype) : arch.cputype
+                let offset = isBE
+                    ? UInt32(bigEndian: arch.offset)
+                    : arch.offset
+
+                // CPU_TYPE_ARM64 = 0x0100000C = 16777228
+                if cpuType == CPU_TYPE_ARM64 || cpuType == CPU_TYPE_X86_64 {
+                    let sliceOff = Int(offset)
+                    if sliceOff + 64 <= raw.count {
+                        return Array(raw[sliceOff..<(sliceOff + 64)])
+                    }
+                    // Slice beyond our 4KB read — seek and read
+                    fh.seek(toFileOffset: UInt64(sliceOff))
+                    if let sliceData = try? fh.read(upToCount: 64), sliceData.count == 64 {
+                        return Array(sliceData)
+                    }
+                }
+            }
+            return nil as [UInt8]?
+        }
     }
 }

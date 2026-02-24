@@ -24,3 +24,8 @@ func iris_dyld_get_shared_cache_uuid(_ uuid: UnsafeMutablePointer<uuid_t>) -> Bo
 
 @_silgen_name("_dyld_get_shared_cache_range")
 func iris_dyld_get_shared_cache_range(_ length: UnsafeMutablePointer<Int>) -> UnsafeRawPointer?
+
+// MARK: - NECP (Network Extension Control Policy)
+
+@_silgen_name("necp_open")
+func iris_necp_open(_ flags: Int32) -> Int32

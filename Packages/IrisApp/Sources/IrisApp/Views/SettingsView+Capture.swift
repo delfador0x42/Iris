@@ -18,7 +18,7 @@ extension SettingsView {
 
 /// Standalone view for capture stats — uses shared SecurityStore
 private struct CaptureSettingsContent: View {
-    @StateObject private var store = SecurityStore.shared
+    private var store = SecurityStore.shared
     @State private var budgetGB: Double = 30
     @State private var totalCaptureBytes: Int = 0
     @State private var connectionsWithData: Int = 0

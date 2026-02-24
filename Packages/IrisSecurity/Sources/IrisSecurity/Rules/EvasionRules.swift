@@ -123,6 +123,57 @@ public enum EvasionRules {
                 mitreId: "T1059.004",
                 mitreName: "Command and Scripting Interpreter: Unix Shell"
             ),
+            // Quarantine xattr DELETION (XCSSET, ZuRu, Bundlore — bypasses Gatekeeper)
+            DetectionRule(
+                id: "evasion_quarantine_delete",
+                name: "Quarantine attribute deleted",
+                eventType: "delete_extattr",
+                conditions: [
+                    .fieldContains("detail", "com.apple.quarantine"),
+                    .processNotAppleSigned,
+                ],
+                severity: .critical,
+                mitreId: "T1553.001",
+                mitreName: "Subvert Trust Controls: Gatekeeper Bypass"
+            ),
+            // Code signing invalidated at runtime (memory corruption / injection)
+            DetectionRule(
+                id: "evasion_cs_invalidated",
+                name: "Code signing invalidated at runtime",
+                eventType: "cs_invalidated",
+                conditions: [
+                    .processNotAppleSigned,
+                ],
+                severity: .critical,
+                mitreId: "T1055",
+                mitreName: "Process Injection"
+            ),
+            // File ownership change by non-system process (privilege escalation)
+            DetectionRule(
+                id: "evasion_chown_escalation",
+                name: "File ownership changed by non-system process",
+                eventType: "set_owner",
+                conditions: [
+                    .processNotAppleSigned,
+                ],
+                severity: .high,
+                mitreId: "T1222.002",
+                mitreName: "File and Directory Permissions Modification: Linux and Mac"
+            ),
+            // Hard link to credential file (bypass access controls)
+            DetectionRule(
+                id: "evasion_hardlink_credential",
+                name: "Hard link created to sensitive file",
+                eventType: "file_link",
+                conditions: [
+                    .fieldMatchesRegex("detail", "(Keychain|login\\.keychain|TCC\\.db|shadow|sudoers)"),
+                    .processNotAppleSigned,
+                ],
+                severity: .critical,
+                mitreId: "T1552",
+                mitreName: "Unsecured Credentials"
+            ),
         ]
     }
 }
+

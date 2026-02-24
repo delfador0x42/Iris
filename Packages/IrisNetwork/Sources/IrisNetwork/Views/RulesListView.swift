@@ -2,7 +2,7 @@ import SwiftUI
 
 /// View for managing all firewall rules
 struct RulesListView: View {
-    @EnvironmentObject private var store: SecurityStore
+    var store = SecurityStore.shared
     @State private var filter: RuleFilter = .all
 
     enum RuleFilter: String, CaseIterable {

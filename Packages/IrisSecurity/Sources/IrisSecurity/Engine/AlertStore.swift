@@ -2,7 +2,7 @@ import Foundation
 import UserNotifications
 import os.log
 
-/// A detection alert produced by the DetectionEngine
+/// A detection alert produced by the detection pipeline
 public struct SecurityAlert: Identifiable, Sendable {
     public let id: UUID
     public let ruleId: String
@@ -14,15 +14,13 @@ public struct SecurityAlert: Identifiable, Sendable {
     public let processName: String
     public let processPath: String
     public let description: String
-    public let events: [SecurityEvent]
 
     public init(
         ruleId: String, name: String,
         severity: AnomalySeverity,
         mitreId: String, mitreName: String,
         processName: String, processPath: String,
-        description: String,
-        events: [SecurityEvent] = []
+        description: String
     ) {
         self.id = UUID()
         self.ruleId = ruleId
@@ -34,7 +32,6 @@ public struct SecurityAlert: Identifiable, Sendable {
         self.processName = processName
         self.processPath = processPath
         self.description = description
-        self.events = events
     }
 }
 
@@ -88,9 +85,8 @@ public actor AlertStore {
 
         logger.info("[ALERT] \(alert.severity.label): \(alert.name) — \(alert.processName)")
 
-        // Stream to real-time event log + persist to diagnostic archive
+        // Persist to diagnostic archive
         Task {
-            await EventLogger.shared.log(alert)
             await DiagnosticReporter.shared.recordAlert(DiagnosticAlert(
                 ruleId: alert.ruleId, name: alert.name,
                 severity: alert.severity.label, mitreId: alert.mitreId,

@@ -5,7 +5,7 @@ struct ConnectionDetailRow: View {
     let aggregated: AggregatedConnection
     var onViewTraffic: ((NetworkConnection) -> Void)?
     var onViewPlaintext: ((NetworkConnection) -> Void)?
-    @EnvironmentObject private var store: SecurityStore
+    var store = SecurityStore.shared
     @State private var isHovering = false
     @State private var showDetailPopover = false
 

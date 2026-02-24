@@ -4,7 +4,7 @@ import SwiftUI
 
 /// World map visualization showing network connection destinations
 public struct WorldMapView: View {
-  @ObservedObject var store: SecurityStore
+  var store: SecurityStore
   @State private var cameraPosition: MapCameraPosition = .automatic
   @State private var animationPhase: CGFloat = 0
 

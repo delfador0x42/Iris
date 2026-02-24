@@ -42,69 +42,101 @@ public actor ProcessCensusProbe2: ContradictionProbe {
         let machPids = Set(machTasks.map(\.pid))
         let coalitionTaskCount = readCoalitionTaskCount()
 
-        let allPids = sysctlPids.union(procPids).union(machPids)
+        // A source that FAILS (returns empty) is excluded from comparison.
+        // "No data" ≠ "0 processes found." processor_set_tasks requires root.
+        let machAvailable = !machPids.isEmpty
+        var activeSources = 2  // sysctl + proc always available
+        if machAvailable { activeSources += 1 }
 
-        logger.info("Census: sysctl=\(sysctlPids.count) proc=\(procPids.count) mach=\(machPids.count) coalitions_tasks=\(coalitionTaskCount ?? -1) union=\(allPids.count)")
+        // Union only includes sources that returned data
+        var allPids = sysctlPids.union(procPids)
+        if machAvailable { allPids = allPids.union(machPids) }
 
-        // Overall count comparisons
+        logger.info("Census: sysctl=\(sysctlPids.count) proc=\(procPids.count) mach=\(machPids.count)\(machAvailable ? "" : "(unavail)") coalitions=\(coalitionTaskCount ?? -1) union=\(allPids.count)")
+
+        // Source 1 vs 2: sysctl vs proc_listallpids (always available)
+        // Allow ±3 for race conditions (processes spawning/dying between calls)
+        let countDiff12 = abs(sysctlPids.count - procPids.count)
         comparisons.append(SourceComparison(
             label: "process count: sysctl vs proc_listallpids",
             sourceA: SourceValue("sysctl(KERN_PROC_ALL)", "\(sysctlPids.count) PIDs"),
             sourceB: SourceValue("proc_listallpids()", "\(procPids.count) PIDs"),
-            matches: sysctlPids.count == procPids.count))
+            matches: countDiff12 <= 3))
+        if countDiff12 > 3 { hasContradiction = true }
 
-        comparisons.append(SourceComparison(
-            label: "process count: sysctl vs processor_set_tasks",
-            sourceA: SourceValue("sysctl(KERN_PROC_ALL)", "\(sysctlPids.count) PIDs"),
-            sourceB: SourceValue("processor_set_tasks()", "\(machPids.count) PIDs"),
-            matches: sysctlPids.count == machPids.count))
+        // Source 3: processor_set_tasks — requires root.
+        // If unavailable, record as degraded info, NOT as contradiction.
+        if machAvailable {
+            let countDiff13 = abs(sysctlPids.count - machPids.count)
+            comparisons.append(SourceComparison(
+                label: "process count: sysctl vs processor_set_tasks",
+                sourceA: SourceValue("sysctl(KERN_PROC_ALL)", "\(sysctlPids.count) PIDs"),
+                sourceB: SourceValue("processor_set_tasks()", "\(machPids.count) PIDs"),
+                matches: countDiff13 <= 3))
+            if countDiff13 > 3 { hasContradiction = true }
+        } else {
+            comparisons.append(SourceComparison(
+                label: "processor_set_tasks availability",
+                sourceA: SourceValue("processor_set_tasks()", "unavailable — requires root"),
+                sourceB: SourceValue("expected", "host_processor_set_priv needs root"),
+                matches: true))  // Degraded, not contradicted
+        }
 
-        // Source 4: Coalition task count cross-reference
-        // The kernel tracks total tasks in jetsam coalitions. If coalition total >> visible PIDs,
-        // there are hidden tasks.
-        if let ctc = coalitionTaskCount {
-            // Coalition count includes kernel tasks, so allow some slack
+        // Source 4: Coalition count cross-reference.
+        // Each coalition = one app/process group. Multiple PIDs per coalition.
+        // Coalition count should be LESS than PID count. If MORE, something is wrong.
+        if let coalitionCount = coalitionTaskCount {
             let maxPids = allPids.count
-            let suspicious = ctc > maxPids + 10  // Allow 10 for kernel threads/zombie tasks
+            // Coalitions should be fewer than PIDs (typically 20-40% of PID count).
+            // If coalition count exceeds PID count, either parsing is wrong or
+            // there are coalitions for hidden processes.
+            let suspicious = coalitionCount > maxPids
             if suspicious { hasContradiction = true }
             comparisons.append(SourceComparison(
-                label: "coalition task count vs visible processes",
-                sourceA: SourceValue("proc_listcoalitions(JETSAM)", "\(ctc) tasks"),
-                sourceB: SourceValue("union of 3 sources", "\(maxPids) PIDs"),
+                label: "coalition count vs visible processes",
+                sourceA: SourceValue("proc_listcoalitions(JETSAM)", "\(coalitionCount) coalitions"),
+                sourceB: SourceValue("union of \(activeSources) sources", "\(maxPids) PIDs"),
                 matches: !suspicious))
         }
 
-        // Per-PID disagreements
+        // Per-PID disagreements — only between AVAILABLE sources.
+        // Collect all mismatches, then decide if it's a real contradiction.
+        var hiddenPids: [(pid: pid_t, name: String, visible: [String], missing: [String])] = []
         for pid in allPids {
-            if pid == 0 { continue }  // kernel_task — may not appear in all sources
+            if pid == 0 { continue }  // kernel_task
 
             let inSysctl = sysctlPids.contains(pid)
             let inProc = procPids.contains(pid)
-            let inMach = machPids.contains(pid)
+            // If mach unavailable, don't count it as missing
+            let inMach = machAvailable ? machPids.contains(pid) : true
 
-            let sources = (inSysctl ? 1 : 0) + (inProc ? 1 : 0) + (inMach ? 1 : 0)
+            var visible: [String] = []
+            var missing: [String] = []
+            if inSysctl { visible.append("sysctl") } else { missing.append("sysctl") }
+            if inProc { visible.append("proc_listallpids") } else { missing.append("proc_listallpids") }
+            if machAvailable {
+                if inMach { visible.append("processor_set_tasks") } else { missing.append("processor_set_tasks") }
+            }
 
-            if sources < 3 && sources > 0 {
-                hasContradiction = true
-                let name = processName(for: pid)
-                let missing = [
-                    inSysctl ? nil : "sysctl",
-                    inProc ? nil : "proc_listallpids",
-                    inMach ? nil : "processor_set_tasks",
-                ].compactMap { $0 }
-                let visible = [
-                    inSysctl ? "sysctl" : nil,
-                    inProc ? "proc_listallpids" : nil,
-                    inMach ? "processor_set_tasks" : nil,
-                ].compactMap { $0 }
+            if !missing.isEmpty && !visible.isEmpty {
+                hiddenPids.append((pid, processName(for: pid), visible, missing))
+            }
+        }
 
-                comparisons.append(SourceComparison(
-                    label: "PID \(pid) (\(name)): visible vs hidden",
-                    sourceA: SourceValue("visible in", visible.joined(separator: ", ")),
-                    sourceB: SourceValue("hidden from", missing.joined(separator: ", ")),
-                    matches: false))
+        // ≤3 transient mismatches = race condition (processes spawn/die between calls).
+        // >3 persistent mismatches = something is hiding processes.
+        let raceThreshold = 3
+        if hiddenPids.count > raceThreshold { hasContradiction = true }
 
-                logger.warning("CENSUS MISMATCH: PID \(pid) (\(name)) missing from \(missing)")
+        for entry in hiddenPids.prefix(10) {
+            let withinRace = hiddenPids.count <= raceThreshold
+            comparisons.append(SourceComparison(
+                label: "PID \(entry.pid) (\(entry.name)): visibility",
+                sourceA: SourceValue("visible in", entry.visible.joined(separator: ", ")),
+                sourceB: SourceValue("hidden from", entry.missing.joined(separator: ", ")),
+                matches: withinRace))
+            if !withinRace {
+                logger.warning("CENSUS: PID \(entry.pid) (\(entry.name)) hidden from \(entry.missing)")
             }
         }
 
@@ -113,12 +145,14 @@ public actor ProcessCensusProbe2: ContradictionProbe {
         let message: String
 
         if hasContradiction {
-            let hidden = comparisons.filter { !$0.matches && $0.label.hasPrefix("PID") }.count
             verdict = .contradiction
-            message = "CONTRADICTION: \(hidden) process(es) hidden from at least one enumeration source"
+            message = "CONTRADICTION: \(hiddenPids.count) process(es) hidden from enumeration source(s)"
+        } else if !machAvailable {
+            verdict = .consistent
+            message = "\(activeSources)/4 sources agree on \(allPids.count) processes (Mach requires root)"
         } else {
             verdict = .consistent
-            message = "All 4 sources agree on \(allPids.count) processes"
+            message = "All \(activeSources) sources agree on \(allPids.count) processes"
         }
 
         return ProbeResult(
@@ -157,40 +191,29 @@ public actor ProcessCensusProbe2: ContradictionProbe {
         return pids
     }
 
-    /// Read total task count from jetsam coalitions.
-    /// Returns aggregate task_count across all coalitions — a 4th independent source
-    /// of "how many tasks exist in the kernel."
+    /// Read coalition count from jetsam coalitions.
+    /// Returns the number of active coalitions — each roughly maps to an app/process group.
+    ///
+    /// NOTE: procinfo_coalinfo struct layout varies by macOS version:
+    ///   - 80 bytes on older macOS
+    ///   - 104 bytes on arm64 macOS 15.x+
+    /// We do NOT parse internal fields (the offsets are unreliable).
+    /// Instead, use entry COUNT only — derived from (buffer size / entry size).
     private func readCoalitionTaskCount() -> Int? {
-        // First call: get buffer size
         let bufSize = Self.proc_listcoalitions(1, 0, nil, 0)
         guard bufSize > 0 else {
             logger.debug("proc_listcoalitions size query returned \(bufSize)")
             return nil
         }
-        // Jetsam coalition info: each entry has at minimum a leader PID and task count.
-        // The struct is procinfo_coalinfo (not publicly exported), but we know:
-        //   offset 0: coalition_id (uint64_t)
-        //   offset 16: task_count (uint64_t) — at offset 16 based on XNU source
-        // However, the exact layout varies by OS version. Instead of parsing structs,
-        // we use the total buffer size as a coalition count indicator and cross-check
-        // with visible process count.
         let buffer = UnsafeMutableRawPointer.allocate(byteCount: Int(bufSize), alignment: 8)
         defer { buffer.deallocate() }
         let actual = Self.proc_listcoalitions(1, 0, buffer, bufSize)
         guard actual > 0 else { return nil }
 
-        // Parse coalition entries — each procinfo_coalinfo is 80 bytes on arm64
-        // We extract the pid_count field at offset 16 (uint64_t)
-        let entrySize = 80
-        let entryCount = Int(actual) / entrySize
-        var totalTasks = 0
-        for i in 0..<entryCount {
-            let base = buffer.advanced(by: i * entrySize)
-            // pid_count is at offset 16 in the coalition info struct
-            let taskCount = base.advanced(by: 16).load(as: UInt64.self)
-            totalTasks += Int(taskCount)
-        }
-        return totalTasks
+        // Determine entry size: try known sizes that divide evenly
+        let knownSizes = [104, 80, 88, 96, 112, 120, 128]
+        let entrySize = knownSizes.first { Int(actual) % $0 == 0 } ?? 104
+        return Int(actual) / entrySize
     }
 
     private func processName(for pid: pid_t) -> String {

@@ -9,7 +9,7 @@ import SwiftUI
 
 /// Main view for the DNS query monitor.
 public struct DNSMonitorView: View {
-    @StateObject var store = DNSStore.shared
+    @Bindable var store = DNSStore.shared
     @State var showingClearConfirmation = false
     @State var showingServerPicker = false
 

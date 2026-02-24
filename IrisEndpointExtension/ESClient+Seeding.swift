@@ -56,10 +56,21 @@ extension ESClient {
         (
           pid,
           ESProcessInfo(
-            pid: pid, ppid: ppid, responsiblePid: responsiblePid,
+            pid: pid, ppid: ppid,
+            originalPpid: nil,
+            responsiblePid: responsiblePid,
+            processGroupId: nil,
+            sessionId: nil,
             path: path, name: name,
-            arguments: [], userId: uid, groupId: gid,
-            codeSigningInfo: csInfo, timestamp: Date()
+            cdhash: nil,
+            arguments: [],
+            environment: nil,
+            userId: uid, groupId: gid,
+            codeSigningInfo: csInfo, timestamp: Date(),
+            machTime: nil,
+            startTime: nil,
+            isESClient: nil,
+            ttyPath: nil
           )
         ))
     }

@@ -41,6 +41,38 @@ enum RustBatchOps {
             monteCarloPIError: out.monte_carlo_pi_error, isEncrypted: out.is_encrypted)
     }
 
+    // MARK: - TLSH (locality-sensitive hashing)
+
+    /// Compute TLSH hash of a file. Returns 70-char hex string or nil.
+    static func tlshFile(path: String) -> String? {
+        guard let ptr = path.withCString({ iris_tlsh_file($0) }) else { return nil }
+        let result = String(cString: ptr)
+        iris_free_string(ptr)
+        return result
+    }
+
+    /// Compute TLSH hash of raw bytes. Returns 70-char hex string or nil.
+    static func tlshBytes(_ data: Data) -> String? {
+        guard data.count >= 50 else { return nil }
+        return data.withUnsafeBytes { buf in
+            guard let ptr = iris_tlsh_bytes(buf.baseAddress!.assumingMemoryBound(to: UInt8.self),
+                                            buf.count) else { return nil }
+            let result = String(cString: ptr)
+            iris_free_string(ptr)
+            return result
+        }
+    }
+
+    /// Distance between two TLSH hashes. 0=identical, <30=very similar, <100=similar.
+    /// Returns -1 on invalid input.
+    static func tlshDistance(_ h1: String, _ h2: String) -> Int32 {
+        h1.withCString { p1 in
+            h2.withCString { p2 in
+                iris_tlsh_distance(p1, p2)
+            }
+        }
+    }
+
     /// Batch SHA256: hash multiple files in one call. Returns array of hex digests.
     /// Empty string for files that failed.
     static func batchSHA256(paths: [String]) -> [String] {

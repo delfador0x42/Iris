@@ -1,10 +1,10 @@
 import SwiftUI
 
-/// Live detection alert view — real-time display of alerts from the DetectionEngine.
+/// Live detection alert view — real-time display of alerts from ThreatEngine.
 public struct DetectionView: View {
     @State private var alerts: [SecurityAlert] = []
     @State private var isLoading = true
-    @State private var stats: (events: UInt64, alerts: UInt64, rules: Int, correlations: Int)?
+    @State private var stats: (events: UInt64, alerts: UInt64, ruleBuckets: Int, correlations: Int)?
     @State private var refreshTimer: Timer?
 
     public init() {}
@@ -29,7 +29,7 @@ public struct DetectionView: View {
     private var statsHeader: some View {
         HStack(spacing: 20) {
             if let s = stats {
-                DetectionStat(label: "RULES", value: "\(s.rules + s.correlations)")
+                DetectionStat(label: "RULES", value: "\(s.ruleBuckets + s.correlations)")
                 DetectionStat(label: "EVENTS", value: s.events > 1000 ? "\(s.events/1000)K" : "\(s.events)")
                 DetectionStat(label: "ALERTS", value: "\(s.alerts)")
             }
@@ -56,7 +56,7 @@ public struct DetectionView: View {
             Text("NO ACTIVE ALERTS")
                 .font(.system(size: 14, weight: .bold, design: .monospaced))
                 .foregroundColor(.gray)
-            Text("Detection engine monitoring \(stats?.rules ?? 0) rules")
+            Text("Detection engine monitoring \(stats?.ruleBuckets ?? 0) rules")
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundColor(.gray.opacity(0.6))
         }
@@ -89,7 +89,7 @@ public struct DetectionView: View {
     @MainActor
     private func refresh() async {
         alerts = await AlertStore.shared.recent(200)
-        stats = await DetectionEngine.shared.stats()
+        stats = await ThreatEngine.shared.stats()
         isLoading = false
     }
 }

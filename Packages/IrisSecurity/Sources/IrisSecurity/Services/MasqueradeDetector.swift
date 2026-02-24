@@ -43,7 +43,12 @@ public actor MasqueradeDetector {
         ("zoom", ["/Applications/zoom.us.app/"]),
     ]
 
-    /// Scan running processes for masquerade indicators
+    /// Scan running processes for masquerade indicators.
+    /// Contradiction-based: process claims Apple name but code signature disagrees.
+    /// Source 1: Process name (from sysctl/KERN_PROCARGS2).
+    /// Source 2: Code signature of the binary at that path.
+    /// Contradiction: name matches known Apple process but binary is NOT Apple-signed.
+    /// This replaces the path-prefix allowlist which couldn't track all valid locations.
     public func scan(snapshot: ProcessSnapshot) -> [ProcessAnomaly] {
         var anomalies: [ProcessAnomaly] = []
 
@@ -51,26 +56,45 @@ public actor MasqueradeDetector {
             let name = snapshot.name(for: pid)
             let path = snapshot.path(for: pid)
 
-            for (apName, expectedPaths) in Self.appleProcesses {
+            for (apName, _) in Self.appleProcesses {
                 guard name.lowercased() == apName.lowercased() else { continue }
+                guard !path.isEmpty else { continue }
 
-                let matchesExpected = expectedPaths.contains { path.hasPrefix($0) }
-                if !matchesExpected && !path.isEmpty {
-                    anomalies.append(.forProcess(
-                        pid: pid, name: name, path: path,
-                        technique: "Process Masquerade",
-                        description: "\(name) running from \(path) (expected: \(expectedPaths.joined(separator: ", ")))",
-                        severity: .high,
-                        mitreID: "T1036.004",
-                        scannerId: "masquerade",
-                        enumMethod: "sysctl(KERN_PROCARGS2) path comparison",
-                        evidence: [
-                            "process: \(name)",
-                            "actual_path: \(path)",
-                            "expected_prefixes: \(expectedPaths.joined(separator: ", "))",
-                        ]
-                    ))
+                // Cross-validate: does the binary's code signature confirm Apple origin?
+                let signing = CodeSignValidator.validate(path: path)
+
+                if signing.isAppleSigned && signing.isValidSignature {
+                    // Name claims Apple, signature confirms Apple — consistent, skip.
+                    continue
                 }
+
+                // Contradiction: claims Apple name but signature says otherwise.
+                let sigDetail: String
+                if !signing.isSigned {
+                    sigDetail = "UNSIGNED"
+                } else if !signing.isValidSignature {
+                    sigDetail = "INVALID signature"
+                } else {
+                    sigDetail = "signed by \(signing.teamIdentifier ?? signing.signingIdentifier ?? "unknown")"
+                }
+
+                anomalies.append(.forProcess(
+                    pid: pid, name: name, path: path,
+                    technique: "Process Masquerade",
+                    description: "\(name) claims Apple identity but binary is \(sigDetail). Path: \(path)",
+                    severity: signing.isSigned ? .high : .critical,
+                    mitreID: "T1036.004",
+                    scannerId: "masquerade",
+                    enumMethod: "sysctl(KERN_PROCARGS2) name + SecStaticCode signature cross-validation",
+                    evidence: [
+                        "process: \(name)",
+                        "actual_path: \(path)",
+                        "apple_signed: \(signing.isAppleSigned)",
+                        "signature_valid: \(signing.isValidSignature)",
+                        "signing_id: \(signing.signingIdentifier ?? "none")",
+                        "team_id: \(signing.teamIdentifier ?? "none")",
+                    ]
+                ))
             }
         }
 

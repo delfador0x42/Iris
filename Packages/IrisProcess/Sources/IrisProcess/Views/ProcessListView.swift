@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Main container for process monitoring — switches between Monitor and History views
 public struct ProcessListView: View {
-    @ObservedObject private var store = ProcessStore.shared
+    private var store = ProcessStore.shared
     @State private var selectedProcess: ProcessInfo?
     @State private var showingDetail = false
 

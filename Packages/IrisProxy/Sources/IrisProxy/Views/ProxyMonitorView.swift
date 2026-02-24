@@ -9,7 +9,7 @@ import SwiftUI
 
 /// Main view for the network proxy monitor.
 public struct ProxyMonitorView: View {
-  @StateObject var store = ProxyStore.shared
+  @Bindable var store = ProxyStore.shared
   @State var showingClearConfirmation = false
 
   public init() {}

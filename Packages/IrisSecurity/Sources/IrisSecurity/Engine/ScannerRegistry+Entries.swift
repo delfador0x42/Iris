@@ -1,6 +1,6 @@
 import Foundation
 
-/// All registered scanners, categorized by execution tier.
+/// All registered scanners, categorized by execution tier and attack category.
 /// Fast scanners use only the ProcessSnapshot (in-memory).
 /// Medium scanners read files or parse plists.
 /// Slow scanners shell out to codesign, docker, sqlite3, etc.
@@ -11,43 +11,43 @@ extension ScannerEntry {
   // MARK: - Fast Tier (process inspection, snapshot-only)
 
   static let fast: [ScannerEntry] = [
-    ScannerEntry(id: "lolbin", name: "LOLBin Detector", tier: .fast) { ctx in
+    ScannerEntry(id: "lolbin", name: "LOLBin Detector", tier: .fast, category: .codeExecution) { ctx in
       await LOLBinDetector.shared.scan(snapshot: ctx.snapshot)
     },
-    ScannerEntry(id: "stealth", name: "Stealth Scanner", tier: .fast) { ctx in
+    ScannerEntry(id: "stealth", name: "Stealth Scanner", tier: .fast, category: .processIntegrity) { ctx in
       await StealthScanner.shared.scanAll(snapshot: ctx.snapshot)
     },
-    ScannerEntry(id: "process_integrity", name: "Process Integrity", tier: .fast) { ctx in
+    ScannerEntry(id: "process_integrity", name: "Process Integrity", tier: .fast, category: .processIntegrity) { ctx in
       await ProcessIntegrityChecker.shared.scan(snapshot: ctx.snapshot)
     },
-    ScannerEntry(id: "credential_access", name: "Credential Access", tier: .fast) { ctx in
+    ScannerEntry(id: "credential_access", name: "Credential Access", tier: .fast, category: .credentials) { ctx in
       await CredentialAccessDetector.shared.scan(snapshot: ctx.snapshot)
     },
-    ScannerEntry(id: "dyld_env", name: "DYLD Injection", tier: .fast) { ctx in
+    ScannerEntry(id: "dyld_env", name: "DYLD Injection", tier: .fast, category: .codeExecution) { ctx in
       await DyldEnvDetector.shared.scan(snapshot: ctx.snapshot)
     },
-    ScannerEntry(id: "masquerade", name: "Masquerade Detector", tier: .fast) { ctx in
+    ScannerEntry(id: "masquerade", name: "Masquerade Detector", tier: .fast, category: .processIntegrity) { ctx in
       await MasqueradeDetector.shared.scan(snapshot: ctx.snapshot)
     },
-    ScannerEntry(id: "hidden_process", name: "Hidden Processes", tier: .fast) { ctx in
+    ScannerEntry(id: "hidden_process", name: "Hidden Processes", tier: .fast, category: .processIntegrity) { ctx in
       await HiddenProcessDetector.shared.scan(snapshot: ctx.snapshot)
     },
-    ScannerEntry(id: "memory", name: "Memory Scanner", tier: .fast) { ctx in
+    ScannerEntry(id: "memory", name: "Memory Scanner", tier: .fast, category: .codeExecution) { ctx in
       await MemoryScanner.shared.scan(snapshot: ctx.snapshot)
     },
-    ScannerEntry(id: "fake_prompt", name: "Fake Prompt Detector", tier: .fast) { ctx in
+    ScannerEntry(id: "fake_prompt", name: "Fake Prompt Detector", tier: .fast, category: .credentials) { ctx in
       await FakePromptDetector.shared.scan(snapshot: ctx.snapshot)
     },
-    ScannerEntry(id: "exploit_tool", name: "Exploit Tool Detector", tier: .fast) { ctx in
+    ScannerEntry(id: "exploit_tool", name: "Exploit Tool Detector", tier: .fast, category: .codeExecution) { ctx in
       await ExploitToolDetector.shared.scan(snapshot: ctx.snapshot)
     },
-    ScannerEntry(id: "thread_anomaly", name: "Thread Anomaly", tier: .fast) { ctx in
+    ScannerEntry(id: "thread_anomaly", name: "Thread Anomaly", tier: .fast, category: .processIntegrity) { ctx in
       await ThreadAnomalyScanner.shared.scan(snapshot: ctx.snapshot)
     },
-    ScannerEntry(id: "clipboard", name: "Clipboard Scanner", tier: .fast) { ctx in
+    ScannerEntry(id: "clipboard", name: "Clipboard Scanner", tier: .fast, category: .credentials) { ctx in
       await ClipboardScanner.shared.scan(snapshot: ctx.snapshot)
     },
-    ScannerEntry(id: "network_anomaly", name: "Network Anomaly", tier: .fast) { ctx in
+    ScannerEntry(id: "network_anomaly", name: "Network Anomaly", tier: .fast, category: .network) { ctx in
       (await NetworkAnomalyDetector.shared.scanConnections(ctx.connections)).map { na in
         ProcessAnomaly(pid: 0, processName: na.processName, processPath: "",
           parentPID: 0, parentName: "", technique: na.type.rawValue,
@@ -60,16 +60,16 @@ extension ScannerEntry {
           ])
       }
     },
-    ScannerEntry(id: "cloud_c2", name: "Cloud C2 Detector", tier: .fast) { ctx in
+    ScannerEntry(id: "cloud_c2", name: "Cloud C2 Detector", tier: .fast, category: .network) { ctx in
       await CloudC2Detector.shared.scan(connections: ctx.connections)
     },
-    ScannerEntry(id: "env_keying", name: "Environmental Keying", tier: .fast) { ctx in
+    ScannerEntry(id: "env_keying", name: "Environmental Keying", tier: .fast, category: .codeExecution) { ctx in
       await EnvironmentalKeyingDetector.shared.scan(snapshot: ctx.snapshot)
     },
-    ScannerEntry(id: "process_hollowing", name: "Process Hollowing", tier: .fast) { ctx in
+    ScannerEntry(id: "process_hollowing", name: "Process Hollowing", tier: .fast, category: .processIntegrity) { ctx in
       await ProcessHollowingDetector.shared.scan(snapshot: ctx.snapshot)
     },
-    ScannerEntry(id: "inline_hook", name: "Inline Hook Detector", tier: .fast) { ctx in
+    ScannerEntry(id: "inline_hook", name: "Inline Hook Detector", tier: .fast, category: .codeExecution) { ctx in
       await InlineHookDetector.shared.scan(snapshot: ctx.snapshot)
     },
   ]
@@ -77,19 +77,19 @@ extension ScannerEntry {
   // MARK: - Medium Tier (filesystem reads, plist parsing, sqlite)
 
   static let medium: [ScannerEntry] = [
-    ScannerEntry(id: "xpc_services", name: "XPC Services", tier: .medium) { _ in
+    ScannerEntry(id: "xpc_services", name: "XPC Services", tier: .medium, category: .persistence) { _ in
       await XPCServiceAuditor.shared.scanXPCServices()
     },
-    ScannerEntry(id: "mach_services", name: "Mach Services", tier: .medium) { _ in
+    ScannerEntry(id: "mach_services", name: "Mach Services", tier: .medium, category: .persistence) { _ in
       await XPCServiceAuditor.shared.scanMachServices()
     },
-    ScannerEntry(id: "kext", name: "Kext Anomaly", tier: .medium) { _ in
+    ScannerEntry(id: "kext", name: "Kext Anomaly", tier: .medium, category: .system) { _ in
       await KextAnomalyDetector.shared.scan()
     },
-    ScannerEntry(id: "auth_db", name: "Authorization DB", tier: .medium) { _ in
+    ScannerEntry(id: "auth_db", name: "Authorization DB", tier: .medium, category: .system) { _ in
       await AuthorizationDBMonitor.shared.scan()
     },
-    ScannerEntry(id: "persistence", name: "Persistence Scanner", tier: .medium) { _ in
+    ScannerEntry(id: "persistence", name: "Persistence Scanner", tier: .medium, category: .persistence) { _ in
       (await PersistenceScanner.shared.scanAll()).filter(\.isSuspicious).map { item in
         ProcessAnomaly(pid: 0, processName: item.name, processPath: item.path,
           parentPID: 0, parentName: "",
@@ -105,7 +105,7 @@ extension ScannerEntry {
           ])
       }
     },
-    ScannerEntry(id: "event_taps", name: "Event Taps", tier: .medium) { _ in
+    ScannerEntry(id: "event_taps", name: "Event Taps", tier: .medium, category: .credentials) { _ in
       (await EventTapScanner.shared.scan()).filter(\.isSuspicious).map { tap in
         ProcessAnomaly(pid: tap.tappingPID, processName: tap.tappingProcessName,
           processPath: tap.tappingProcessPath, parentPID: 0, parentName: "",
@@ -121,7 +121,7 @@ extension ScannerEntry {
           ])
       }
     },
-    ScannerEntry(id: "tcc", name: "TCC Monitor", tier: .medium) { _ in
+    ScannerEntry(id: "tcc", name: "TCC Monitor", tier: .medium, category: .credentials) { _ in
       (await TCCMonitor.shared.scan()).filter(\.isSuspicious).map { entry in
         ProcessAnomaly(pid: 0, processName: entry.client, processPath: "",
           parentPID: 0, parentName: "", technique: "Suspicious TCC Grant",
@@ -135,7 +135,7 @@ extension ScannerEntry {
           ])
       }
     },
-    ScannerEntry(id: "ransomware", name: "Ransomware Detector", tier: .medium) { _ in
+    ScannerEntry(id: "ransomware", name: "Ransomware Detector", tier: .medium, category: .fileSystem) { _ in
       (await RansomwareDetector.shared.getAlerts()).map { alert in
         ProcessAnomaly(pid: alert.processID, processName: alert.processName,
           processPath: alert.processPath, parentPID: 0, parentName: "",
@@ -151,49 +151,49 @@ extension ScannerEntry {
           ])
       }
     },
-    ScannerEntry(id: "system_integrity", name: "System Integrity", tier: .medium) { _ in
+    ScannerEntry(id: "system_integrity", name: "System Integrity", tier: .medium, category: .system) { _ in
       await SystemIntegrityScanner.shared.scan()
     },
-    ScannerEntry(id: "network_config", name: "Network Config", tier: .medium) { _ in
+    ScannerEntry(id: "network_config", name: "Network Config", tier: .medium, category: .network) { _ in
       await NetworkConfigAuditor.shared.scan()
     },
-    ScannerEntry(id: "staging", name: "Staging Detector", tier: .medium) { _ in
+    ScannerEntry(id: "staging", name: "Staging Detector", tier: .medium, category: .fileSystem) { _ in
       await StagingDetector.shared.scan()
     },
-    ScannerEntry(id: "xattr", name: "Xattr Abuse", tier: .medium) { _ in
+    ScannerEntry(id: "xattr", name: "Xattr Abuse", tier: .medium, category: .fileSystem) { _ in
       await XattrAbuseDetector.shared.scan()
     },
-    ScannerEntry(id: "hidden_files", name: "Hidden Files", tier: .medium) { _ in
+    ScannerEntry(id: "hidden_files", name: "Hidden Files", tier: .medium, category: .fileSystem) { _ in
       await HiddenFileDetector.shared.scan()
     },
-    ScannerEntry(id: "usb", name: "USB Devices", tier: .medium) { _ in
+    ScannerEntry(id: "usb", name: "USB Devices", tier: .medium, category: .system) { _ in
       await USBDeviceScanner.shared.scan()
     },
-    ScannerEntry(id: "log_integrity", name: "Log Integrity", tier: .medium) { _ in
+    ScannerEntry(id: "log_integrity", name: "Log Integrity", tier: .medium, category: .fileSystem) { _ in
       await LogIntegrityScanner.shared.scan()
     },
-    ScannerEntry(id: "screen_capture", name: "Screen Capture", tier: .medium) { _ in
+    ScannerEntry(id: "screen_capture", name: "Screen Capture", tier: .medium, category: .credentials) { _ in
       await ScreenCaptureScanner.shared.scan()
     },
-    ScannerEntry(id: "covert_channel", name: "Covert Channel", tier: .medium) { _ in
+    ScannerEntry(id: "covert_channel", name: "Covert Channel", tier: .medium, category: .network) { _ in
       await CovertChannelDetector.shared.scan()
     },
-    ScannerEntry(id: "firewall", name: "Firewall Auditor", tier: .medium) { _ in
+    ScannerEntry(id: "firewall", name: "Firewall Auditor", tier: .medium, category: .network) { _ in
       await FirewallRoutingAuditor.shared.scan()
     },
-    ScannerEntry(id: "mach_port", name: "Mach Port Scanner", tier: .medium) { _ in
+    ScannerEntry(id: "mach_port", name: "Mach Port Scanner", tier: .medium, category: .codeExecution) { _ in
       await MachPortScanner.shared.scan()
     },
-    ScannerEntry(id: "script_backdoor", name: "Script Backdoors", tier: .medium) { _ in
+    ScannerEntry(id: "script_backdoor", name: "Script Backdoors", tier: .medium, category: .persistence) { _ in
       await ScriptBackdoorScanner.shared.scan()
     },
-    ScannerEntry(id: "download_provenance", name: "Download Provenance", tier: .medium) { _ in
+    ScannerEntry(id: "download_provenance", name: "Download Provenance", tier: .medium, category: .fileSystem) { _ in
       await DownloadProvenanceScanner.shared.scan()
     },
-    ScannerEntry(id: "crash_reports", name: "Crash Reports", tier: .medium) { _ in
+    ScannerEntry(id: "crash_reports", name: "Crash Reports", tier: .medium, category: .system) { _ in
       await CrashReportAnalyzer.shared.scan()
     },
-    ScannerEntry(id: "dns_tunnel", name: "DNS Tunneling", tier: .medium) { _ in
+    ScannerEntry(id: "dns_tunnel", name: "DNS Tunneling", tier: .medium, category: .network) { _ in
       (await DNSTunnelingDetector.shared.analyze()).map { na in
         ProcessAnomaly(pid: 0, processName: na.processName, processPath: "",
           parentPID: 0, parentName: "", technique: na.type.rawValue,
@@ -206,7 +206,7 @@ extension ScannerEntry {
           ])
       }
     },
-    ScannerEntry(id: "persistence_monitor", name: "Persistence Monitor", tier: .medium) { _ in
+    ScannerEntry(id: "persistence_monitor", name: "Persistence Monitor", tier: .medium, category: .persistence) { _ in
       (await PersistenceMonitor.shared.diffAgainstSnapshot()).map { change in
         ProcessAnomaly.filesystem(
           name: change.processName.isEmpty ? (change.path as NSString).lastPathComponent : change.processName,
@@ -225,7 +225,7 @@ extension ScannerEntry {
           ])
       }
     },
-    ScannerEntry(id: "timestomp", name: "Timestomp Detector", tier: .medium) { _ in
+    ScannerEntry(id: "timestomp", name: "Timestomp Detector", tier: .medium, category: .fileSystem) { _ in
       await TimestompDetector.shared.scan()
     },
   ]
@@ -233,10 +233,10 @@ extension ScannerEntry {
   // MARK: - Slow Tier (codesign, docker, network calls)
 
   static let slow: [ScannerEntry] = [
-    ScannerEntry(id: "binary_integrity", name: "Binary Integrity", tier: .slow) { ctx in
+    ScannerEntry(id: "binary_integrity", name: "Binary Integrity", tier: .slow, category: .binary) { ctx in
       await BinaryIntegrityScanner.shared.scan(snapshot: ctx.snapshot)
     },
-    ScannerEntry(id: "dylib_hijack", name: "Dylib Hijack", tier: .slow) { ctx in
+    ScannerEntry(id: "dylib_hijack", name: "Dylib Hijack", tier: .slow, category: .binary) { ctx in
       (await DylibHijackScanner.shared.scanRunningProcesses(snapshot: ctx.snapshot))
         .filter(\.isActiveHijack).map { h in
           ProcessAnomaly(pid: 0, processName: h.binaryName, processPath: h.binaryPath,
@@ -251,40 +251,40 @@ extension ScannerEntry {
             ])
         }
     },
-    ScannerEntry(id: "certificate", name: "Certificate Auditor", tier: .slow) { _ in
+    ScannerEntry(id: "certificate", name: "Certificate Auditor", tier: .slow, category: .binary) { _ in
       await CertificateAuditor.shared.scan()
     },
-    ScannerEntry(id: "browser_ext", name: "Browser Extensions", tier: .slow) { _ in
+    ScannerEntry(id: "browser_ext", name: "Browser Extensions", tier: .slow, category: .supply) { _ in
       await BrowserExtensionScanner.shared.scan()
     },
-    ScannerEntry(id: "entitlement", name: "Entitlement Scanner", tier: .slow) { ctx in
+    ScannerEntry(id: "entitlement", name: "Entitlement Scanner", tier: .slow, category: .binary) { ctx in
       await EntitlementScanner.shared.scan(snapshot: ctx.snapshot)
     },
-    ScannerEntry(id: "security_evasion", name: "Security Tool Evasion", tier: .slow) { ctx in
+    ScannerEntry(id: "security_evasion", name: "Security Tool Evasion", tier: .slow, category: .processIntegrity) { ctx in
       await SecurityToolEvasionDetector.shared.scan(snapshot: ctx.snapshot)
     },
-    ScannerEntry(id: "vm_container", name: "VM/Container Detector", tier: .slow) { ctx in
+    ScannerEntry(id: "vm_container", name: "VM/Container Detector", tier: .slow, category: .system) { ctx in
       await VMContainerDetector.shared.scan(snapshot: ctx.snapshot)
     },
-    ScannerEntry(id: "boot_security", name: "Boot Security", tier: .slow) { _ in
+    ScannerEntry(id: "boot_security", name: "Boot Security", tier: .slow, category: .system) { _ in
       await BootSecurityScanner.shared.scan()
     },
-    ScannerEntry(id: "kernel_integrity", name: "Kernel Integrity", tier: .slow) { _ in
+    ScannerEntry(id: "kernel_integrity", name: "Kernel Integrity", tier: .slow, category: .system) { _ in
       await KernelIntegrityScanner.shared.scan()
     },
-    ScannerEntry(id: "dyld_cache", name: "Dyld Cache", tier: .slow) { _ in
+    ScannerEntry(id: "dyld_cache", name: "Dyld Cache", tier: .slow, category: .binary) { _ in
       await DyldCacheScanner.shared.scan()
     },
-    ScannerEntry(id: "iokit_driver", name: "IOKit Drivers", tier: .slow) { _ in
+    ScannerEntry(id: "iokit_driver", name: "IOKit Drivers", tier: .slow, category: .system) { _ in
       await IOKitDriverScanner.shared.scan()
     },
-    ScannerEntry(id: "app_audit", name: "Application Auditor", tier: .slow) { _ in
+    ScannerEntry(id: "app_audit", name: "Application Auditor", tier: .slow, category: .supply) { _ in
       await ApplicationAuditor.shared.scan()
     },
-    ScannerEntry(id: "browser_history", name: "Browser History", tier: .slow) { _ in
+    ScannerEntry(id: "browser_history", name: "Browser History", tier: .slow, category: .credentials) { _ in
       await BrowserHistoryScanner.shared.scan()
     },
-    ScannerEntry(id: "supply_chain", name: "Supply Chain Auditor", tier: .slow) { _ in
+    ScannerEntry(id: "supply_chain", name: "Supply Chain Auditor", tier: .slow, category: .supply) { _ in
       (await SupplyChainAuditor.shared.auditAll()).map { finding in
         ProcessAnomaly(pid: 0, processName: finding.packageName, processPath: "",
           parentPID: 0, parentName: "",
@@ -299,29 +299,27 @@ extension ScannerEntry {
           ])
       }
     },
-    ScannerEntry(id: "phantom_dylib", name: "Phantom Dylib", tier: .slow) { ctx in
+    ScannerEntry(id: "phantom_dylib", name: "Phantom Dylib", tier: .slow, category: .binary) { ctx in
       await PhantomDylibDetector.shared.scan(snapshot: ctx.snapshot)
     },
 
     // ── Contradiction Probes (v2 — structured via ProbeRunner) ─────
-    // 5 probes migrated to ContradictionProbe protocol; results convert to ProcessAnomaly
-
-    ScannerEntry(id: "contradiction_probes", name: "Contradiction Probes", tier: .slow) { _ in
+    ScannerEntry(id: "contradiction_probes", name: "Contradiction Probes", tier: .slow, category: .probes) { _ in
       let results = await ProbeRunner.shared.runAll()
       return results.flatMap { $0.toAnomalies() }
     },
 
-    // ── Legacy Probes (Phase 2 migration) ────────────────────
-    ScannerEntry(id: "launch_daemon_census", name: "Launch Daemon Census", tier: .slow) { ctx in
+    // ── Legacy Probes ────────────────────
+    ScannerEntry(id: "launch_daemon_census", name: "Launch Daemon Census", tier: .slow, category: .probes) { ctx in
       await LaunchDaemonCensusProbe.shared.scan(snapshot: ctx.snapshot)
     },
-    ScannerEntry(id: "entitlement_contradiction", name: "Entitlement Contradiction", tier: .slow) { ctx in
+    ScannerEntry(id: "entitlement_contradiction", name: "Entitlement Contradiction", tier: .slow, category: .probes) { ctx in
       await EntitlementContradictionProbe.shared.scan(snapshot: ctx.snapshot)
     },
-    ScannerEntry(id: "partition_integrity", name: "Partition Integrity", tier: .slow) { _ in
+    ScannerEntry(id: "partition_integrity", name: "Partition Integrity", tier: .slow, category: .probes) { _ in
       await PartitionIntegrityProbe.shared.scan()
     },
-    ScannerEntry(id: "disk_entropy", name: "Disk Entropy Analysis", tier: .slow) { _ in
+    ScannerEntry(id: "disk_entropy", name: "Disk Entropy Analysis", tier: .slow, category: .probes) { _ in
       await DiskEntropyProbe.shared.scan()
     },
   ]

@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Chronological timeline of all processes seen this session, newest first
 struct ProcessHistoryView: View {
-    @ObservedObject var store: ProcessStore
+    var store: ProcessStore
     let onSelect: (ProcessInfo) -> Void
 
     private var filteredHistory: [ProcessInfo] {

@@ -3,7 +3,7 @@ import SwiftUI
 /// Compact sidebar: search + module list + scanner status dots.
 struct SecuritySidebar: View {
   @Binding var selectedModule: SecurityModule?
-  @ObservedObject var session: ScanSession
+  var session: ScanSession
   @State private var searchText = ""
 
   var body: some View {

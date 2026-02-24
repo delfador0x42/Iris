@@ -57,16 +57,20 @@ extension LOLBinDetector {
         return []
     }
 
-    /// Check if process is running from /tmp or hidden path
+    /// Check if process is running from a staging directory.
+    /// Attack technique: droppers stage payloads in world-writable temp dirs.
+    /// Does NOT flag dotfile directories (~/.cargo, ~/.local, ~/.config) —
+    /// those are standard package manager locations, not staging dirs.
     func checkSuspiciousPath(pid: pid_t, name: String, path: String,
                              ppid: pid_t, parentName: String) -> [ProcessAnomaly] {
-        guard path.hasPrefix("/tmp/") || path.hasPrefix("/private/tmp/") ||
-              path.contains("/.") else { return [] }
+        guard path.hasPrefix("/tmp/") || path.hasPrefix("/private/tmp/")
+              || path.hasPrefix("/var/tmp/") || path.hasPrefix("/private/var/tmp/")
+        else { return [] }
         return [ProcessAnomaly(
             pid: pid, processName: name, processPath: path,
             parentPID: ppid, parentName: parentName,
-            technique: "Execution from Suspicious Path",
-            description: "Binary executing from temporary or hidden directory: \(path)",
+            technique: "Execution from Staging Directory",
+            description: "Binary executing from world-writable staging directory: \(path)",
             severity: .critical, mitreID: "T1059",
             scannerId: "lolbin",
             enumMethod: "sysctl(KERN_PROCARGS2) path prefix check",

@@ -30,59 +30,66 @@ public actor KextCensusProbe: ContradictionProbe {
         var comparisons: [SourceComparison] = []
         var hasContradiction = false
 
-        // Source 1: KextManagerCopyLoadedKextInfo — MIG kext_request to kernel
-        let kextManagerSet = queryKextManager()
+        // Source 1: KextManagerCopyLoadedKextInfo — returns BUNDLE IDs
+        let kextManagerBundleIDs = queryKextManager()
 
-        // Source 2: IOKit IOService plane — walk registry for kext class instances
-        let ioServiceSet = queryIOServicePlane()
+        // Source 2: IOKit IOService plane — returns (bundleIDs, classNames) separately
+        let (ioServiceBundleIDs, ioServiceClassNames) = queryIOServicePlaneSplit()
 
-        // Source 3: IOKit diagnostics — class table with instance counts
-        let diagnosticsSet = queryIOKitDiagnostics()
+        // Source 3: IOKit diagnostics — returns CLASS NAMES only
+        let diagnosticsClassNames = queryIOKitDiagnostics()
 
-        // Compare: KextManager vs IOService
-        if !kextManagerSet.isEmpty && !ioServiceSet.isEmpty {
-            let onlyKM = kextManagerSet.subtracting(ioServiceSet)
-            let onlyIO = ioServiceSet.subtracting(kextManagerSet)
-            let match = onlyKM.isEmpty && onlyIO.isEmpty
-            if !match { hasContradiction = true }
+        // CRITICAL: Only compare within the SAME identifier space.
+        // Bundle IDs (com.apple.driver.X) ≠ class names (AppleX).
+        // Mixing them guarantees false positives.
 
-            var detail = "KextManager: \(kextManagerSet.count), IOService: \(ioServiceSet.count)"
-            if !onlyKM.isEmpty { detail += " | only-KM: \(onlyKM.sorted().prefix(5).joined(separator: ","))" }
-            if !onlyIO.isEmpty { detail += " | only-IO: \(onlyIO.sorted().prefix(5).joined(separator: ","))" }
+        // Compare 1: KextManager bundle IDs vs IOService bundle IDs
+        // KextManager returns ONLY kexts. IOService returns kexts + dexts (driver extensions).
+        // So IOService will always have bundle IDs not in KextManager (dexts).
+        // The meaningful signal: KextManager should be a SUBSET-OR-EQUAL of what the kernel knows.
+        // Flag only if KextManager has bundle IDs that IOService doesn't even know about.
+        if !kextManagerBundleIDs.isEmpty && !ioServiceBundleIDs.isEmpty {
+            // kexts in KextManager that have NO IOService provider AND no class at all
+            // This would mean the kernel claims a kext is loaded but it has zero presence in IOKit
+            let overlap = kextManagerBundleIDs.intersection(ioServiceBundleIDs)
 
             comparisons.append(SourceComparison(
-                label: "KextManager vs IOService plane",
-                sourceA: SourceValue("KextManagerCopyLoadedKextInfo", "\(kextManagerSet.count) kexts"),
-                sourceB: SourceValue("IOService plane walk", "\(ioServiceSet.count) kext classes"),
-                matches: match))
+                label: "KextManager vs IOService bundle IDs",
+                sourceA: SourceValue("KextManager (kexts only)", "\(kextManagerBundleIDs.count) bundle IDs"),
+                sourceB: SourceValue("IOService (kexts+dexts)", "\(ioServiceBundleIDs.count) bundle IDs, \(overlap.count) overlap"),
+                matches: true))  // Informational — identifier spaces don't align perfectly
         }
 
-        // Compare: KextManager vs Diagnostics
-        if !kextManagerSet.isEmpty && !diagnosticsSet.isEmpty {
-            let onlyKM = kextManagerSet.subtracting(diagnosticsSet)
-            let onlyDiag = diagnosticsSet.subtracting(kextManagerSet)
-            let match = onlyKM.isEmpty && onlyDiag.isEmpty
-            if !match { hasContradiction = true }
+        // Compare 2: IOService class names vs Diagnostics class names
+        // (both are class names — same identifier space)
+        if !ioServiceClassNames.isEmpty && !diagnosticsClassNames.isEmpty {
+            let onlyIO = ioServiceClassNames.subtracting(diagnosticsClassNames)
+            let onlyDiag = diagnosticsClassNames.subtracting(ioServiceClassNames)
+            // Diagnostics has ALL classes. IOService walk may miss some.
+            // Flag if IOService sees classes that diagnostics doesn't — that's injection.
+            let suspicious = !onlyIO.isEmpty
+            if suspicious { hasContradiction = true }
 
             comparisons.append(SourceComparison(
-                label: "KextManager vs IOKit diagnostics",
-                sourceA: SourceValue("KextManagerCopyLoadedKextInfo", "\(kextManagerSet.count) kexts"),
-                sourceB: SourceValue("IOKit diagnostics classes", "\(diagnosticsSet.count) classes"),
-                matches: match))
+                label: "IOService classes vs IOKit diagnostics classes",
+                sourceA: SourceValue("IOService plane walk", "\(ioServiceClassNames.count) classes"),
+                sourceB: SourceValue("IOKit diagnostics", "\(diagnosticsClassNames.count) classes"),
+                matches: !suspicious))
         }
 
-        // Compare: IOService vs Diagnostics
-        if !ioServiceSet.isEmpty && !diagnosticsSet.isEmpty {
-            let onlyIO = ioServiceSet.subtracting(diagnosticsSet)
-            let onlyDiag = diagnosticsSet.subtracting(ioServiceSet)
-            let match = onlyIO.isEmpty && onlyDiag.isEmpty
-            if !match { hasContradiction = true }
-
+        // Compare 3: KextManager count vs total unique classes
+        // Sanity check — if KextManager reports far fewer than class enumeration finds,
+        // a kext may be hiding from the KextManager API path.
+        if !kextManagerBundleIDs.isEmpty && !diagnosticsClassNames.isEmpty {
+            // KextManager count should be <= diagnostics (diagnostics includes base IOKit classes)
+            // but if diagnostics has dramatically more, that's suspicious
+            let ratio = Double(diagnosticsClassNames.count) / Double(kextManagerBundleIDs.count)
+            // Normal ratio is typically 5-15x (many classes per kext). Flag extreme outliers.
             comparisons.append(SourceComparison(
-                label: "IOService plane vs IOKit diagnostics",
-                sourceA: SourceValue("IOService plane walk", "\(ioServiceSet.count) kext classes"),
-                sourceB: SourceValue("IOKit diagnostics classes", "\(diagnosticsSet.count) classes"),
-                matches: match))
+                label: "kext count sanity: KextManager vs diagnostics",
+                sourceA: SourceValue("KextManager", "\(kextManagerBundleIDs.count) kexts"),
+                sourceB: SourceValue("diagnostics", "\(diagnosticsClassNames.count) classes (ratio: \(String(format: "%.1f", ratio))x)"),
+                matches: true))  // Informational — ratio varies too much for hard threshold
         }
 
         let durationMs = Int(Date().timeIntervalSince(start) * 1000)
@@ -120,16 +127,17 @@ public actor KextCensusProbe: ContradictionProbe {
 
     // MARK: - Source 2: IOKit IOService plane walk
 
-    private func queryIOServicePlane() -> Set<String> {
-        var result = Set<String>()
+    /// Returns (bundleIDs, classNames) as separate sets — never mix identifier spaces.
+    private func queryIOServicePlaneSplit() -> (bundleIDs: Set<String>, classNames: Set<String>) {
+        var bundleIDs = Set<String>()
+        var classNames = Set<String>()
         var iterator: io_iterator_t = 0
 
-        // Match all IOService entries
         let matching = IOServiceMatching("IOService")
         let kr = IOServiceGetMatchingServices(kIOMainPortDefault, matching, &iterator)
         guard kr == KERN_SUCCESS else {
             logger.warning("IOServiceGetMatchingServices failed: \(kr)")
-            return result
+            return (bundleIDs, classNames)
         }
         defer { IOObjectRelease(iterator) }
 
@@ -139,23 +147,20 @@ public actor KextCensusProbe: ContradictionProbe {
                 IOObjectRelease(service)
                 service = IOIteratorNext(iterator)
             }
-            // Get the class name — maps back to kext providing it
+            // Always collect class name
             var className = [CChar](repeating: 0, count: 128)
             IOObjectGetClass(service, &className)
-            let name = String(cString: className)
+            classNames.insert(String(cString: className))
 
-            // Get the bundle ID if available from IOKit properties
+            // Also collect bundle ID if available
             var props: Unmanaged<CFMutableDictionary>?
             if IORegistryEntryCreateCFProperties(service, &props, kCFAllocatorDefault, 0) == KERN_SUCCESS,
                let dict = props?.takeRetainedValue() as? [String: Any],
                let bundleID = dict["CFBundleIdentifier"] as? String {
-                result.insert(bundleID)
-            } else {
-                // Use class name as identifier when no bundle ID
-                result.insert("class:\(name)")
+                bundleIDs.insert(bundleID)
             }
         }
-        return result
+        return (bundleIDs, classNames)
     }
 
     // MARK: - Source 3: IOKit diagnostics class table
@@ -179,10 +184,11 @@ public actor KextCensusProbe: ContradictionProbe {
         }
 
         // Root entry properties include IOKitDiagnostics with Classes dict
+        // Return raw class names (no "class:" prefix) to match IOService classNames
         if let diagnostics = dict["IOKitDiagnostics"] as? [String: Any],
            let classes = diagnostics["Classes"] as? [String: Any] {
             for (className, _) in classes {
-                result.insert("class:\(className)")
+                result.insert(className)
             }
         }
         return result
@@ -200,7 +206,7 @@ public actor KextCensusProbe: ContradictionProbe {
         if IORegistryEntryCreateCFProperties(service, &props, kCFAllocatorDefault, 0) == KERN_SUCCESS,
            let dict = props?.takeRetainedValue() as? [String: Any] {
             for key in dict.keys where key.contains(".") {
-                result.insert("class:\(key)")
+                result.insert(key)
             }
         }
         return result

@@ -26,11 +26,26 @@ public struct ScanContext: Sendable {
   public let connections: [NetworkConnection]
 }
 
+/// Attack category for scanner grouping in UI and EventStream.
+public enum ScannerCategory: String, Sendable, CaseIterable {
+  case processIntegrity = "Process Integrity"
+  case codeExecution = "Code Execution"
+  case persistence = "Persistence"
+  case credentials = "Credentials"
+  case network = "Network"
+  case fileSystem = "File System"
+  case binary = "Binary Analysis"
+  case supply = "Supply Chain"
+  case system = "System Integrity"
+  case probes = "Contradiction Probes"
+}
+
 /// A registered scanner with metadata and execution closure.
 public struct ScannerEntry: Identifiable, Sendable {
   public let id: String
   public let name: String
   public let tier: ScannerTier
+  public let category: ScannerCategory
   public let run: @Sendable (ScanContext) async -> [ProcessAnomaly]
 }
 

@@ -47,6 +47,10 @@ public actor LaunchDaemonCensusProbe {
         for (label, info) in loadedServices {
             guard !label.hasPrefix(applePrefix) else { continue }
             guard !label.hasPrefix("com.wudan.") else { continue }
+            // Per-app launchd domains (application.{bundleId}.{pid}.{random}) are created
+            // dynamically by macOS when any app launches. They NEVER have plist files.
+            // This is the standard macOS app lifecycle, not persistence.
+            guard !label.hasPrefix("application.") else { continue }
             if !diskLabels.contains(label) && info.pid > 0 {
                 anomalies.append(.filesystem(
                     name: label, path: "launchctl://\(label)",

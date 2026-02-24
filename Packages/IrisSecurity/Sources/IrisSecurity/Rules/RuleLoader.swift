@@ -1,7 +1,7 @@
 import Foundation
 
-/// Aggregates all detection rules from all modules and loads them
-/// into the DetectionEngine at startup.
+/// Aggregates all detection rules from all modules.
+/// Used by ThreatRuleLoader to convert old-format rules into ThreatRules.
 public enum RuleLoader {
 
     /// All simple (single-event) detection rules
@@ -21,12 +21,5 @@ public enum RuleLoader {
     /// All multi-event correlation rules
     public static func allCorrelationRules() -> [CorrelationRule] {
         CorrelationRuleDefinitions.rules()
-    }
-
-    /// Initialize the DetectionEngine with all rules
-    public static func loadAll() async {
-        let simple = allSimpleRules()
-        let correlation = allCorrelationRules()
-        await DetectionEngine.shared.loadRules(simple: simple, correlation: correlation)
     }
 }

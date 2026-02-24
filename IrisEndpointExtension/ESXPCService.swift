@@ -5,6 +5,7 @@
 //  XPC Service for communication between the main app and the endpoint security extension
 //
 
+import EndpointSecurity
 import Foundation
 import Security
 import os.log
@@ -75,6 +76,9 @@ extension ESXPCService: NSXPCListenerDelegate {
             return false
         }
 
+        // Mute the connecting app so we don't flood events with Iris watching itself
+        muteConnectingProcess(pid)
+
         newConnection.exportedInterface = NSXPCInterface(with: EndpointXPCProtocol.self)
         newConnection.exportedObject = self
 
@@ -88,7 +92,7 @@ extension ESXPCService: NSXPCListenerDelegate {
         let count = activeConnections.count
 
         newConnection.resume()
-        logger.info("[XPC] ACCEPTED connection from PID \(pid) (total active: \(count))")
+        logger.info("[XPC] ACCEPTED + muted PID \(pid) (total active: \(count))")
 
         return true
     }
@@ -113,6 +117,44 @@ extension ESXPCService: NSXPCListenerDelegate {
             logger.error("[XPC] SecCodeCheckValidity FAILED for PID \(pid): \(checkResult)")
         }
         return checkResult == errSecSuccess
+    }
+
+    /// Mute a connecting process at the ES level to eliminate self-monitoring noise.
+    /// Uses audit_token_t from the PID to call es_mute_process.
+    private func muteConnectingProcess(_ pid: pid_t) {
+        guard let client = esClient?.client else {
+            logger.warning("[XPC] Cannot mute PID \(pid) — no ES client")
+            return
+        }
+        var token = audit_token_t()
+        var size = UInt32(MemoryLayout<audit_token_t>.size / MemoryLayout<integer_t>.size)
+        var taskPort: mach_port_t = 0
+        let kr = task_for_pid(mach_task_self_, pid, &taskPort)
+        guard kr == KERN_SUCCESS else {
+            logger.warning("[XPC] task_for_pid failed for PID \(pid): \(kr) — muting by path instead")
+            // Fallback: mute by path (less precise but still effective)
+            let pathBuf = UnsafeMutablePointer<UInt8>.allocate(capacity: Int(MAXPATHLEN))
+            defer { pathBuf.deallocate() }
+            let pathLen = proc_pidpath(pid, pathBuf, UInt32(MAXPATHLEN))
+            if pathLen > 0 {
+                let path = String(cString: pathBuf)
+                let result = es_mute_path_literal(client, path)
+                logger.info("[XPC] Muted path \(path) for PID \(pid): \(result == ES_RETURN_SUCCESS ? "OK" : "FAIL")")
+            }
+            return
+        }
+        defer { mach_port_deallocate(mach_task_self_, taskPort) }
+        let tkr = task_info(
+            taskPort, task_flavor_t(TASK_AUDIT_TOKEN),
+            withUnsafeMutablePointer(to: &token) {
+                $0.withMemoryRebound(to: integer_t.self, capacity: Int(size)) { $0 }
+            }, &size)
+        guard tkr == KERN_SUCCESS else {
+            logger.warning("[XPC] task_info failed for PID \(pid): \(tkr)")
+            return
+        }
+        let result = es_mute_process(client, &token)
+        logger.info("[XPC] Muted PID \(pid) via audit_token: \(result == ES_RETURN_SUCCESS ? "OK" : "FAIL")")
     }
 
     private func connectionInvalidated(_ connection: NSXPCConnection) {

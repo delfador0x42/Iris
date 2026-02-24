@@ -43,12 +43,13 @@ extension ESClient {
       logger.warning("[AUTH] \(mode) EXEC: \(path) reason=\(decision.reason) pid=\(pid)")
     }
 
-    // Record as security event for the main app's DetectionEngine.
+    // Record as security event for the main app's ThreatEngine.
     // Skip platform binaries (too noisy) — only log interesting decisions.
     if !decision.allow || decision.reason != "platform_binary" {
-      let info = extractBasicProcessInfo(from: target)
+      let mt = message.pointee.mach_time
+      let info = extractBasicProcessInfo(from: target, machTime: mt)
       recordSecurityEvent(
-        .authExec, process: info, targetPath: path,
+        .authExec, process: info, machTime: mt, targetPath: path,
         detail: "policy=\(decision.reason) allow=\(effectiveAllow)")
     }
 

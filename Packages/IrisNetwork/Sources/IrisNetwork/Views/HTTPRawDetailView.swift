@@ -5,7 +5,6 @@ import AppKit
 /// Fetches raw bytes on-demand from the extension via XPC.
 struct HTTPRawDetailView: View {
     let connection: NetworkConnection
-    @EnvironmentObject private var store: SecurityStore
     @Environment(\.dismiss) private var dismiss
     @State private var selectedTab = 0
     @State var rawOutbound: Data?
@@ -227,7 +226,7 @@ struct HTTPRawDetailView: View {
     // MARK: - Helpers
 
     private func loadRawData() async {
-        let (outbound, inbound) = await store.fetchRawData(for: connection.id)
+        let (outbound, inbound) = await SecurityStore.shared.fetchRawData(for: connection.id)
         rawOutbound = outbound
         rawInbound = inbound
         isLoading = false

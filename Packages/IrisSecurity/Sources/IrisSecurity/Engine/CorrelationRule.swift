@@ -7,7 +7,8 @@ public enum CorrelationKey: Sendable {
     case signingId
 }
 
-/// One stage in a multi-event correlation rule
+/// One stage in a multi-event correlation rule.
+/// Data-only — ThreatRuleLoader converts these into CorrelationStages.
 public struct RuleStage: Sendable {
     public let eventType: String
     public let conditions: [RuleCondition]
@@ -15,11 +16,6 @@ public struct RuleStage: Sendable {
     public init(eventType: String, conditions: [RuleCondition] = []) {
         self.eventType = eventType
         self.conditions = conditions
-    }
-
-    func matches(_ event: SecurityEvent) -> Bool {
-        guard event.eventType == eventType else { return false }
-        return conditions.allSatisfy { $0.matches(event) }
     }
 }
 

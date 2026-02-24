@@ -4,7 +4,7 @@ import SwiftUI
 /// Auto-runs full scan on appear. Findings are the main view.
 public struct SecurityHubView: View {
   @State private var selectedModule: SecurityModule?
-  @StateObject private var session = ScanSession()
+  @State private var session = ScanSession()
   @State private var showTiming = false
 
   public init() {}

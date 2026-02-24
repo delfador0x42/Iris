@@ -32,9 +32,12 @@ struct IrisMainApp: App {
       // 3. Send CA to proxy extension via XPC
       await IrisMainApp.sendCAToProxy()
 
-      // 4. Initialize detection engine with all rules, start event bus
-      await RuleLoader.loadAll()
+      // 4. Initialize ThreatEngine with all rules, start event bus
+      await ThreatRuleLoader.loadAll()
       await SecurityEventBus.shared.start()
+
+      // 5b. Start Unix socket server for CLI/Claude integration
+      await IrisSocketServer.shared.start()
 
       // 5. Push threat intel blocklists to endpoint extension
       await IrisMainApp.pushThreatIntel()

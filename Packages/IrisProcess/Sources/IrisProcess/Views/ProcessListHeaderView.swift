@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Process monitor header — NieR aesthetic.
 struct ProcessListHeaderView: View {
-    @ObservedObject var store: ProcessStore
+    var store: ProcessStore
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {

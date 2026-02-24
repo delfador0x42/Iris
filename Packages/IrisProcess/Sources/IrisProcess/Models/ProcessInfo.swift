@@ -49,17 +49,26 @@ public struct ProcessInfo: Identifiable, Sendable, Codable, Equatable {
     public var id: Int32 { pid }
     public let pid: Int32
     public let ppid: Int32
+    public let originalPpid: Int32?       // Before reparenting — double-fork detection
     /// The PID of the process "responsible" for this one (macOS responsibility chain).
     /// For app helpers/XPC services, this points to the parent application.
     /// 0 means unknown or same as pid.
     public let responsiblePid: Int32
+    public let processGroupId: Int32?     // Job control group
+    public let sessionId: Int32?          // Login session — lateral movement grouping
     public let path: String
     public let name: String
+    public let cdhash: String?            // 20-byte hex — tamper-proof binary identity
     public let arguments: [String]
+    public let environment: [String]?     // DYLD_* and suspicious env vars
     public let userId: UInt32
     public let groupId: UInt32
     public let codeSigningInfo: CodeSigningInfo?
     public let timestamp: Date
+    public let machTime: UInt64?          // Monotonic nanosecond — forensic ground truth
+    public let startTime: Double?         // Process start (seconds since epoch)
+    public let isESClient: Bool?          // Is this an ES client? Detect competing EDR
+    public let ttyPath: String?           // Terminal device — interactive session detection
     /// Whether this process has a man page (nil if not checked yet)
     public var hasManPage: Bool?
     /// CPU, memory, thread, and file descriptor metrics
@@ -68,27 +77,45 @@ public struct ProcessInfo: Identifiable, Sendable, Codable, Equatable {
     public init(
         pid: Int32,
         ppid: Int32,
+        originalPpid: Int32? = nil,
         responsiblePid: Int32 = 0,
+        processGroupId: Int32? = nil,
+        sessionId: Int32? = nil,
         path: String,
         name: String,
+        cdhash: String? = nil,
         arguments: [String] = [],
+        environment: [String]? = nil,
         userId: UInt32,
         groupId: UInt32,
         codeSigningInfo: CodeSigningInfo? = nil,
         timestamp: Date = Date(),
+        machTime: UInt64? = nil,
+        startTime: Double? = nil,
+        isESClient: Bool? = nil,
+        ttyPath: String? = nil,
         hasManPage: Bool? = nil,
         resources: ProcessResourceInfo? = nil
     ) {
         self.pid = pid
         self.ppid = ppid
+        self.originalPpid = originalPpid
         self.responsiblePid = responsiblePid
+        self.processGroupId = processGroupId
+        self.sessionId = sessionId
         self.path = path
         self.name = name
+        self.cdhash = cdhash
         self.arguments = arguments
+        self.environment = environment
         self.userId = userId
         self.groupId = groupId
         self.codeSigningInfo = codeSigningInfo
         self.timestamp = timestamp
+        self.machTime = machTime
+        self.startTime = startTime
+        self.isESClient = isESClient
+        self.ttyPath = ttyPath
         self.hasManPage = hasManPage
         self.resources = resources
     }
@@ -193,8 +220,10 @@ public struct ProcessInfo: Identifiable, Sendable, Codable, Equatable {
     /// Exclude ephemeral properties from Codable — they're computed app-side.
     /// `id` is excluded because it's computed from `pid`.
     enum CodingKeys: String, CodingKey {
-        case pid, ppid, responsiblePid, path, name, arguments, userId, groupId
-        case codeSigningInfo, timestamp
+        case pid, ppid, originalPpid, responsiblePid, processGroupId, sessionId
+        case path, name, cdhash, arguments, environment
+        case userId, groupId, codeSigningInfo, timestamp
+        case machTime, startTime, isESClient, ttyPath
     }
 
     /// Cached suspicion reasons (call `refreshSuspicion()` to update).

@@ -270,5 +270,76 @@ public enum NationStateRules {
             ],
             severity: .medium, mitreId: "T1560.001",
             mitreName: "Archive Collected Data"),
+
+        // === HARDWARE ACCESS / IMPLANT DETECTION ===
+
+        // IOKit access to HID devices (keylogger detection)
+        DetectionRule(
+            id: "ns_iokit_hid",
+            name: "IOKit HID device access by non-system process",
+            eventType: "iokit_open",
+            conditions: [
+                .fieldMatchesRegex("detail", "(IOHIDDevice|IOHIDUserDevice|AppleHIDDevice)"),
+                .processNotAppleSigned,
+            ],
+            severity: .high, mitreId: "T1056.001",
+            mitreName: "Input Capture: Keylogging"),
+
+        // IOKit access to USB devices (USB implant / data exfil)
+        DetectionRule(
+            id: "ns_iokit_usb",
+            name: "IOKit USB device access by non-system process",
+            eventType: "iokit_open",
+            conditions: [
+                .fieldMatchesRegex("detail", "(AppleUSB|IOUSBHost|IOUSBDevice)"),
+                .processNotAppleSigned,
+            ],
+            severity: .medium, mitreId: "T1200",
+            mitreName: "Hardware Additions"),
+
+        // Mass file copying (exfiltration staging via copyfile)
+        DetectionRule(
+            id: "ns_mass_copyfile",
+            name: "File copy by non-system process",
+            eventType: "copyfile",
+            conditions: [
+                .processNotAppleSigned,
+            ],
+            severity: .medium, mitreId: "T1005",
+            mitreName: "Data from Local System"),
+
+        // Unix domain socket created by non-system process (covert channel)
+        DetectionRule(
+            id: "ns_covert_uipc",
+            name: "Unix socket created by non-system process",
+            eventType: "uipc_bind",
+            conditions: [
+                .processNotAppleSigned,
+            ],
+            severity: .medium, mitreId: "T1071",
+            mitreName: "Application Layer Protocol"),
+
+        // Authentication failure (brute force / lateral movement)
+        DetectionRule(
+            id: "ns_auth_failure",
+            name: "Authentication attempt by non-system process",
+            eventType: "authentication",
+            conditions: [
+                .processNotAppleSigned,
+            ],
+            severity: .medium, mitreId: "T1110",
+            mitreName: "Brute Force"),
+
+        // File created in persistence location
+        DetectionRule(
+            id: "ns_persistence_create",
+            name: "File created in persistence location",
+            eventType: "file_create",
+            conditions: [
+                .fieldMatchesRegex("target_path", "/(LaunchAgents|LaunchDaemons|StartupItems)/"),
+                .processNotAppleSigned,
+            ],
+            severity: .critical, mitreId: "T1543.001",
+            mitreName: "Create or Modify System Process: Launch Agent"),
     ] }
 }

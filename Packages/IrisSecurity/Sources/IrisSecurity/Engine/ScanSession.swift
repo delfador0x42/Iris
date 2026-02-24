@@ -1,24 +1,23 @@
-import Combine
 import SwiftUI
 
 /// Observable scan session for live UI updates.
 /// Wraps SecurityAssessor.scanThreats() with progress tracking.
-@MainActor
-public final class ScanSession: ObservableObject {
-  @Published public var scannerResults: [ScannerResult] = []
-  @Published public var isScanning = false
-  @Published public var completed = 0
-  @Published public var total = 0
-  @Published public var latestScanner = ""
-  @Published public var scanResult: ThreatScanResult?
-  @Published public var diff: FindingsDiff?
-  @Published public var correlations: [CorrelationEngine.Correlation] = []
-  @Published public var fusion: FusionResult = .empty
-  @Published public var allowlistSuppressedCount = 0
-  @Published public var vtResults: [String: VTVerdict] = [:]
-  @Published public var vtChecking = false
-  @Published public var binaryAnalyses: [String: BinaryAnalysis] = [:]
-  @Published public var analyzingBinaries = false
+@MainActor @Observable
+public final class ScanSession {
+  public var scannerResults: [ScannerResult] = []
+  public var isScanning = false
+  public var completed = 0
+  public var total = 0
+  public var latestScanner = ""
+  public var scanResult: ThreatScanResult?
+  public var diff: FindingsDiff?
+  public var correlations: [CorrelationEngine.Correlation] = []
+  public var fusion: FusionResult = .empty
+  public var allowlistSuppressedCount = 0
+  public var vtResults: [String: VTVerdict] = [:]
+  public var vtChecking = false
+  public var binaryAnalyses: [String: BinaryAnalysis] = [:]
+  public var analyzingBinaries = false
 
   public init() {}
 

@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Scanner status grid — 50 dots that light up as scanners complete.
 struct ScannerStatusGrid: View {
-  @ObservedObject var session: ScanSession
+  var session: ScanSession
 
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {

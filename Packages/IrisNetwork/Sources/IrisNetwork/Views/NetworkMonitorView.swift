@@ -34,7 +34,7 @@ public enum NetworkViewMode: String, CaseIterable {
 
 /// Main view for network monitoring - displays per-process connections
 public struct NetworkMonitorView: View {
-    @StateObject var store = SecurityStore.shared
+    var store = SecurityStore.shared
     @StateObject var extensionManager = ExtensionManager.shared
     @State var expandedProcesses: Set<String> = []
     @State var viewMode: NetworkViewMode = .list
@@ -125,7 +125,7 @@ public struct NetworkMonitorView: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: plaintextConnection != nil)
-        .environmentObject(store)
+        // SecurityStore accessed via singleton (.shared), no environment injection needed
         .onAppear {
             // Set callback for when extension becomes ready (after user approval)
             extensionManager.onNetworkExtensionReady = { [weak store] in

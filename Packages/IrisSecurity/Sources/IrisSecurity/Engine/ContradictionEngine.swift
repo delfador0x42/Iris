@@ -2,11 +2,10 @@ import Foundation
 import os.log
 
 /// Runs all contradiction probes on a periodic schedule and feeds results
-/// into the EventLogger and AlertStore.
+/// into AlertStore (notifications) and EventStream (single JSONL log).
 ///
 /// Fast probes (process census, architecture, code signing) run every 60s.
 /// Slow probes (trust cache, binary integrity, IOKit) run every 300s.
-/// All results are logged to events.jsonl for Claude to monitor.
 public actor ContradictionEngine {
     public static let shared = ContradictionEngine()
     private let logger = Logger(subsystem: "com.wudan.iris", category: "ContradictionEngine")
@@ -83,13 +82,21 @@ public actor ContradictionEngine {
     private func processResults(_ results: [ProbeResult]) async {
         lastResults = results
 
-        // Log every result to EventLogger
+        // Emit every result to EventStream (the single data path)
         for result in results {
-            await EventLogger.shared.logProbe(
-                id: result.probeId,
-                name: result.probeName,
-                verdict: result.verdict.rawValue,
-                contradictions: result.comparisons.filter { !$0.matches }.count)
+            let verdict: Verdict = switch result.verdict {
+            case .consistent: .clean
+            case .contradiction: .contradiction
+            case .degraded, .error: .error
+            }
+            let mismatches = result.comparisons.filter { !$0.matches }.map {
+                Contradiction(
+                    label: $0.label,
+                    sourceA: $0.sourceA.source, valueA: $0.sourceA.value,
+                    sourceB: $0.sourceB.source, valueB: $0.sourceB.value)
+            }
+            await EventStream.shared.emit(
+                EventBridge.fromProbe(probeId: result.probeId, verdict: verdict, contradictions: mismatches))
         }
 
         // Generate alerts for contradictions

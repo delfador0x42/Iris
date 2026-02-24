@@ -3,7 +3,7 @@ import SwiftUI
 /// DNS monitoring embedded as a tab within Network Monitor.
 /// Uses DNSStore from IrisDNS package (same module, no import needed).
 struct DNSTabView: View {
-    @ObservedObject var store = DNSStore.shared
+    @Bindable var store = DNSStore.shared
     @State var showingClearConfirmation = false
     @State var showingServerPicker = false
 

@@ -33,25 +33,25 @@ public actor DNSTunnelingDetector {
 
         // Real-time single-query check: high-entropy subdomain → immediate alert
         if checkQuery(domain: domain) {
-            let event = SecurityEvent(
-                source: .dns, eventType: "dns_exfil",
-                processName: "DNS", processPath: "",
-                pid: 0, fields: [
-                    "domain": domain, "base_domain": baseDomain,
-                    "record_type": recordType,
-                ])
+            let event = Event(
+                id: EventIDGen.shared.next(),
+                source: .dns, severity: .high,
+                process: ProcessRef(pid: 0, path: "", sign: ""),
+                kind: .dns(query: domain, qtype: 0, answers: []),
+                fields: ["domain": domain, "base_domain": baseDomain,
+                         "record_type": recordType, "detection": "exfil"])
             Task { await SecurityEventBus.shared.ingest(event) }
             logger.warning("[DNS] Exfil indicator: \(domain)")
         }
 
         // DGA check on base domain
         if DGADetector.isDGA(baseDomain) {
-            let event = SecurityEvent(
-                source: .dns, eventType: "dns_dga",
-                processName: "DNS", processPath: "",
-                pid: 0, fields: [
-                    "domain": domain, "base_domain": baseDomain,
-                ])
+            let event = Event(
+                id: EventIDGen.shared.next(),
+                source: .dns, severity: .high,
+                process: ProcessRef(pid: 0, path: "", sign: ""),
+                kind: .dns(query: domain, qtype: 0, answers: []),
+                fields: ["domain": domain, "base_domain": baseDomain, "detection": "dga"])
             Task { await SecurityEventBus.shared.ingest(event) }
             logger.warning("[DNS] DGA domain: \(baseDomain)")
         }

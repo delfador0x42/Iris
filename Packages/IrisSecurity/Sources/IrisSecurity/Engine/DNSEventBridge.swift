@@ -2,7 +2,7 @@ import Foundation
 import os.log
 
 /// Bridges DNS queries from DNSStore into the DNSTunnelingDetector
-/// and emits SecurityEvents for dns_query rule matching.
+/// and emits Events for dns_query rule matching via the unified data path.
 actor DNSEventBridge {
   static let shared = DNSEventBridge()
   private let logger = Logger(subsystem: "com.wudan.iris", category: "DNSBridge")
@@ -34,7 +34,7 @@ actor DNSEventBridge {
 
   private func pollQueries() async {
     let queries = await MainActor.run { DNSStore.shared.queries }
-    var newEvents: [SecurityEvent] = []
+    var newEvents: [Event] = []
 
     for query in queries {
       guard !seenIds.contains(query.id) else { continue }
@@ -46,35 +46,26 @@ actor DNSEventBridge {
         recordType: query.recordType
       )
 
-      // Also emit as SecurityEvent for dns_query rules
+      // Emit typed Event directly
+      let processName = query.processName ?? "unknown"
       var fields: [String: String] = [
         "domain": query.domain,
         "record_type": query.recordType,
       ]
-      if !query.answers.isEmpty {
-        fields["answers"] = query.answers.joined(separator: ",")
-      }
-      if query.isBlocked {
-        fields["blocked"] = "true"
-      }
+      if !query.answers.isEmpty { fields["answers"] = query.answers.joined(separator: ",") }
+      if query.isBlocked { fields["blocked"] = "true" }
 
-      let processName = query.processName ?? "unknown"
-      newEvents.append(SecurityEvent(
+      newEvents.append(Event(
+        id: EventIDGen.shared.next(),
         source: .dns,
-        timestamp: query.timestamp,
-        eventType: "dns_query",
-        processName: processName,
-        processPath: "",
-        pid: 0,
-        fields: fields
-      ))
+        severity: .info,
+        process: ProcessRef(pid: 0, path: "", sign: ""),
+        kind: .dns(query: query.domain, qtype: 0, answers: query.answers),
+        fields: fields))
     }
 
     if !newEvents.isEmpty {
       await SecurityEventBus.shared.ingest(newEvents)
-      // Prune: reset to just the currently-live query IDs.
-      // Set.suffix() on an unordered Set gives ARBITRARY elements, not the
-      // most recent — previous code could keep old IDs and drop new ones.
       if seenIds.count > 100_000 {
         seenIds = Set(queries.map(\.id))
       }

@@ -220,24 +220,32 @@ enum ShellDeobfuscator {
 
     // MARK: - Quote splitting
 
-    /// 'cu''rl' → curl, "cu""rl" → curl
-    /// Attackers split strings to break naive substring matching
+    /// 'cu''rl' → curl — detects ACTUAL quote-splitting obfuscation.
+    /// Contradiction-based: bare '' or "" in normal scripts (AppleScript, Python) is
+    /// NOT obfuscation — it's empty strings. Real obfuscation joins adjacent quoted
+    /// segments: letter''letter where removing '' produces a meaningful command.
+    /// Only flag when the joined result contains a dangerous command.
     private static func decodeQuoteSplitting(_ text: String) -> (String, [Evidence]) {
-        let hasSingleSplit = text.contains("''") && !text.contains("'''")
-        let hasDoubleSplit = text.contains("\"\"") && !text.contains("\"\"\"")
-        guard hasSingleSplit || hasDoubleSplit else { return (text, []) }
+        // Must have adjacent quote pairs that actually join strings
+        // Pattern: letter''letter (the actual split technique)
+        let hasRealSingleSplit = text.range(of: #"[a-zA-Z]''[a-zA-Z]"#, options: .regularExpression) != nil
+        let hasRealDoubleSplit = text.range(of: #"[a-zA-Z]""[a-zA-Z]"#, options: .regularExpression) != nil
+        guard hasRealSingleSplit || hasRealDoubleSplit else { return (text, []) }
 
         var decoded = text
-        // 'foo''bar' — adjacent single quotes joining strings
-        decoded = decoded.replacingOccurrences(of: "''", with: "")
-        // "foo""bar" — adjacent double quotes
-        decoded = decoded.replacingOccurrences(of: "\"\"", with: "")
-
-        // Only flag if it actually changed something meaningful
+        if hasRealSingleSplit { decoded = decoded.replacingOccurrences(of: "''", with: "") }
+        if hasRealDoubleSplit { decoded = decoded.replacingOccurrences(of: "\"\"", with: "") }
         guard decoded != text else { return (text, []) }
+
+        // Cross-validate: does the joined result reveal a dangerous command?
+        let lower = decoded.lowercased()
+        let reveals = ["curl", "wget", "nc", "bash", "python", "perl", "ruby",
+                       "osascript", "launchctl", "chmod", "eval"]
+        guard reveals.contains(where: { lower.contains($0) }) else { return (decoded, []) }
+
         let ev = Evidence(
-            factor: "Quote-split strings — keyword fragmentation",
-            weight: 0.3, category: .content
+            factor: "Quote-split strings — keyword fragmentation (dangerous command revealed)",
+            weight: 0.5, category: .content
         )
         return (decoded, [ev])
     }

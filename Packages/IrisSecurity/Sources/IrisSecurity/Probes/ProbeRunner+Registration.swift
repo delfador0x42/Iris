@@ -23,6 +23,10 @@ extension ProbeRunner {
             CodeSignContradictionProbe.shared,
             IOKitGroundTruthProbe.shared,
             ArchitectureContradictionProbe.shared,
+            // Phase 5: compromised-host probes (assume kernel is hostile)
+            EntitlementAuditProbe.shared,
+            NECPPolicyProbe.shared,
+            FileDescriptorAuditProbe.shared,
         ])
     }
 }

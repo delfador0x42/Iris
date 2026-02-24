@@ -100,7 +100,7 @@ final class CLICommandHandler {
       await writeDump()
 
     case "watch":
-      respondWithPath(EventLogger.shared.path, action: "watch")
+      Task { respondWithPath(await EventStream.shared.jsonlPath, action: "watch") }
 
     default:
       logger.warning("Unknown CLI command: \(action)")
@@ -113,7 +113,7 @@ final class CLICommandHandler {
   private func writeStatus() async {
     await ExtensionManager.shared.checkAllExtensionStatuses()
     let em = ExtensionManager.shared
-    let detStats = await DetectionEngine.shared.stats()
+    let threatStats = await ThreatEngine.shared.stats()
     let busStats = await SecurityEventBus.shared.stats()
 
     let status: [String: Any] = [
@@ -131,10 +131,10 @@ final class CLICommandHandler {
         "loaded": CertificateStore.shared.caCertificate != nil
       ],
       "detection": [
-        "eventsProcessed": detStats.events,
-        "alertsProduced": detStats.alerts,
-        "rulesLoaded": detStats.rules,
-        "correlationRules": detStats.correlations,
+        "eventsProcessed": threatStats.events,
+        "alertsProduced": threatStats.alerts,
+        "rulesLoaded": threatStats.ruleBuckets,
+        "correlationRules": threatStats.correlations,
         "busRunning": busStats.running,
         "busIngested": busStats.ingested,
       ],
@@ -143,7 +143,7 @@ final class CLICommandHandler {
         "alertsPath": DiagnosticReporter.shared.alertPath,
         "logPath": DiagnosticReporter.shared.logPath,
         "exportPath": DiagnosticReporter.shared.exportPath,
-        "eventStream": EventLogger.shared.path,
+        "eventStream": await EventStream.shared.jsonlPath,
       ],
     ]
 
@@ -233,7 +233,7 @@ final class CLICommandHandler {
   // MARK: - Stats
 
   private func writeStats() async {
-    let det = await DetectionEngine.shared.stats()
+    let det = await ThreatEngine.shared.stats()
     let bus = await SecurityEventBus.shared.stats()
     let alertCounts = await AlertStore.shared.countBySeverity()
 
@@ -242,7 +242,7 @@ final class CLICommandHandler {
       "detection": [
         "eventsProcessed": det.events,
         "alertsProduced": det.alerts,
-        "rulesLoaded": det.rules,
+        "rulesLoaded": det.ruleBuckets,
         "correlationRules": det.correlations,
       ],
       "eventBus": [
@@ -276,7 +276,7 @@ final class CLICommandHandler {
     if let cached { result = cached }
     else { result = await SecurityAssessor.shared.scanThreats { _ in } }
 
-    let det = await DetectionEngine.shared.stats()
+    let det = await ThreatEngine.shared.stats()
     let bus = await SecurityEventBus.shared.stats()
     let alerts = await AlertStore.shared.recent(500)
     let probeResults = ProbeStore.readLatest()
@@ -296,7 +296,7 @@ final class CLICommandHandler {
       campaignCount: result.fusion.campaigns.count,
       detectionStats: DetectionStats(
         eventsProcessed: det.events, alertsProduced: det.alerts,
-        rulesLoaded: det.rules, correlationRulesLoaded: det.correlations,
+        rulesLoaded: det.ruleBuckets, correlationRulesLoaded: det.correlations,
         busRunning: bus.running, busIngested: bus.ingested),
       alerts: alerts.map {
         DiagnosticAlert(
@@ -405,7 +405,7 @@ final class CLICommandHandler {
   // MARK: - Dump (all store state)
 
   private func writeDump() async {
-    let det = await DetectionEngine.shared.stats()
+    let det = await ThreatEngine.shared.stats()
     let bus = await SecurityEventBus.shared.stats()
     let alerts = await AlertStore.shared.recent(500)
     let probeResults = ProbeStore.readLatest()
@@ -435,7 +435,7 @@ final class CLICommandHandler {
       },
       detection: DumpDetectionStats(
         eventsProcessed: det.events, alertsProduced: det.alerts,
-        rulesLoaded: det.rules, correlationRules: det.correlations,
+        rulesLoaded: det.ruleBuckets, correlationRules: det.correlations,
         busRunning: bus.running, busIngested: bus.ingested),
       probes: probeResults.map { r in
         ProbeOutput(
@@ -447,7 +447,7 @@ final class CLICommandHandler {
           },
           timestamp: ISO8601DateFormatter().string(from: r.timestamp))
       },
-      eventStreamPath: EventLogger.shared.path
+      eventStreamPath: await EventStream.shared.jsonlPath
     )
 
     let encoder = JSONEncoder()

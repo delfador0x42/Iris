@@ -12,8 +12,8 @@ public actor ProcessIntegrityChecker {
     private let logger = Logger(subsystem: "com.wudan.iris", category: "ProcessIntegrity")
 
     /// Check all running processes for integrity violations.
-    /// System binaries (sealed volume) skip expensive dylib enum + __TEXT check —
-    /// checkCodeSigningFlags still catches CS_DEBUGGED/CS_VALID anomalies cheaply.
+    /// ZERO-TRUST: no path-based skips. Expensive checks (task_for_pid) naturally
+    /// fail on hardened system processes — no false positives, just honest scanning.
     public func scan(snapshot: ProcessSnapshot? = nil) async -> [ProcessAnomaly] {
         let snap = snapshot ?? ProcessSnapshot.capture()
         var anomalies: [ProcessAnomaly] = []
@@ -23,32 +23,23 @@ public actor ProcessIntegrityChecker {
             let path = snap.path(for: pid)
             guard !path.isEmpty else { continue }
 
-            let isSystem = path.hasPrefix("/System/") || path.hasPrefix("/usr/libexec/")
-                || path.hasPrefix("/usr/sbin/") || path.hasPrefix("/usr/bin/")
-                || path.hasPrefix("/sbin/")
+            // 1. Injected dylibs (task_for_pid + dyld image enum).
+            // task_for_pid fails on hardened processes → returns empty, no FP.
+            let injected = checkInjectedDylibs(pid: pid, binaryPath: path)
+            anomalies.append(contentsOf: injected)
 
-            // 1. Injected dylibs — EXPENSIVE (task_for_pid + dyld image enum).
-            // Skip for system binaries: sealed volume prevents tampering, dyld shared cache.
-            if !isSystem {
-                let injected = checkInjectedDylibs(pid: pid, binaryPath: path)
-                anomalies.append(contentsOf: injected)
-            }
-
-            // 2. Code signing flags — CHEAP (proc_pidinfo + csops, ~2 syscalls). Always run.
+            // 2. Code signing flags (proc_pidinfo + csops, ~2 syscalls). Always run.
             let csAnomalies = checkCodeSigningFlags(pid: pid, path: path)
             anomalies.append(contentsOf: csAnomalies)
 
-            // 3. Binary hash — only checks system binaries, uses cached CodeSignValidator.
+            // 3. Binary hash — system binaries validated via SecStaticCodeCheckValidity.
             let hashAnomaly = await checkBinaryHash(pid: pid, path: path)
             if let a = hashAnomaly { anomalies.append(a) }
 
-            // 4. __TEXT integrity — EXPENSIVE (reads binary + task_for_pid + memory hash).
-            // Skip for system binaries: sealed volume prevents disk tampering,
-            // in-memory patching needs task_for_pid → caught by CS_DEBUGGED above.
-            if !isSystem {
-                if let textAnomaly = TextIntegrityChecker.check(pid: pid, binaryPath: path) {
-                    anomalies.append(textAnomaly)
-                }
+            // 4. __TEXT integrity (reads binary + task_for_pid + memory hash).
+            // task_for_pid fails on hardened processes → returns nil, no FP.
+            if let textAnomaly = TextIntegrityChecker.check(pid: pid, binaryPath: path) {
+                anomalies.append(textAnomaly)
             }
         }
 
@@ -56,57 +47,73 @@ public actor ProcessIntegrityChecker {
     }
 
     /// Compare dylibs actually loaded in a process vs what the binary declares.
-    /// Aggregates per-process — one finding with all undeclared dylibs, not one per dylib.
-    /// System framework loads from sealed volume are whitelisted (can't be tampered).
+    ///
+    /// ZERO-TRUST: No process name allowlists. Detection is path-based:
+    /// - System libraries (sealed volume): always expected, skip.
+    /// - Dylibs from same .app bundle: framework loading, not injection.
+    /// - Dylibs from staging dirs (/tmp/, /var/tmp/, /var/folders/): REAL INJECTION.
+    /// - Dylibs from standard paths (/opt/, /Users/, /Applications/): dlopen() runtime loading.
+    ///
+    /// Why staging-only: DyldEnvDetector catches DYLD_INSERT_LIBRARIES.
+    /// checkCodeSigningFlags catches CS_DEBUGGED (task_for_pid injection).
+    /// This scanner's unique value: dylibs dropped in staging directories.
     private func checkInjectedDylibs(pid: pid_t, binaryPath: String) -> [ProcessAnomaly] {
         let processName = (binaryPath as NSString).lastPathComponent
 
         guard let machInfo = RustMachOParser.parse(binaryPath) else { return [] }
 
-        // Build declared set from ALL load command types (load + weak + reexport)
         let allDeclared = machInfo.loadDylibs + machInfo.weakDylibs + machInfo.reexportDylibs
         let declaredNames = Set(allDeclared.map { dylibLeafName($0) })
 
         let enumResult = DylibEnumerator.loadedImagesWithMethod(for: pid)
+        let appBundle = extractAppBundlePath(binaryPath)
 
-        // Collect undeclared, non-system dylibs
-        var undeclared: [String] = []
+        var staged: [String] = []
+        var externalCount = 0
         for image in enumResult.images {
             if image == binaryPath { continue }
-            // System libs from sealed volume / dyld shared cache — always expected
             if isSystemLibrary(image) { continue }
             let leaf = dylibLeafName(image)
-            if !declaredNames.contains(leaf) {
-                undeclared.append(image)
+            if declaredNames.contains(leaf) { continue }
+            if let bundle = appBundle, image.hasPrefix(bundle) { continue }
+
+            // Staging directories: world-writable paths where attackers drop payloads
+            if isStagingPath(image) {
+                staged.append(image)
+            } else {
+                externalCount += 1
             }
         }
 
-        guard !undeclared.isEmpty else { return [] }
-
-        // Severity: unsigned non-system dylib = critical, signed third-party = medium
-        let severity: AnomalySeverity = undeclared.count > 5 ? .critical : .high
+        guard !staged.isEmpty else { return [] }
 
         var evidence = [
-            "injected_count: \(undeclared.count)",
+            "staged_count: \(staged.count)",
+            "external_undeclared: \(externalCount)",
             "declared_count: \(declaredNames.count)",
-            "loaded_count: \(enumResult.images.count)",
             "enum_method: \(enumResult.method.rawValue)",
             "binary: \(binaryPath)",
         ]
-        evidence += undeclared.prefix(10).map { "injected_dylib: \($0)" }
-        if undeclared.count > 10 { evidence.append("... +\(undeclared.count - 10) more") }
+        evidence += staged.prefix(10).map { "staged_dylib: \($0)" }
 
         return [.forProcess(
             pid: pid, name: processName, path: binaryPath,
-            technique: "Dylib Injection Detected",
-            description: "\(processName) (PID \(pid)) has \(undeclared.count) non-system dylib(s) not declared in Mach-O headers.",
-            severity: severity, mitreID: "T1055.001",
+            technique: "Dylib Injection from Staging Directory",
+            description: "\(processName) (PID \(pid)) has \(staged.count) undeclared dylib(s) from staging directories.",
+            severity: .critical, mitreID: "T1055.001",
             scannerId: "process_integrity",
             enumMethod: enumResult.method == .dyld
                 ? "task_info(TASK_DYLD_INFO) → dyld_all_image_infos"
                 : "PROC_PIDREGIONPATHINFO",
             evidence: evidence
         )]
+    }
+
+    /// World-writable staging directories where attackers drop payloads
+    private func isStagingPath(_ path: String) -> Bool {
+        path.hasPrefix("/tmp/") || path.hasPrefix("/private/tmp/")
+            || path.hasPrefix("/var/tmp/") || path.hasPrefix("/private/var/tmp/")
+            || path.hasPrefix("/var/folders/") || path.hasPrefix("/private/var/folders/")
     }
 
     /// Check code signing flags for anomalies (two layers: proc_bsdinfo + csops kernel)
@@ -163,23 +170,37 @@ public actor ProcessIntegrityChecker {
             ))
         }
 
+        // Contradiction-based CS_HARD|CS_KILL check for system binaries.
+        // Apple doesn't set CS_HARD|CS_KILL on all system binaries — that's a
+        // policy choice, not evidence of tampering. The real contradiction is:
+        // kernel says CS_VALID=true (signature intact) but CS_HARD|CS_KILL missing
+        // AND the binary's signature is INVALID on disk. That means someone removed
+        // hardened flags post-signing.
+        //
+        // If CS_VALID is true, Apple's signing decision stands — no contradiction.
         if path.hasPrefix("/System/") || path.hasPrefix("/usr/") {
             if csFlags & 0x0100 == 0 && csFlags & 0x0200 == 0 {
-                anomalies.append(.forProcess(
-                    pid: pid, name: processName, path: path,
-                    technique: "Missing Hardened Runtime Flags",
-                    description: "System binary \(processName) missing CS_HARD|CS_KILL flags. May have been patched.",
-                    severity: .high, mitreID: "T1574",
-                    scannerId: "process_integrity",
-                    enumMethod: "csops(CS_OPS_STATUS) + proc_pidinfo(PROC_PIDTBSDINFO)",
-                    evidence: [
-                        "pbi_flags: \(flagsHex)",
-                        "kernel_cs: \(kernelCS?.flagsHex ?? "unavailable")",
-                        "CS_HARD: \(csFlags & 0x0100 != 0 ? "SET" : "MISSING")",
-                        "CS_KILL: \(csFlags & 0x0200 != 0 ? "SET" : "MISSING")",
-                        "binary: \(path)",
-                    ]
-                ))
+                // Only flag if there's a contradiction: kernel says valid but
+                // we can detect the signature was actually tampered with.
+                if let ks = kernelCS, !ks.isValid {
+                    anomalies.append(.forProcess(
+                        pid: pid, name: processName, path: path,
+                        technique: "Tampered System Binary (CS flags stripped)",
+                        description: "System binary \(processName) missing CS_HARD|CS_KILL AND kernel reports invalid signature. Possible rootkit patch.",
+                        severity: .critical, mitreID: "T1574",
+                        scannerId: "process_integrity",
+                        enumMethod: "csops(CS_OPS_STATUS) + proc_pidinfo(PROC_PIDTBSDINFO)",
+                        evidence: [
+                            "pbi_flags: \(flagsHex)",
+                            "kernel_cs: \(ks.flagsHex)",
+                            "CS_VALID: false",
+                            "CS_HARD: MISSING",
+                            "CS_KILL: MISSING",
+                            "binary: \(path)",
+                        ]
+                    ))
+                }
+                // CS_VALID=true + missing CS_HARD|CS_KILL = Apple's policy, not a contradiction
             }
         }
 
@@ -227,8 +248,19 @@ public actor ProcessIntegrityChecker {
         (path as NSString).lastPathComponent
     }
 
-    /// System libraries from the sealed system volume / dyld shared cache.
-    /// These cannot be tampered with on modern macOS — always expected loads.
+    /// Extract the .app bundle root from a binary path.
+    /// e.g. "/Applications/Brave.app/Contents/MacOS/Brave" → "/Applications/Brave.app/"
+    /// Returns nil if binary isn't inside an .app bundle.
+    private func extractAppBundlePath(_ path: String) -> String? {
+        guard let range = path.range(of: ".app/") else { return nil }
+        return String(path[...range.upperBound])
+    }
+
+    /// Dyld shared cache paths — these dylibs are loaded via the shared cache,
+    /// NOT via LC_LOAD_DYLIB, so they always appear "undeclared." Filtering them
+    /// prevents false positives in the undeclared-dylib check.
+    /// NOTE: On a compromised kernel, proc_pidinfo could report spoofed paths.
+    /// This is a technical filter (dyld behavior), not a security trust assumption.
     private func isSystemLibrary(_ path: String) -> Bool {
         path.hasPrefix("/System/Library/") ||
         path.hasPrefix("/usr/lib/") ||

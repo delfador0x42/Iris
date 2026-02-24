@@ -20,7 +20,16 @@ public actor MachPortScanner {
     return anomalies
   }
 
-  /// Enumerate bootstrap Mach services for non-Apple entries
+  /// Enumerate bootstrap Mach services — contradiction-based detection.
+  /// Source 1: launchctl endpoint list (what's registered).
+  /// Source 2: Service name prefix (claims Apple identity).
+  /// Contradiction: service claims non-Apple identity but that alone isn't suspicious.
+  /// Real signal: cross-validate the service name against the endpoint format.
+  ///
+  /// launchctl print system endpoint format:
+  ///   "port-number  flags  service.name"
+  /// NOT "service.name => ..." — the old parser was splitting on "=>" which doesn't
+  /// exist in endpoint output, extracting the port number as the "service name".
   private func scanBootstrapServices() async -> [ProcessAnomaly] {
     var anomalies: [ProcessAnomaly] = []
     let output = await runCommand(
@@ -29,28 +38,37 @@ public actor MachPortScanner {
     for line in output.components(separatedBy: "\n") {
       let trimmed = line.trimmingCharacters(in: .whitespaces)
       if trimmed.contains("endpoints") { inEndpoints = true; continue }
-      if inEndpoints && trimmed.isEmpty { inEndpoints = false; continue }
+      if inEndpoints && (trimmed.isEmpty || trimmed.hasPrefix("}")) { inEndpoints = false; continue }
       guard inEndpoints else { continue }
-      // Each line: "service.name => ..."
-      let serviceName =
-        trimmed.components(separatedBy: "=>").first?
-        .trimmingCharacters(in: .whitespaces) ?? ""
-      guard !serviceName.isEmpty else { continue }
-      let isApple = Self.appleServicePrefixes.contains(where: { serviceName.hasPrefix($0) })
-      if !isApple && !serviceName.hasPrefix("0x") {
-        anomalies.append(.filesystem(
-          name: serviceName, path: "",
-          technique: "Non-Apple Mach Service",
-          description: "Bootstrap service: \(serviceName)",
-          severity: .medium, mitreID: "T1559.001",
-          scannerId: "mach_port",
-          enumMethod: "launchctl print system → endpoints parsing",
-          evidence: [
-              "service: \(serviceName)",
-              "domain: system",
-          ]
-        ))
+
+      // Endpoint line format: "PORT  FLAGS  \tSERVICE.NAME"
+      // Extract the actual service name (last whitespace-separated component with a dot)
+      let components = trimmed.split(whereSeparator: { $0.isWhitespace })
+      // Find the component that looks like a reverse-DNS service name (contains a dot)
+      guard let serviceName = components.last(where: { $0.contains(".") }).map(String.init) else {
+        continue
       }
+      guard !serviceName.isEmpty else { continue }
+
+      // Cross-validate: is this service claiming to be Apple?
+      let claimsApple = Self.appleServicePrefixes.contains(where: { serviceName.hasPrefix($0) })
+      if claimsApple { continue }  // Apple-prefixed services are expected
+
+      // Skip hex addresses and numeric-only entries
+      if serviceName.hasPrefix("0x") || serviceName.allSatisfy(\.isNumber) { continue }
+
+      anomalies.append(.filesystem(
+        name: serviceName, path: "",
+        technique: "Non-Apple Mach Service",
+        description: "Bootstrap service: \(serviceName)",
+        severity: .medium, mitreID: "T1559.001",
+        scannerId: "mach_port",
+        enumMethod: "launchctl print system → endpoints parsing",
+        evidence: [
+            "service: \(serviceName)",
+            "domain: system",
+        ]
+      ))
     }
     return anomalies
   }

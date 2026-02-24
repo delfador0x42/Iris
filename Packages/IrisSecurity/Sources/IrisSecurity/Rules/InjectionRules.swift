@@ -43,18 +43,10 @@ public enum InjectionRules {
                 mitreId: "T1055.008",
                 mitreName: "Ptrace System Calls"
             ),
-            // Non-Apple kext loading (Ventir, WeaponX)
-            DetectionRule(
-                id: "inject_kext_load",
-                name: "Third-party kernel extension loaded",
-                eventType: "kext_load",
-                conditions: [
-                    .processNotAppleSigned,
-                ],
-                severity: .critical,
-                mitreId: "T1547.006",
-                mitreName: "Kernel Modules and Extensions"
-            ),
+            // kext loading: KextCensusProbe handles 3-way contradiction detection.
+            // Single-event rule removed — checking caller signing is meaningless
+            // because kextload is always Apple-signed. Real detection requires
+            // cross-referencing the kext bundle ID across KextManager/IOService/diagnostics.
         ]
     }
 }

@@ -109,22 +109,30 @@ public actor PersistenceMonitor {
     }
 
     /// Diff current state against last snapshot.
-    /// Uses SHA256 to verify actual content changes (not just mtime bumps).
+    /// Contradiction-based: only flags items where two sources disagree.
+    /// Source 1: IPSW baseline (what SHOULD exist on stock macOS).
+    /// Source 2: Current filesystem state.
+    /// Source 3: Previous snapshot (temporal delta).
+    ///
+    /// On first scan (no snapshot): cross-validate against baseline + code signature.
+    /// Items in baseline with valid signatures = consistent (not flagged).
+    /// Items NOT in baseline = genuinely new persistence (flagged).
     public func diffAgainstSnapshot() async -> [PersistenceChange] {
         var changes: [PersistenceChange] = []
         let scanner = PersistenceScanner.shared
         let currentItems = await scanner.scanAll()
         let fm = FileManager.default
+        let isFirstScan = previousSnapshot.isEmpty
 
         for item in currentItems {
             guard let attrs = try? fm.attributesOfItem(atPath: item.path),
                   let modDate = attrs[.modificationDate] as? Date else { continue }
 
             if let prev = previousSnapshot[item.path] {
-                // Only flag if content actually changed (hash mismatch), not just mtime
+                // Temporal contradiction: snapshot says hash X, disk now says hash Y
                 let currentHash = hashFile(item.path)
                 let contentChanged = (currentHash != nil && prev.hash != nil && currentHash != prev.hash)
-                    || (modDate > prev.modDate && prev.hash == nil)  // can't verify, trust mtime
+                    || (modDate > prev.modDate && prev.hash == nil)
                 if contentChanged {
                     changes.append(PersistenceChange(
                         path: item.path,
@@ -135,7 +143,27 @@ public actor PersistenceMonitor {
                         processPath: ""
                     ))
                 }
+            } else if isFirstScan {
+                // First scan: cross-validate against baseline + signature.
+                // Baseline says it should exist AND signature is valid = consistent.
+                // Not in baseline OR signature broken = contradiction worth reporting.
+                if item.isBaselineItem && item.signingStatus != .invalid {
+                    continue  // Baseline and signature agree: expected item, skip
+                }
+                if item.isAppleSigned && item.signingStatus != .invalid {
+                    continue  // Apple-signed with valid sig: consistent, skip
+                }
+                // Non-baseline item or broken signature: genuine finding
+                changes.append(PersistenceChange(
+                    path: item.path,
+                    persistenceType: item.type,
+                    eventType: .created,
+                    pid: 0,
+                    processName: "unknown",
+                    processPath: ""
+                ))
             } else {
+                // Subsequent scan: item wasn't in previous snapshot = genuinely new
                 changes.append(PersistenceChange(
                     path: item.path,
                     persistenceType: item.type,
@@ -147,18 +175,20 @@ public actor PersistenceMonitor {
             }
         }
 
-        // Check for deleted items
-        let currentPaths = Set(currentItems.map(\.path))
-        for (path, _) in previousSnapshot where !currentPaths.contains(path) {
-            if let type = matchesPersistenceLocation(path) {
-                changes.append(PersistenceChange(
-                    path: path,
-                    persistenceType: type,
-                    eventType: .deleted,
-                    pid: 0,
-                    processName: "unknown",
-                    processPath: ""
-                ))
+        // Check for deleted items (only if we have a prior snapshot)
+        if !isFirstScan {
+            let currentPaths = Set(currentItems.map(\.path))
+            for (path, _) in previousSnapshot where !currentPaths.contains(path) {
+                if let type = matchesPersistenceLocation(path) {
+                    changes.append(PersistenceChange(
+                        path: path,
+                        persistenceType: type,
+                        eventType: .deleted,
+                        pid: 0,
+                        processName: "unknown",
+                        processPath: ""
+                    ))
+                }
             }
         }
 

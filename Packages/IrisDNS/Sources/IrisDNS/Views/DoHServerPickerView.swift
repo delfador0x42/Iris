@@ -3,7 +3,7 @@ import SwiftUI
 // MARK: - DoH Server Picker
 
 struct DoHServerPickerView: View {
-    @ObservedObject var store: DNSStore
+    var store: DNSStore
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {

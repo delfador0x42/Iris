@@ -1,35 +1,34 @@
-import Combine
 import Foundation
 import os.log
 
 /// State store for network security monitoring
-@MainActor
-public final class SecurityStore: ObservableObject {
+@MainActor @Observable
+public final class SecurityStore {
 
   public static let shared = SecurityStore()
 
-  // MARK: - Published State
+  // MARK: - State
 
   /// All active network connections grouped by binary identity key
-  @Published public internal(set) var connectionsByProcess: [String: [NetworkConnection]] = [:]
+  public internal(set) var connectionsByProcess: [String: [NetworkConnection]] = [:]
 
   /// All tracked connections
-  @Published public internal(set) var connections: [NetworkConnection] = []
+  public internal(set) var connections: [NetworkConnection] = []
 
   /// Security rules
-  @Published public internal(set) var rules: [SecurityRule] = []
+  public internal(set) var rules: [SecurityRule] = []
 
   /// Whether connected to the extension
-  @Published public internal(set) var isConnected = false
+  public internal(set) var isConnected = false
 
   /// Whether the network filter is actively monitoring (passthrough when false)
-  @Published public internal(set) var filteringEnabled = true
+  public internal(set) var filteringEnabled = true
 
   /// Last update timestamp
-  @Published public internal(set) var lastUpdate: Date?
+  public internal(set) var lastUpdate: Date?
 
   /// Error message if any
-  @Published public internal(set) var errorMessage: String?
+  public internal(set) var errorMessage: String?
 
   // MARK: - Properties
 
@@ -51,19 +50,19 @@ public final class SecurityStore: ObservableObject {
   // MARK: - Derived State (updated when connections change)
 
   /// Unique processes with connections
-  @Published public internal(set) var processes: [ProcessSummary] = []
+  public internal(set) var processes: [ProcessSummary] = []
 
   /// Total bytes uploaded
-  @Published public internal(set) var totalBytesUp: UInt64 = 0
+  public internal(set) var totalBytesUp: UInt64 = 0
 
   /// Total bytes downloaded
-  @Published public internal(set) var totalBytesDown: UInt64 = 0
+  public internal(set) var totalBytesDown: UInt64 = 0
 
   /// Count of connections with geolocation
-  @Published public internal(set) var geolocatedCount: Int = 0
+  public internal(set) var geolocatedCount: Int = 0
 
   /// Unique countries in connections
-  @Published public internal(set) var uniqueCountries: Set<String> = []
+  public internal(set) var uniqueCountries: Set<String> = []
 
   /// Recalculates all derived state from current connections.
   func updateDerivedState() {
@@ -129,8 +128,5 @@ public final class SecurityStore: ObservableObject {
     self.dataSource = dataSource
   }
 
-  deinit {
-    refreshTimer?.invalidate()
-    xpcConnection?.invalidate()
-  }
+  // Singleton — never deallocated, no deinit needed
 }

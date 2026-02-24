@@ -3,7 +3,7 @@ import SwiftUI
 /// Main findings view — streams results as scanners complete.
 /// Groups duplicates by (technique, processName). Uses ThemedScrollView for styled scrollbar.
 struct ScanResultsView: View {
-  @ObservedObject var session: ScanSession
+  var session: ScanSession
 
   var body: some View {
     ZStack {

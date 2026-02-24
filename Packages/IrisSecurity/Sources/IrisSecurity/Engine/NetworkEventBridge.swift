@@ -1,8 +1,8 @@
 import Foundation
 import os.log
 
-/// Bridges network connections from SecurityStore into the SecurityEvent pipeline.
-/// Converts NetworkConnection objects to SecurityEvent with eventType "connection",
+/// Bridges network connections from SecurityStore into the unified Event pipeline.
+/// Converts NetworkConnection objects to Events with Kind.connect,
 /// enabling C2, exfiltration, and APT detection rules to fire on network data.
 actor NetworkEventBridge {
   static let shared = NetworkEventBridge()
@@ -13,7 +13,6 @@ actor NetworkEventBridge {
   private var isRunning = false
   private var pollTask: Task<Void, Never>?
 
-  /// Start polling SecurityStore for new connections
   func start() {
     guard !isRunning else { return }
     isRunning = true
@@ -30,13 +29,13 @@ actor NetworkEventBridge {
   private func pollLoop() async {
     while isRunning && !Task.isCancelled {
       await pollConnections()
-      try? await Task.sleep(nanoseconds: 2_000_000_000) // 2s matches SecurityStore refresh
+      try? await Task.sleep(nanoseconds: 2_000_000_000)
     }
   }
 
   private func pollConnections() async {
     let connections = await MainActor.run { SecurityStore.shared.connections }
-    var newEvents: [SecurityEvent] = []
+    var newEvents: [Event] = []
 
     for conn in connections {
       guard !seenIds.contains(conn.id) else { continue }
@@ -56,29 +55,24 @@ actor NetworkEventBridge {
       } else {
         fields["remote_host"] = conn.remoteAddress
       }
-      if let country = conn.remoteCountryCode {
-        fields["remote_country"] = country
-      }
+      if let country = conn.remoteCountryCode { fields["remote_country"] = country }
 
-      let isApple = conn.signingId?.hasPrefix("com.apple.") ?? false
-      newEvents.append(SecurityEvent(
+      let proto: Proto = conn.protocol == .udp ? .udp : .tcp
+      newEvents.append(Event(
+        id: EventIDGen.shared.next(),
         source: .network,
-        timestamp: conn.timestamp,
-        eventType: "connection",
-        processName: conn.processName,
-        processPath: conn.processPath,
-        pid: conn.processId,
-        signingId: conn.signingId,
-        isAppleSigned: isApple,
-        fields: fields
-      ))
+        severity: .info,
+        process: ProcessRef(
+          pid: conn.processId, path: conn.processPath,
+          sign: conn.signingId ?? ""),
+        kind: .connect(
+          remote: NetAddr(conn.remoteAddress, conn.remotePort),
+          proto: proto),
+        fields: fields))
     }
 
     if !newEvents.isEmpty {
       await SecurityEventBus.shared.ingest(newEvents)
-      // Prune seen set to avoid unbounded growth.
-      // Set is unordered — suffix() gives arbitrary entries, not "most recent".
-      // Instead, reset to just the current live connections.
       if seenIds.count > 50_000 {
         seenIds = Set(connections.map(\.id))
       }

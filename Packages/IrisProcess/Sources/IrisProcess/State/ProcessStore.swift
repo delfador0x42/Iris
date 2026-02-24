@@ -1,18 +1,17 @@
 import Foundation
-import Combine
 import os.log
 
 /// State store for process monitoring
-@MainActor
-public final class ProcessStore: ObservableObject {
+@MainActor @Observable
+public final class ProcessStore {
 
     // MARK: - Singleton
 
     public static let shared = ProcessStore()
 
-    // MARK: - Published State
+    // MARK: - State
 
-    @Published public internal(set) var processes: [ProcessInfo] = [] {
+    public internal(set) var processes: [ProcessInfo] = [] {
         didSet {
             updateDisplayedProcesses()
             livePidPaths = Set(processes.map { "\($0.pid):\($0.path)" })
@@ -21,24 +20,24 @@ public final class ProcessStore: ObservableObject {
 
     /// O(1) lookup set for checking if a (pid, path) pair is currently live.
     /// Updated in processes didSet — avoids O(N) scan per history row.
-    @Published public internal(set) var livePidPaths: Set<String> = []
-    @Published public internal(set) var processHistory: [ProcessInfo] = []
-    @Published public internal(set) var isLoading = false
-    @Published public internal(set) var lastUpdate: Date?
-    @Published public internal(set) var errorMessage: String?
-    @Published public var filterText: String = "" { didSet { updateDisplayedProcesses() } }
-    @Published public var showOnlySuspicious: Bool = false { didSet { updateDisplayedProcesses() } }
-    @Published public var sortOrder: SortOrder = .name { didSet { updateDisplayedProcesses() } }
-    @Published public var viewMode: ViewMode = .monitor
+    public internal(set) var livePidPaths: Set<String> = []
+    public internal(set) var processHistory: [ProcessInfo] = []
+    public internal(set) var isLoading = false
+    public internal(set) var lastUpdate: Date?
+    public internal(set) var errorMessage: String?
+    public var filterText: String = "" { didSet { updateDisplayedProcesses() } }
+    public var showOnlySuspicious: Bool = false { didSet { updateDisplayedProcesses() } }
+    public var sortOrder: SortOrder = .name { didSet { updateDisplayedProcesses() } }
+    public var viewMode: ViewMode = .monitor
 
     /// Whether process data comes from ES extension (true) or sysctl polling (false)
-    @Published public internal(set) var isUsingEndpointSecurity = false
+    public internal(set) var isUsingEndpointSecurity = false
 
     /// Whether the ES extension is actively running
-    @Published public internal(set) var esExtensionStatus: ESExtensionStatus = .unknown
+    public internal(set) var esExtensionStatus: ESExtensionStatus = .unknown
 
     /// Whether ExecPolicy enforcement is active (false = audit-only, true = blocking)
-    @Published public var enforcementEnabled = false
+    public var enforcementEnabled = false
 
     public enum ESExtensionStatus: String {
         case unknown = "Unknown"
@@ -88,10 +87,10 @@ public final class ProcessStore: ObservableObject {
     // MARK: - Derived State (updated via didSet, not recomputed per render)
 
     /// Filtered and sorted processes
-    @Published public internal(set) var displayedProcesses: [ProcessInfo] = []
+    public internal(set) var displayedProcesses: [ProcessInfo] = []
 
     /// Count of suspicious processes
-    @Published public internal(set) var suspiciousCount: Int = 0
+    public internal(set) var suspiciousCount: Int = 0
 
     /// Total process count
     public var totalCount: Int { processes.count }
@@ -160,8 +159,5 @@ public final class ProcessStore: ObservableObject {
         self.dataSource = dataSource
     }
 
-    deinit {
-        refreshTimer?.invalidate()
-        xpcConnection?.invalidate()
-    }
+    // Singleton — never deallocated, no deinit needed
 }

@@ -183,4 +183,20 @@ typedef struct {
 /// Reads up to 3MB. Returns 0=ok, -1=too small/error, -2=arg error, -3=known format.
 int32_t iris_file_entropy_full(const char *path, IrisEntropyResult *out);
 
+// ============================================================
+// TLSH (locality-sensitive hashing for binary similarity)
+// ============================================================
+
+/// Compute TLSH hash of a file. Returns heap-allocated 70-char hex string.
+/// Free with iris_free_string. Returns NULL if file unreadable or <50 bytes.
+char *iris_tlsh_file(const char *path);
+
+/// Compute TLSH hash of raw bytes. Returns heap-allocated hex string.
+/// Free with iris_free_string. Returns NULL if data <50 bytes.
+char *iris_tlsh_bytes(const uint8_t *data, size_t len);
+
+/// Distance between two TLSH hashes (70 hex chars each).
+/// 0 = identical, <30 = very similar, <100 = similar. Returns -1 on invalid input.
+int32_t iris_tlsh_distance(const char *hash1, const char *hash2);
+
 #endif

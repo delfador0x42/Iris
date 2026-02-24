@@ -7,7 +7,7 @@ struct ConnectionConversationView: View {
     let connection: NetworkConnection
     var onDismiss: () -> Void = {}
 
-    @EnvironmentObject private var store: SecurityStore
+    var store = SecurityStore.shared
     @State var segments: [CaptureSegment] = []
     @State private var isLoading = true
     @State private var autoScroll = true

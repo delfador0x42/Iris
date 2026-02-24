@@ -25,23 +25,23 @@ extension StealthScanner {
         return anomalies
     }
 
-    /// At jobs — /usr/lib/cron/at.* and /private/var/at/jobs/
+    /// At jobs — only actual scheduled jobs in /private/var/at/jobs/.
+    /// Contradiction-based: at.deny and at.allow in /usr/lib/cron/ are stock macOS
+    /// config files (they control who can USE `at`), not scheduled jobs.
+    /// Only flag files in the actual jobs spool directory.
     func scanAtJobs() async -> [ProcessAnomaly] {
         var anomalies: [ProcessAnomaly] = []
-        let dirs = ["/private/var/at/jobs", "/usr/lib/cron"]
-
-        for dir in dirs {
-            guard let files = try? FileManager.default.contentsOfDirectory(atPath: dir) else {
-                continue
-            }
-            for file in files where file.hasPrefix("a") || file.hasPrefix("at.") {
-                anomalies.append(.filesystem(
-                    name: file, path: "\(dir)/\(file)",
-                    technique: "At Job Persistence",
-                    description: "Scheduled at job found: \(dir)/\(file). Rarely used legitimately on macOS.",
-                    severity: .high, mitreID: "T1053.002"
-                ))
-            }
+        let jobsDir = "/private/var/at/jobs"
+        guard let files = try? FileManager.default.contentsOfDirectory(atPath: jobsDir) else {
+            return anomalies
+        }
+        for file in files {
+            anomalies.append(.filesystem(
+                name: file, path: "\(jobsDir)/\(file)",
+                technique: "At Job Persistence",
+                description: "Scheduled at job found: \(jobsDir)/\(file). Rarely used legitimately on macOS.",
+                severity: .high, mitreID: "T1053.002"
+            ))
         }
         return anomalies
     }

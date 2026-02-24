@@ -2,9 +2,9 @@ import SwiftUI
 
 /// Network monitor header — NieR aesthetic.
 struct NetworkMonitorHeaderView: View {
-    @ObservedObject var store: SecurityStore
+    var store: SecurityStore
     @ObservedObject var extensionManager: ExtensionManager
-    @ObservedObject var dnsStore = DNSStore.shared
+    var dnsStore = DNSStore.shared
     @Binding var viewMode: NetworkViewMode
 
     var body: some View {

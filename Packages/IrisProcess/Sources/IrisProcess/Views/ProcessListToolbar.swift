@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Process toolbar — NieR aesthetic.
 struct ProcessListToolbar: View {
-    @ObservedObject var store: ProcessStore
+    @Bindable var store: ProcessStore
 
     var body: some View {
         HStack(spacing: 10) {

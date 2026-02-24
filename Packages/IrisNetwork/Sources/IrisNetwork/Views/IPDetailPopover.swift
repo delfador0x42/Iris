@@ -6,7 +6,6 @@ struct IPDetailPopover: View {
     let aggregated: AggregatedConnection
     var onViewTraffic: ((NetworkConnection) -> Void)?
     var onViewPlaintext: ((NetworkConnection) -> Void)?
-    @EnvironmentObject private var store: SecurityStore
     @Environment(\.dismiss) private var dismiss
     @State var showHTTPRawDetail = false
 
@@ -67,7 +66,7 @@ struct IPDetailPopover: View {
                     Button {
                         dismiss()
                         Task {
-                            await store.allowEndpoint(
+                            await SecurityStore.shared.allowEndpoint(
                                 processPath: connection.processPath,
                                 signingId: connection.signingId,
                                 remoteAddress: connection.remoteAddress,
@@ -87,7 +86,7 @@ struct IPDetailPopover: View {
                     Button {
                         dismiss()
                         Task {
-                            await store.blockEndpoint(
+                            await SecurityStore.shared.blockEndpoint(
                                 processPath: connection.processPath,
                                 signingId: connection.signingId,
                                 remoteAddress: connection.remoteAddress,

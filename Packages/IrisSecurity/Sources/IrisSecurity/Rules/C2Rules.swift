@@ -100,18 +100,9 @@ public enum C2Rules {
             mitreName: "Remote Services: SSH"
         ))
 
-        // XPC connection by non-system process to privileged service
-        rules.append(DetectionRule(
-            id: "c2_xpc_priv_connect",
-            name: "Non-system XPC connection to privileged service",
-            eventType: "xpc_connect",
-            conditions: [
-                .processNotAppleSigned,
-            ],
-            severity: .medium,
-            mitreId: "T1559",
-            mitreName: "Inter-Process Communication"
-        ))
+        // XPC: removed c2_xpc_priv_connect — "unsigned + any XPC" is pure noise.
+        // Every third-party app uses XPC. Detection belongs in correlation:
+        // (exec from staging dir → XPC to security service → privilege escalation)
 
         // XProtect malware detection (Apple's built-in signature match)
         rules.append(DetectionRule(

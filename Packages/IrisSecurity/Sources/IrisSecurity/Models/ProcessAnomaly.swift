@@ -40,6 +40,8 @@ public struct ProcessAnomaly: Identifiable, Sendable, Codable, Equatable {
     public let enumMethod: String
     /// Supporting evidence lines (dylib paths, flag values, hashes, etc.)
     public let evidence: [String]
+    /// Process command-line arguments (argv) — captured at finding time via KERN_PROCARGS2
+    public let arguments: [String]
 
     public init(
         id: UUID = UUID(),
@@ -55,7 +57,8 @@ public struct ProcessAnomaly: Identifiable, Sendable, Codable, Equatable {
         timestamp: Date = Date(),
         scannerId: String = "",
         enumMethod: String = "",
-        evidence: [String] = []
+        evidence: [String] = [],
+        arguments: [String] = []
     ) {
         self.id = id
         self.pid = pid
@@ -71,6 +74,7 @@ public struct ProcessAnomaly: Identifiable, Sendable, Codable, Equatable {
         self.scannerId = scannerId
         self.enumMethod = enumMethod
         self.evidence = evidence
+        self.arguments = arguments
     }
 
     /// Factory for filesystem-based findings (no running process).
@@ -90,18 +94,21 @@ public struct ProcessAnomaly: Identifiable, Sendable, Codable, Equatable {
     }
 
     /// Factory for process-based findings without parent info.
+    /// Auto-fetches argv via KERN_PROCARGS2 so every finding includes command line.
     public static func forProcess(
         pid: pid_t, name: String, path: String,
         technique: String, description: String,
         severity: AnomalySeverity, mitreID: String,
         scannerId: String = "", enumMethod: String = "", evidence: [String] = []
     ) -> ProcessAnomaly {
-        ProcessAnomaly(
+        let argv = pid > 0 ? ProcessEnumeration.getProcessArguments(pid) : []
+        return ProcessAnomaly(
             pid: pid, processName: name, processPath: path,
             parentPID: 0, parentName: "",
             technique: technique, description: description,
             severity: severity, mitreID: mitreID,
-            scannerId: scannerId, enumMethod: enumMethod, evidence: evidence
+            scannerId: scannerId, enumMethod: enumMethod, evidence: evidence,
+            arguments: argv
         )
     }
 }
