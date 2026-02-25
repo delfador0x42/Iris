@@ -76,12 +76,13 @@ extension FlowHandler {
     }
 
     /// Captures a completed HTTP response to the XPC flow store.
+    /// Uses per-request start time from RelayState for accurate pipelined request durations.
     static func captureResponse(
         state: RelayState, response: HTTPParser.ParsedResponse,
         flowId: UUID, startTime: CFAbsoluteTime,
         xpcService: ProxyXPCService?
     ) {
-        let elapsed = CFAbsoluteTimeGetCurrent() - startTime
+        let elapsed = CFAbsoluteTimeGetCurrent() - state.requestStartTime
         let body = extractResponseBody(from: state.getResponseBuffer(), response: response)
         let capturedResponse = ProxyCapturedResponse(
             statusCode: response.statusCode, reason: response.reason,

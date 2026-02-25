@@ -40,6 +40,9 @@ extension PersistenceScanner {
 
     /// Analyze shell config content for dangerous patterns
     private func shellConfigEvidence(path: String) -> [Evidence] {
+        let attrs = try? FileManager.default.attributesOfItem(atPath: path)
+        let fileSize = (attrs?[.size] as? UInt64) ?? 0
+        guard fileSize < 1_048_576 else { return [] }  // skip files > 1MB
         guard let content = try? String(contentsOfFile: path, encoding: .utf8) else {
             return []
         }
@@ -269,6 +272,9 @@ extension PersistenceScanner {
 
     /// Analyze periodic script content
     private func periodicScriptEvidence(path: String) -> [Evidence] {
+        let attrs = try? FileManager.default.attributesOfItem(atPath: path)
+        let fileSize = (attrs?[.size] as? UInt64) ?? 0
+        guard fileSize < 1_048_576 else { return [] }  // skip files > 1MB
         guard let content = try? String(contentsOfFile: path, encoding: .utf8) else {
             return []
         }

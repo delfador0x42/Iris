@@ -10,7 +10,10 @@ import Foundation
 import Security
 
 /// Gets the code signing identifier for a process.
-/// Uses the shared cache in ProxyXPCService.
+/// Uses the shared cache in ProxyXPCService. Cache is bounded to prevent
+/// unbounded growth and mitigate PID-reuse stale entries.
+private let maxSigningIdCacheSize = 2000
+
 func getSigningIdentifier(pid: Int32, cache: NSLock, signingIdCache: inout [pid_t: String?]) -> String? {
     cache.lock()
     if let cached = signingIdCache[pid] {
@@ -47,6 +50,11 @@ func getSigningIdentifier(pid: Int32, cache: NSLock, signingIdCache: inout [pid_
     }
     cache.lock()
     signingIdCache[pid] = identifier
+    // Evict half the cache when it grows too large (amortized O(1))
+    if signingIdCache.count > maxSigningIdCacheSize {
+        let keysToRemove = Array(signingIdCache.keys.prefix(maxSigningIdCacheSize / 2))
+        for key in keysToRemove { signingIdCache.removeValue(forKey: key) }
+    }
     cache.unlock()
     return identifier
 }

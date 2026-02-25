@@ -45,6 +45,7 @@ public actor ConnectionJustifier {
 
     public static let shared = ConnectionJustifier()
     private var cache: [UUID: ConnectionJustification] = [:]
+    private static let cacheTTL: TimeInterval = 300  // 5 minutes
 
     private init() {}
 
@@ -65,7 +66,10 @@ public actor ConnectionJustifier {
         isKnownScanner: Bool = false,
         httpMethod: String? = nil
     ) -> ConnectionJustification {
-        if let cached = cache[connectionId] { return cached }
+        if let cached = cache[connectionId],
+           Date().timeIntervalSince(cached.timestamp) < Self.cacheTTL {
+            return cached
+        }
 
         var reasons: [JustificationReason] = []
         let procInfo = ProcessKnowledgeBase.lookup(processName)
@@ -290,11 +294,18 @@ public actor ConnectionJustifier {
     }
 
     private static func isPrivateAddress(_ addr: String) -> Bool {
-        addr.hasPrefix("10.") || addr.hasPrefix("192.168.") ||
-        addr.hasPrefix("172.16.") || addr.hasPrefix("172.17.") ||
-        addr.hasPrefix("172.18.") || addr.hasPrefix("172.19.") ||
-        addr.hasPrefix("172.2") || addr.hasPrefix("172.3") ||
-        addr == "127.0.0.1" || addr == "::1" || addr.hasPrefix("fe80:")
+        if addr.hasPrefix("10.") || addr.hasPrefix("192.168.") ||
+           addr.hasPrefix("127.") || addr == "::1" || addr.hasPrefix("fe80:") {
+            return true
+        }
+        // RFC 1918: 172.16.0.0/12 = 172.16.0.0 - 172.31.255.255
+        if addr.hasPrefix("172.") {
+            let parts = addr.split(separator: ".", maxSplits: 2)
+            if parts.count >= 2, let octet = Int(parts[1]) {
+                return octet >= 16 && octet <= 31
+            }
+        }
+        return false
     }
 
     private static func formatBytes(_ bytes: UInt64) -> String {
@@ -305,7 +316,11 @@ public actor ConnectionJustifier {
     }
 
     private func pruneCache() {
-        let sorted = cache.sorted { $0.value.timestamp > $1.value.timestamp }
-        cache = Dictionary(uniqueKeysWithValues: Array(sorted.prefix(5000)))
+        let cutoff = Date().addingTimeInterval(-Self.cacheTTL)
+        cache = cache.filter { $0.value.timestamp > cutoff }
+        if cache.count > 5000 {
+            let sorted = cache.sorted { $0.value.timestamp > $1.value.timestamp }
+            cache = Dictionary(uniqueKeysWithValues: Array(sorted.prefix(5000)))
+        }
     }
 }

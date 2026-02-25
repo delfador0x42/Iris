@@ -86,6 +86,9 @@ public actor LogIntegrityScanner {
         if let files = try? FileManager.default.contentsOfDirectory(atPath: loggingPrefs) {
             for file in files where file.hasSuffix(".plist") {
                 let path = "\(loggingPrefs)/\(file)"
+                let attrs = try? FileManager.default.attributesOfItem(atPath: path)
+                let fileSize = (attrs?[.size] as? UInt64) ?? 0
+                guard fileSize < 1_048_576 else { continue }  // skip files > 1MB
                 if let content = try? String(contentsOfFile: path, encoding: .utf8),
                    content.contains("Level") && content.contains("Off") {
                     result.append(.filesystem(

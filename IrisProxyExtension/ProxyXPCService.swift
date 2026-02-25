@@ -114,8 +114,13 @@ class ProxyXPCService: NSObject {
     var signingIdCache: [pid_t: String?] = [:]
     let signingIdLock = NSLock()
 
-    /// Whether filtering is enabled
-    var filteringEnabled: Bool = true
+    /// Whether filtering is enabled (accessed from flow handling + XPC threads)
+    private let filteringLock = NSLock()
+    private var _filteringEnabled: Bool = true
+    var filteringEnabled: Bool {
+        get { filteringLock.lock(); defer { filteringLock.unlock() }; return _filteringEnabled }
+        set { filteringLock.lock(); _filteringEnabled = newValue; filteringLock.unlock() }
+    }
 
     // MARK: - Connection Tracking
 

@@ -153,11 +153,10 @@ public struct FusionEngine: Sendable {
 
         // Real-time alerts → evidence
         for alert in recentAlerts {
-            let ev0 = alert.events.first
             evidence.append(ThreatEvidence(
                 source: .realtime, processPath: alert.processPath,
-                signingId: ev0?.signingId,
-                networkPeer: ev0.flatMap { $0.fields["remote_host"] ?? $0.fields["remote_address"] },
+                signingId: nil,
+                networkPeer: nil,
                 technique: alert.name, severity: alert.severity,
                 mitreId: alert.mitreId,
                 stage: classify(mitre: alert.mitreId, scanner: alert.ruleId, technique: alert.name),
@@ -187,10 +186,10 @@ public struct FusionEngine: Sendable {
         for (path, ev) in group(evidence, by: \.processPath) where !path.isEmpty {
             entities.append(score(type: .process, key: path, evidence: ev))
         }
-        for (sig, ev) in group(evidence.filter { $0.signingId != nil }, by: { $0.signingId! }) where ev.count >= 2 {
+        for (sig, ev) in group(evidence.filter { $0.signingId != nil }, by: { $0.signingId ?? "" }) where !sig.isEmpty && ev.count >= 2 {
             entities.append(score(type: .signingId, key: sig, evidence: ev))
         }
-        for (peer, ev) in group(evidence.filter { $0.networkPeer != nil }, by: { $0.networkPeer! }) where ev.count >= 2 {
+        for (peer, ev) in group(evidence.filter { $0.networkPeer != nil }, by: { $0.networkPeer ?? "" }) where !peer.isEmpty && ev.count >= 2 {
             entities.append(score(type: .networkPeer, key: peer, evidence: ev))
         }
         entities.sort { $0.threatScore > $1.threatScore }
@@ -255,10 +254,10 @@ public struct FusionEngine: Sendable {
                 let otherTimes = other.evidence.map(\.timestamp)
                 guard let oMin = otherTimes.min(), let oMax = otherTimes.max() else { continue }
 
-                // Temporal overlap within window
-                let gapStart = max(tMin.timeIntervalSince1970 - window, oMin.timeIntervalSince1970 - window)
-                let gapEnd = min(tMax.timeIntervalSince1970 + window, oMax.timeIntervalSince1970 + window)
-                if gapStart <= gapEnd {
+                // Temporal overlap: two ranges within window tolerance
+                let overlaps = tMin.timeIntervalSince1970 - window <= oMax.timeIntervalSince1970
+                    && oMin.timeIntervalSince1970 - window <= tMax.timeIntervalSince1970
+                if overlaps {
                     cluster.append(other)
                     stages.formUnion(other.stages)
                 }

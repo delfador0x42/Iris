@@ -255,6 +255,7 @@ func watchEventStream() {
         printErr("Cannot open: \(path)")
         exit(1)
     }
+    defer { fh.closeFile() }
     // Seek to last 4KB for recent context
     let size = fh.seekToEndOfFile()
     if size > 4096 { fh.seek(toFileOffset: size - 4096) }

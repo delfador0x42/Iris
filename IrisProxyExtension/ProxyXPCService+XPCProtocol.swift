@@ -55,9 +55,9 @@ extension ProxyXPCService: ProxyXPCProtocol {
   }
 
   func setCA(_ certData: Data, keyData: Data, reply: @escaping (Bool) -> Void) {
-    logger.info("XPC: setCA (cert: \(certData.count) bytes, key: \(keyData.count) bytes)")
+    logger.error("XPC: setCA called (cert: \(certData.count) bytes, key: \(keyData.count) bytes)")
     let success = provider?.setCA(certData: certData, keyData: keyData) ?? false
-    logger.info("XPC: setCA result: \(success)")
+    logger.error("XPC: setCA result: \(success)")
     reply(success)
   }
 

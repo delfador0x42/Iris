@@ -26,6 +26,8 @@ final class RelayState: @unchecked Sendable {
   private var _requestHeaderEndIndex: Int = 0
   /// Whether the current request uses Transfer-Encoding: chunked
   private var _requestIsChunked = false
+  /// Per-request start time for accurate duration measurement on pipelined connections
+  private var _requestStartTime: CFAbsoluteTime = CFAbsoluteTimeGetCurrent()
 
   /// Max buffer size per direction (16 MB) to prevent unbounded growth
   static let maxBufferSize = 16 * 1024 * 1024
@@ -102,7 +104,15 @@ final class RelayState: @unchecked Sendable {
     lock.lock()
     _hasRequest = true
     _currentFlowId = flowId
+    _requestStartTime = CFAbsoluteTimeGetCurrent()
     lock.unlock()
+  }
+
+  /// Start time of the current request (for per-request duration measurement)
+  var requestStartTime: CFAbsoluteTime {
+    lock.lock()
+    defer { lock.unlock() }
+    return _requestStartTime
   }
 
   /// Store request parse metadata for chunked body tracking.

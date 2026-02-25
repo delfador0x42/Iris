@@ -98,7 +98,7 @@ public actor HiddenFileDetector {
         let dangerous = Set(["app", "command", "sh", "py", "rb", "pl", "scpt", "terminal", "pkg", "dmg"])
         let parts = name.split(separator: ".")
         guard parts.count >= 3 else { return false }
-        let lastExt = String(parts.last!).lowercased()
+        let lastExt = String(parts[parts.count - 1]).lowercased()
         return dangerous.contains(lastExt)
     }
 

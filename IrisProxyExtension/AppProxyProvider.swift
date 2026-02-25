@@ -33,8 +33,13 @@ class AppProxyProvider: NETransparentProxyProvider {
   private var activeUDPFlows: [UUID: NEAppProxyUDPFlow] = [:]
   private let udpFlowsLock = NSLock()
 
-  /// Whether the proxy is currently active
-  private var isActive = false
+  /// Whether the proxy is currently active (accessed from NE framework threads)
+  private let activeLock = NSLock()
+  private var _isActive = false
+  private var isActive: Bool {
+    get { activeLock.lock(); defer { activeLock.unlock() }; return _isActive }
+    set { activeLock.lock(); _isActive = newValue; activeLock.unlock() }
+  }
 
   // MARK: - Lifecycle
 

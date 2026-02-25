@@ -42,9 +42,10 @@ struct IrisMainApp: App {
       // 5. Push threat intel blocklists to endpoint extension
       await IrisMainApp.pushThreatIntel()
 
-      // 6. Bridge network + DNS data into the detection pipeline
+      // 6. Bridge network + DNS + proxy data into the detection pipeline
       await NetworkEventBridge.shared.start()
       await DNSEventBridge.shared.start()
+      await ProxyFlowEventBridge.shared.start()
 
       // 7. Start contradiction engine (periodic probe execution)
       await ContradictionEngine.shared.start()
@@ -97,18 +98,21 @@ struct IrisMainApp: App {
       return
     }
 
+    logger.error("[CA] Have cert (\(certData.count) bytes) and key (\(keyData.count) bytes)")
+
     // Retry — proxy extension may not have started its XPC listener yet
     for attempt in 1...10 {
       ProxyStore.shared.connect()
-      try? await Task.sleep(nanoseconds: 1_000_000_000)
+      logger.error("[CA] Attempt \(attempt): connected=\(ProxyStore.shared.xpcConnection != nil)")
+      try? await Task.sleep(nanoseconds: 2_000_000_000)
       let success = await ProxyStore.shared.sendCA(certData: certData, keyData: keyData)
       if success {
-        logger.info("CA sent to proxy extension (attempt \(attempt))")
+        logger.error("[CA] Sent to proxy extension on attempt \(attempt)")
         return
       }
-      logger.warning("CA send attempt \(attempt) failed, retrying...")
+      logger.error("[CA] Attempt \(attempt) failed")
       ProxyStore.shared.disconnect()
     }
-    logger.error("Failed to send CA to proxy extension after 10 attempts")
+    logger.error("[CA] Failed to send CA after 10 attempts")
   }
 }

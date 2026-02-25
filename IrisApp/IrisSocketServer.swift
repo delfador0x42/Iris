@@ -379,6 +379,25 @@ actor IrisSocketServer {
                     "flowCount": proxy.totalFlowCount,
                     "isEnabled": proxy.isEnabled,
                     "interception": proxy.isInterceptionEnabled,
+                    "recentFlows": proxy.flows.prefix(20).map { f in
+                        var entry: [String: Any] = [
+                            "host": f.host, "port": f.port,
+                            "type": f.flowType.rawValue,
+                            "process": f.processName ?? "",
+                            "time": ISO8601DateFormatter().string(from: f.timestamp),
+                        ]
+                        if let req = f.request {
+                            entry["method"] = req.method
+                            entry["url"] = req.url
+                        }
+                        if let resp = f.response {
+                            entry["status"] = resp.statusCode
+                            entry["duration_ms"] = Int(resp.duration * 1000)
+                        }
+                        entry["bytes_in"] = f.bytesIn
+                        entry["bytes_out"] = f.bytesOut
+                        return entry
+                    },
                 ],
             ]
         }

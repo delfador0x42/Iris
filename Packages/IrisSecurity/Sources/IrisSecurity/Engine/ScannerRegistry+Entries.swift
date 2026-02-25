@@ -72,6 +72,12 @@ extension ScannerEntry {
     ScannerEntry(id: "inline_hook", name: "Inline Hook Detector", tier: .fast, category: .codeExecution) { ctx in
       await InlineHookDetector.shared.scan(snapshot: ctx.snapshot)
     },
+    ScannerEntry(id: "xnu_regions", name: "XNU Region Scanner", tier: .fast, category: .codeExecution) { ctx in
+      await XNURegionScanner.shared.scan(snapshot: ctx.snapshot)
+    },
+    ScannerEntry(id: "ancestry", name: "Ancestry Scanner", tier: .fast, category: .processIntegrity) { ctx in
+      await AncestryScanner.shared.scan(snapshot: ctx.snapshot)
+    },
   ]
 
   // MARK: - Medium Tier (filesystem reads, plist parsing, sqlite)
@@ -181,8 +187,8 @@ extension ScannerEntry {
     ScannerEntry(id: "firewall", name: "Firewall Auditor", tier: .medium, category: .network) { _ in
       await FirewallRoutingAuditor.shared.scan()
     },
-    ScannerEntry(id: "mach_port", name: "Mach Port Scanner", tier: .medium, category: .codeExecution) { _ in
-      await MachPortScanner.shared.scan()
+    ScannerEntry(id: "mach_port", name: "Mach Port Scanner", tier: .medium, category: .codeExecution) { ctx in
+      await MachPortScanner.shared.scan(snapshot: ctx.snapshot)
     },
     ScannerEntry(id: "script_backdoor", name: "Script Backdoors", tier: .medium, category: .persistence) { _ in
       await ScriptBackdoorScanner.shared.scan()

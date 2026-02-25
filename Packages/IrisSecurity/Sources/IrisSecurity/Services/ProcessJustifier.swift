@@ -45,6 +45,7 @@ public actor ProcessJustifier {
 
     public static let shared = ProcessJustifier()
     private var cache: [String: ProcessJustification] = [:]  // keyed by "pid:path"
+    private static let cacheTTL: TimeInterval = 300  // 5 minutes
 
     private init() {}
 
@@ -68,7 +69,10 @@ public actor ProcessJustifier {
         arguments: [String] = []
     ) -> ProcessJustification {
         let key = "\(pid):\(processPath)"
-        if let cached = cache[key] { return cached }
+        if let cached = cache[key],
+           Date().timeIntervalSince(cached.timestamp) < Self.cacheTTL {
+            return cached
+        }
 
         var reasons: [ProcessReason] = []
         let info = ProcessKnowledgeBase.lookup(processName)
@@ -397,7 +401,11 @@ public actor ProcessJustifier {
     }
 
     private func pruneCache() {
-        let sorted = cache.sorted { $0.value.timestamp > $1.value.timestamp }
-        cache = Dictionary(uniqueKeysWithValues: Array(sorted.prefix(5000)))
+        let cutoff = Date().addingTimeInterval(-Self.cacheTTL)
+        cache = cache.filter { $0.value.timestamp > cutoff }
+        if cache.count > 5000 {
+            let sorted = cache.sorted { $0.value.timestamp > $1.value.timestamp }
+            cache = Dictionary(uniqueKeysWithValues: Array(sorted.prefix(5000)))
+        }
     }
 }

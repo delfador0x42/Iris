@@ -86,6 +86,8 @@ extension ESClient {
     securityRingLock.lock()
     defer { securityRingLock.unlock() }
 
+    guard securityRingCount > 0 else { return (sinceSeq, []) }
+
     if securityRingCount == maxSecurityHistory && sinceSeq > 0 {
       let oldestSeq = securitySequence - UInt64(securityRingCount)
       if sinceSeq < oldestSeq {
@@ -93,12 +95,26 @@ extension ESClient {
       }
     }
 
-    var events: [ESSecurityEvent] = []
-    events.reserveCapacity(min(limit, securityRingCount))
-
-    for i in 0..<securityRingCount {
-      let idx = (securityRingHead + i) % maxSecurityHistory
+    // Binary search: ring is ordered by monotonic sequenceNumber.
+    // Find first index where sequenceNumber > sinceSeq.
+    var lo = 0, hi = securityRingCount
+    while lo < hi {
+      let mid = (lo + hi) / 2
+      let idx = (securityRingHead + mid) % maxSecurityHistory
       if let event = securityRing[idx], event.sequenceNumber > sinceSeq {
+        hi = mid
+      } else {
+        lo = mid + 1
+      }
+    }
+
+    var events: [ESSecurityEvent] = []
+    let available = securityRingCount - lo
+    events.reserveCapacity(min(limit, available))
+
+    for i in lo..<securityRingCount {
+      let idx = (securityRingHead + i) % maxSecurityHistory
+      if let event = securityRing[idx] {
         events.append(event)
         if events.count >= limit { break }
       }
